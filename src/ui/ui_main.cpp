@@ -775,6 +775,36 @@ void UI_DrawCinematic()
     R_Cinematic_DrawStretchPic_Letterboxed();
 }
 
+void UI_PaintCinematicSubtitles()
+{
+    if (!R_Cinematic_IsStarted())
+        return;
+
+    UiContext *dc = &uiInfo.uiDC;
+    if (!dc->Menus || dc->menuCount <= 0)
+        return;
+
+    // SP cinematic subtitles are authored as a text item carrying bit 1.
+    // They belong to the video frame, not to the currently open UI menu:
+    // loading cinematics close the menu stack before playback starts.
+    for (int menuIndex = 0; menuIndex < dc->menuCount; ++menuIndex)
+    {
+        menuDef_t *menu = dc->Menus[menuIndex];
+        if (!menu || !menu->items || menu->itemCount <= 0)
+            continue;
+
+        for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
+        {
+            itemDef_s *item = menu->items[itemIndex];
+            if (!item || (item->itemFlags & 2) == 0)
+                continue;
+
+            Item_Text_Paint(dc, item);
+            return;
+        }
+    }
+}
+
 void __cdecl UI_LoadIngameMenus()
 {
     MenuList *Menus; // r3

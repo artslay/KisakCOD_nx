@@ -1285,40 +1285,6 @@ void __cdecl CG_Draw2D(int localClientNum)
                 CG_Draw2dHudElems(localClientNum, 0);
             }
             Menu_PaintAll(&cgDC);
-#ifdef __SWITCH__
-            // In-game cinematics on Switch are drawn as world materials. That
-            // keeps the normal CA_ACTIVE CGame frame running, which bypasses
-            // UI_Refresh() and therefore does not paint the video subtitle
-            // item from uiInfo.uiDC. Reuse the original menu item and subtitle
-            // lookup, but submit it in the active CGame 2D pass over the video.
-            if (R_Cinematic_IsWorldMaterialPlayback() &&
-                R_Cinematic_IsStarted() &&
-                uiInfo.uiDC.menuCount > 0)
-            {
-                bool subtitleItemPainted = false;
-                for (int menuIndex = 0;
-                     menuIndex < uiInfo.uiDC.menuCount && !subtitleItemPainted;
-                     ++menuIndex)
-                {
-                    menuDef_t *menu = uiInfo.uiDC.Menus[menuIndex];
-                    if (!menu || !menu->items)
-                        continue;
-
-                    for (int itemIndex = 0;
-                         itemIndex < menu->itemCount;
-                         ++itemIndex)
-                    {
-                        itemDef_s *item = menu->items[itemIndex];
-                        if (item && (item->itemFlags & 2))
-                        {
-                            Item_Text_Paint(&uiInfo.uiDC, item);
-                            subtitleItemPainted = true;
-                            break;
-                        }
-                    }
-                }
-            }
-#endif
             CG_Draw2dHudElems(localClientNum, 1);
             CG_DrawPerformanceWarnings();
             //Profile_Begin(349);
@@ -1347,6 +1313,14 @@ void __cdecl CG_Draw2D(int localClientNum)
         CG_DrawUpperRightDebugInfo(localClientNum);
 #endif
     }
+
+#ifdef __SWITCH__
+    // World-material cinematics are submitted by the normal CA_ACTIVE renderer,
+    // not SCR_DrawCinematic. Keep their subtitles in the same final 2D pass,
+    // independent of cg_draw2D and the script-controlled HUD visibility dvar.
+    if (R_Cinematic_IsWorldMaterialPlayback())
+        UI_PaintCinematicSubtitles();
+#endif
 }
 
 void __cdecl CG_DrawActive(int localClientNum)

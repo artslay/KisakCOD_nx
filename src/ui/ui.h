@@ -104,6 +104,7 @@ void __cdecl UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color);
 void __cdecl UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
 void __cdecl UI_DrawGLInfo(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
 void UI_DrawCinematic();
+void UI_PaintCinematicSubtitles();
 void __cdecl UI_LoadIngameMenus();
 void __cdecl UI_SetMap(const char *mapname);
 int __cdecl UI_OwnerDrawVisible(int flags);

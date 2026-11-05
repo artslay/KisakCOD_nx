@@ -2,6 +2,7 @@
 #include "client.h"
 #include <sound/snd_public.h>
 #include <gfx_d3d/r_cinematic.h>
+#include <ui/ui.h>
 #include <qcommon/cmd.h>
 #ifdef __SWITCH__
 #include <cstdio>
@@ -236,7 +237,10 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
     if (R_Cinematic_IsFinished())
         SCR_StopCinematic(localClientNum);
     if (R_Cinematic_IsStarted())
+    {
         R_Cinematic_DrawStretchPic_Letterboxed();
+        UI_PaintCinematicSubtitles();
+    }
 }
 
 static bool SCR_StopCinematicInternal(int32_t localClientNum, bool forceSkip)
