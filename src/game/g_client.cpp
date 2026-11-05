@@ -9,6 +9,9 @@
 #include <universal/com_math.h>
 #include "actor.h"
 #include <server/sv_game.h>
+#ifdef __SWITCH__
+#include <client/cl_input.h>
+#endif
 
 #ifdef __SWITCH__
 #include <cstdio>
@@ -665,6 +668,12 @@ void __cdecl ClientSpawn(gentity_s *ent)
     }
 #endif
     SetClientViewAngle(ent, v13);
+#ifdef __SWITCH__
+    if (v3 == 0)
+    {
+        CL_SyncSwitchGamepadAnglesAfterSpawn(client->ps.viewangles, client->ps.delta_angles);
+    }
+#endif
     SV_LinkEntity(ent);
     v9 = client->ps.pm_flags | 0x100;
     client->ps.pm_time = 100;
