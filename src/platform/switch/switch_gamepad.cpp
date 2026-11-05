@@ -72,6 +72,8 @@ static constexpr int kSwitchBindButtonCount = 14;
 static constexpr int kSwitchComboKeyBase = 256;
 static constexpr int kSwitchComboKeyCount =
     kSwitchBindButtonCount * (kSwitchBindButtonCount - 1) / 2;
+static_assert(kSwitchComboKeyBase + kSwitchComboKeyCount <= MAX_CLIENT_KEYCODES,
+    "Switch controller chord key range exceeds PlayerKeyState::keys");
 
 struct SwitchBindCaptureButton
 {
