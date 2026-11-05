@@ -171,6 +171,20 @@ static void ReleaseForwardedKey(int key)
     CL_KeyEvent(0, key, 0, Sys_Milliseconds());
 }
 
+static void ReleaseForwardedKeySource(u64 mask, int key)
+{
+    if (key < 0 || key >= 256)
+        return;
+
+    u64 &forwardedButtons = g_forwardedKeyButtons[key];
+    if ((forwardedButtons & mask) == 0)
+        return;
+
+    forwardedButtons &= ~mask;
+    if (forwardedButtons == 0)
+        CL_KeyEvent(0, key, 0, Sys_Milliseconds());
+}
+
 // Input routing can change before a physical button is released (for example,
 // B closes KEYCATCH_UI, after which the normal UI branch no longer polls B).
 // Release all synthetic engine keys whose physical sources went up this frame
@@ -230,7 +244,9 @@ static bool Switch_HasBoundChordForButton(int buttonIndex)
             continue;
 
         const int chordKey = Switch_ComboKeyForPair(buttonIndex, other);
-        if (chordKey < 0)
+        // Preserve the stock ZL press (aim/hold action) for the legacy
+        // ZL + D-pad Right chord; all user-created chords defer their singles.
+        if (chordKey < 0 || chordKey == K_AUX12)
             continue;
 
         const char *binding = Key_GetBinding(0, static_cast<uint32_t>(chordKey));
@@ -275,7 +291,8 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
                 }
                 else
                 {
-                    g_switchChordConsumedButtons |= pairMask;
+                    if (chordKey != K_AUX12)
+                        g_switchChordConsumedButtons |= pairMask;
                     ++pairIndex;
                     continue;
                 }
@@ -294,9 +311,24 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
             if (chordHeld && orderedChordEdge && !alreadyConsumed)
             {
                 g_switchActiveChordKeys[pairIndex] = true;
-                g_switchChordConsumedButtons |= pairMask;
                 g_switchPendingSingleButtons[first].pending = false;
                 g_switchPendingSingleButtons[second].pending = false;
+
+                if (chordKey == K_AUX12)
+                {
+                    // When D-pad Right was pressed first, release its normal
+                    // equipment action as soon as ZL completes the chord.
+                    if (secondWasHeld && firstPressedNow)
+                    {
+                        ReleaseForwardedKeySource(secondMask,
+                            g_switchBindCaptureButtons[second].key);
+                    }
+                }
+                else
+                {
+                    g_switchChordConsumedButtons |= pairMask;
+                }
+
                 CL_KeyEvent(0, chordKey, 1, eventTime);
             }
             ++pairIndex;
@@ -850,7 +882,8 @@ void Switch_GamepadFrame()
     {
         const bool allowButtonDown =
             gameplayActiveNow &&
-            !((button == 7 || button == 8) && g_consoleShortcutConsumed);
+            !((button == 7 || button == 8) && g_consoleShortcutConsumed) &&
+            !(button == 13 && IsDown(g_buttons, HidNpadButton_ZL));
         Switch_SendControllerButtonEdge(button, allowButtonDown);
     }
 }
