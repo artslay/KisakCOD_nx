@@ -103,36 +103,49 @@ void Switch_LogSavedDvarCall(const char *dvarName, const char *value)
     if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
         codePos = scrVmPub.function_frame->fs.pos;
 
-    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
-        !Switch_ScriptSourceLookupIsSane())
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=(unavailable) line=0 codePos=%p functionCount=%d sourceLookup=%u\n",
-            value ? value : "<null>",
-            static_cast<const void *>(codePos),
-            scrVmPub.function_count,
-            Switch_ScriptSourceLookupIsSane() ? 1u : 0u);
-        Switch_LogWrite(trace);
-        return;
-    }
-
+    const bool codePosValid = codePos && Scr_IsInOpcodeMemory(codePos);
     char *filename = nullptr;
     int line = 0;
-    Scr_GetFileAndLine(codePos, &filename, &line);
 
-    char trace[512];
+    // Scr_GetFileAndLine() owns the authoritative Switch-side bounds checks.
+    // Do not use Switch_ScriptSourceLookupIsSane() here: its older 0x40000
+    // limit rejects source-position tables that legitimately grow to 0x100000.
+    if (codePosValid)
+        Scr_GetFileAndLine(codePos, &filename, &line);
+
+    const bool sourceResolved =
+        codePosValid && filename && filename[0] && line > 0;
+    const uintptr_t programBase =
+        reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
+    const uintptr_t codeAddress =
+        reinterpret_cast<uintptr_t>(codePos);
+    const uintptr_t codeOffset =
+        codePosValid && programBase && codeAddress >= programBase
+            ? codeAddress - programBase
+            : UINTPTR_MAX;
+
+    char trace[768];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p functionCount=%d\n",
+        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p codeOffset=0x%llx codeValid=%u program=%p endProgram=%p sourceBuf=%p sourceLen=%u sourceCap=%u opcodeLookup=%p opcodeLen=%u opcodeCap=%u sourcePosLookup=%p sourcePosLen=%u sourcePosCap=%u\\n",
         value ? value : "<null>",
-        filename && filename[0] ? filename : "(unknown)",
-        line,
+        sourceResolved ? filename : "(unavailable)",
+        sourceResolved ? line : 0,
         static_cast<const void *>(codePos),
-        scrVmPub.function_count);
+        static_cast<unsigned long long>(codeOffset),
+        codePosValid ? 1u : 0u,
+        static_cast<const void *>(scrVarPub.programBuffer),
+        static_cast<const void *>(scrVarPub.endScriptBuffer),
+        static_cast<const void *>(scrParserPub.sourceBufferLookup),
+        scrParserPub.sourceBufferLookupLen,
+        scrParserGlob.sourceBufferLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.opcodeLookup),
+        scrParserGlob.opcodeLookupLen,
+        scrParserGlob.opcodeLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.sourcePosLookup),
+        scrParserGlob.sourcePosLookupLen,
+        scrParserGlob.sourcePosLookupMaxLen);
     Switch_LogWrite(trace);
 }
 
