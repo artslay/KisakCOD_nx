@@ -23,6 +23,7 @@ extern void Switch_LogWrite(const char *msg);
 
 // Preserve the original capacity of 1024 child-block pointers on every target.
 static constexpr int SCR_BLOCK_POINTER_ARRAY_BYTES = 1024 * sizeof(scr_block_s *);
+static constexpr size_t SCR_SWITCH_ENTRY_SIZE = sizeof(uintptr_t) + sizeof(const char *);
 
 scrCompilePub_t scrCompilePub;
 scrCompileGlob_t scrCompileGlob;
