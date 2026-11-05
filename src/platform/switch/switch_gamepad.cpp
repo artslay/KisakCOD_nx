@@ -179,7 +179,8 @@ static constexpr SwitchBindCaptureButton g_switchBindCaptureButtons[] =
     { HidNpadButton_Right,  K_AUX11 },
     { HidNpadButton_Down,   K_AUX13 },
     { HidNpadButton_Up,     'n' },
-    { HidNpadButton_Minus,  K_TAB }
+    { HidNpadButton_Minus,  K_TAB },
+    { HidNpadButton_Plus,   K_ESCAPE }
 };
 
 static bool g_switchBindCaptureActive = false;
