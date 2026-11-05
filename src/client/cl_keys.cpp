@@ -145,10 +145,17 @@ keyname_t keynames_localized[96] =
   { "KEY_ESCAPE", K_ESCAPE },
   { "KEY_SPACE", K_SPACE },
   { "KEY_BACKSPACE", K_BACKSPACE },
+#ifdef __SWITCH__
+  { "D-Pad Up", K_UPARROW },
+  { "D-Pad Down", K_DOWNARROW },
+  { "D-Pad Left", K_LEFTARROW },
+  { "D-Pad Right", K_RIGHTARROW },
+#else
   { "KEY_UPARROW", K_UPARROW },
   { "KEY_DOWNARROW", K_DOWNARROW },
   { "KEY_LEFTARROW", K_LEFTARROW },
   { "KEY_RIGHTARROW", K_RIGHTARROW },
+#endif
   { "KEY_ALT", K_ALT },
   { "KEY_CTRL", K_CTRL },
   { "KEY_SHIFT", K_SHIFT },
@@ -178,6 +185,15 @@ keyname_t keynames_localized[96] =
   { "KEY_MOUSE5", K_MOUSE5 },
   { "KEY_MWHEELUP", K_MWHEELUP },
   { "KEY_MWHEELDOWN", K_MWHEELDOWN },
+#ifdef __SWITCH__
+  { "B", K_AUX1 },
+  { "A", K_AUX2 },
+  { "ZL", K_AUX3 },
+  { "R", K_AUX4 },
+  { "L", K_AUX5 },
+  { "L3", K_AUX6 },
+  { "R3", K_AUX7 },
+#else
   { "KEY_AUX1", K_AUX1 },
   { "KEY_AUX2", K_AUX2 },
   { "KEY_AUX3", K_AUX3 },
@@ -185,12 +201,20 @@ keyname_t keynames_localized[96] =
   { "KEY_AUX5", K_AUX5 },
   { "KEY_AUX6", K_AUX6 },
   { "KEY_AUX7", K_AUX7 },
+#endif
   { "KEY_AUX8", K_AUX8 },
   { "KEY_AUX9", K_AUX9 },
+#ifdef __SWITCH__
+  { "D-Pad Left", K_AUX10 },
+  { "D-Pad Right", K_AUX11 },
+  { "ZL + D-Pad Right", K_AUX12 },
+  { "D-Pad Down", K_AUX13 },
+#else
   { "KEY_AUX10", K_AUX10 },
   { "KEY_AUX11", K_AUX11 },
   { "KEY_AUX12", K_AUX12 },
   { "KEY_AUX13", K_AUX13 },
+#endif
   { "KEY_AUX14", K_AUX14 },
   { "KEY_AUX15", K_AUX15 },
   { "KEY_AUX16", K_AUX16 },
