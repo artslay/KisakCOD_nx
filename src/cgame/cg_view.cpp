@@ -36,6 +36,8 @@ namespace
 int s_switchCgViewTraceLastWindow = 0;
 int s_switchCgViewTraceActiveBudget = 16;
 int s_switchCgViewTraceIdleBudget = 8;
+int s_switchOffsetTraceLastWindow = 0;
+int s_switchOffsetTraceBudget = 8;
 float s_switchCgViewTraceLastPredYaw = 0.0f;
 bool s_switchCgViewTraceHasPredYaw = false;
 }
@@ -524,6 +526,19 @@ void __cdecl OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
     double v28; // fp0
     float vRight[6]; // [sp+58h] [-98h] BYREF
 
+#ifdef __SWITCH__
+    const int switchOffsetTraceWindow = g_switchPlayerInputTraceFrames;
+    float switchOffsetYawIn = cgameGlob->refdefViewAngles[1];
+    float switchOffsetYawAfterKick = -999.0f;
+    float switchOffsetYawAfterIdle = -999.0f;
+    float switchOffsetYawAfterBob = -999.0f;
+    float switchOffsetYawAfterAds = -999.0f;
+    float switchOffsetYawAfterGround = -999.0f;
+    if (switchOffsetTraceWindow > s_switchOffsetTraceLastWindow)
+        s_switchOffsetTraceBudget = 8;
+    s_switchOffsetTraceLastWindow = switchOffsetTraceWindow;
+#endif
+
     if ((cgameGlob->predictedPlayerState.eFlags & 0x300) == 0)
     {
         weaponIndex = BG_GetViewmodelWeaponIndex(&cgameGlob->predictedPlayerState);
@@ -546,8 +561,17 @@ void __cdecl OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
             {
                 CG_KickAngles(cgameGlob);
                 Vec3Add(cgameGlob->refdefViewAngles, cgameGlob->kickAngles, cgameGlob->refdefViewAngles);
+#ifdef __SWITCH__
+                switchOffsetYawAfterKick = cgameGlob->refdefViewAngles[1];
+#endif
                 CG_CalculateView_IdleAngles(cgameGlob, cgameGlob->refdefViewAngles);
+#ifdef __SWITCH__
+                switchOffsetYawAfterIdle = cgameGlob->refdefViewAngles[1];
+#endif
                 CG_CalculateView_BobAngles(cgameGlob, cgameGlob->refdefViewAngles);
+#ifdef __SWITCH__
+                switchOffsetYawAfterBob = cgameGlob->refdefViewAngles[1];
+#endif
                 damageTime = cgameGlob->damageTime;
                 if (damageTime)
                 {
@@ -598,6 +622,9 @@ void __cdecl OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
                         * weapDef->fAdsViewBobMult)
                         - cgameGlob->refdefViewAngles[1]);
                 }
+#ifdef __SWITCH__
+                switchOffsetYawAfterAds = cgameGlob->refdefViewAngles[1];
+#endif
 
                 VerticalBobFactor = CG_GetVerticalBobFactor(
                     &cgameGlob->predictedPlayerState,
@@ -638,11 +665,47 @@ void __cdecl OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
                     16.0,
                     20.0);
                 CG_AddGroundTiltToAngles(localClientNum, cgameGlob->refdefViewAngles, cgameGlob);
+#ifdef __SWITCH__
+                switchOffsetYawAfterGround = cgameGlob->refdefViewAngles[1];
+#endif
                 if (cgameGlob->refdef.vieworg[2] < (double)(float)(cgameGlob->predictedPlayerState.origin[2] + (float)8.0))
                     cgameGlob->refdef.vieworg[2] = cgameGlob->predictedPlayerState.origin[2] + (float)8.0;
             }
         }
     }
+#ifdef __SWITCH__
+    if (switchOffsetTraceWindow > 0 && s_switchOffsetTraceBudget > 0)
+    {
+        char trace[768];
+        const playerState_s *ps = &cgameGlob->predictedPlayerState;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER INPUT] offset window=%d weapon=%u yaw=(%.2f,%.2f,%.2f,%.2f,%.2f,%.2f) kick=(%.2f,%.2f,%.2f) vAngOfs=(%.2f,%.2f,%.2f) frac=%.3f ground=(%.2f,%.2f,%.2f) speed=%.2f eFlags=0x%x\n",
+            switchOffsetTraceWindow,
+            weaponIndex,
+            switchOffsetYawIn,
+            switchOffsetYawAfterKick,
+            switchOffsetYawAfterIdle,
+            switchOffsetYawAfterBob,
+            switchOffsetYawAfterAds,
+            switchOffsetYawAfterGround,
+            cgameGlob->kickAngles[0],
+            cgameGlob->kickAngles[1],
+            cgameGlob->kickAngles[2],
+            cgameGlob->vAngOfs[0],
+            cgameGlob->vAngOfs[1],
+            cgameGlob->vAngOfs[2],
+            ps->fWeaponPosFrac,
+            ps->groundTiltAngles[0],
+            ps->groundTiltAngles[1],
+            ps->groundTiltAngles[2],
+            cgameGlob->xyspeed,
+            ps->eFlags);
+        Switch_LogWrite(trace);
+        --s_switchOffsetTraceBudget;
+    }
+#endif
 }
 
 float __cdecl CG_GetViewFov(int localClientNum)
@@ -1489,7 +1552,8 @@ void __cdecl CG_CalcViewValues(int localClientNum)
 
 #ifdef __SWITCH__
     float switchBaseYaw = -999.0f;
-    float switchAfterCameraYaw = -999.0f;
+    float switchAfterOffsetYaw = -999.0f;
+    float switchAfterShakeYaw = -999.0f;
     float switchAfterViewAnimationYaw = -999.0f;
     float switchAfterPerturbYaw = -999.0f;
 #endif
@@ -1568,10 +1632,14 @@ void __cdecl CG_CalcViewValues(int localClientNum)
 
         CalcTurretViewValues(localClientNum);
         OffsetFirstPersonView(localClientNum, cgArray);
+#ifdef __SWITCH__
+        if (g_switchPlayerInputTraceFrames > 0)
+            switchAfterOffsetYaw = cgameGlob->refdefViewAngles[1];
+#endif
         CG_ShakeCamera(localClientNum);
 #ifdef __SWITCH__
         if (g_switchPlayerInputTraceFrames > 0)
-            switchAfterCameraYaw = cgameGlob->refdefViewAngles[1];
+            switchAfterShakeYaw = cgameGlob->refdefViewAngles[1];
 #endif
     }
 
@@ -1635,7 +1703,7 @@ void __cdecl CG_CalcViewValues(int localClientNum)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) stages=(%.2f,%.2f,%.2f,%.2f) snapPm=%d nextPm=%d deadYaw=%.2f axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\n",
+                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) stages=(%.2f,%.2f,%.2f,%.2f,%.2f) snapPm=%d nextPm=%d deadYaw=%.2f axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\n",
                 viewTraceWindow,
                 cgameGlob->time,
                 snapTime, snapYaw, nextSnapTime, nextSnapYaw,
@@ -1646,7 +1714,8 @@ void __cdecl CG_CalcViewValues(int localClientNum)
                 cgameGlob->refdefViewAngles[0],
                 cgameGlob->refdefViewAngles[1],
                 switchBaseYaw,
-                switchAfterCameraYaw,
+                switchAfterOffsetYaw,
+                switchAfterShakeYaw,
                 switchAfterViewAnimationYaw,
                 switchAfterPerturbYaw,
                 snapPm,
