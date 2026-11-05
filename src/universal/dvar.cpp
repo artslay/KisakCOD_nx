@@ -2774,7 +2774,7 @@ void __cdecl Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSou
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DVAR SET CALLER] name=%s source=%s requested='%.96s' caller=%p\\n",
+            "[KisakCOD][DVAR SET CALLER] name=%s source=%s requested='%.96s' caller=%p\n",
             dvar->name,
             Switch_DvarSourceName(source),
             string ? string : "<null>",
