@@ -434,8 +434,9 @@ void Switch_GamepadFrame()
     // Gameplay actions are synthetic AUX key events, not direct calls to
     // IN_* handlers. CL_KeyEvent resolves the configured binding and executes
     // the ordinary +command/-command pair with the correct key number.
-    SendKeyEdge(HidNpadButton_A, K_AUX1, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_B, K_AUX2, gameplayActiveNow);
+    // Nintendo layout: B is jump, A is crouch/stance.
+    SendKeyEdge(HidNpadButton_B, K_AUX1, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_A, K_AUX2, gameplayActiveNow);
     SendKeyEdge(HidNpadButton_X, 'r', gameplayActiveNow);
     // The trigger must act like the real left mouse button. A K_MOUSE1 event
     // runs the normal attack binding and lets scripts observe the click.
