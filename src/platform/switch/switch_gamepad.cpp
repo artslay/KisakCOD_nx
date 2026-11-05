@@ -452,11 +452,6 @@ void Switch_GamepadFrame()
     // that closes the pause menu must still release its synthetic Escape key.
     ReleaseForwardedKeysForReleasedButtons();
 
-    // Bind capture must run before console shortcuts and ordinary UI routing,
-    // otherwise L3/R3 and chord buttons are consumed or translated as navigation.
-    if (Switch_CaptureGamepadBinding())
-        return;
-
     // padUpdate() remains valid for handheld mode and connected standard pads.
     // Consider the pad active whenever the standard input service is producing
     // a non-zero button/axis state; this keeps the engine's existing GPad API
@@ -467,6 +462,11 @@ void Switch_GamepadFrame()
         std::abs(g_leftStick.y) > 256 ||
         std::abs(g_rightStick.x) > 256 ||
         std::abs(g_rightStick.y) > 256;
+
+    // Bind capture must run before console shortcuts and ordinary UI routing,
+    // otherwise L3/R3 and chord buttons are consumed or translated as navigation.
+    if (Switch_CaptureGamepadBinding())
+        return;
 
     const connstate_t connectionState = CL_GetLocalClientConnectionState(0);
     const bool mapLoadingCinematicActive = SCR_IsMapLoadingCinematicActive();
