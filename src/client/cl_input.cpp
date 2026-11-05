@@ -2134,6 +2134,23 @@ static void CL_SetSwitchDefaultGamepadBinding(int key, const char *command)
     if (!currentBinding || !*currentBinding || legacySprintOnly)
         Key_SetBinding(0, key, const_cast<char *>(command));
 }
+
+void CL_RestoreSwitchDefaultGamepadBindings()
+{
+    CL_SetSwitchDefaultGamepadBinding(K_AUX1, "+moveup");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX2, "+stance");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX3, "+speed");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX4, "+frag");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX5, "+smoke");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX6, "+breath_sprint");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
+    CL_SetSwitchDefaultGamepadBinding('n', "+nightvision");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX11, "+actionslot 2");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX12, "+actionslot 3");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX13, "+actionslot 4");
+}
 #endif
 
 void __cdecl CL_InitInput()
@@ -2223,21 +2240,7 @@ void __cdecl CL_InitInput()
 #ifdef __SWITCH__
     // Route Switch controller buttons through the same key-binding path as
     // keyboard input. User bindings already present on AUX keys take priority.
-    CL_SetSwitchDefaultGamepadBinding(K_AUX1, "+moveup");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX2, "+stance");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX3, "+speed");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX4, "+frag");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX5, "+smoke");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX6, "+breath_sprint");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
-    // The Switch D-pad Up emulates the stock PC N key. Ensure the stock
-    // night-vision command is bound there when no user binding exists.
-    CL_SetSwitchDefaultGamepadBinding('n', "+nightvision");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX11, "+actionslot 2");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX12, "+actionslot 3");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX13, "+actionslot 4");
+    CL_RestoreSwitchDefaultGamepadBindings();
 #endif
     //cl_analog_attack_threshold = Dvar_RegisterFloat("cl_analog_attack_threshold", 0.80000001, 0.000099999997, 1.0, v1, v0);
     cl_analog_attack_threshold = Dvar_RegisterFloat("cl_analog_attack_threshold", 0.80000001, 0.000099999997, 1.0, 0, 0);
