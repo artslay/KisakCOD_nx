@@ -1315,10 +1315,15 @@ void __cdecl CG_Draw2D(int localClientNum)
     }
 
 #ifdef __SWITCH__
-    // World-material cinematics are submitted by the normal CA_ACTIVE renderer,
-    // not SCR_DrawCinematic. Keep their subtitles in the same final 2D pass,
-    // independent of cg_draw2D and the script-controlled HUD visibility dvar.
-    if (R_Cinematic_IsWorldMaterialPlayback())
+    // Active-game cinematics can be drawn either as a world material or as
+    // the fullscreen overlay submitted by CG_DrawFadeInCinematic. The loading
+    // cinematic path is painted by SCR_DrawCinematic instead, so do not paint
+    // its subtitle item here as well.
+    const bool cgameCinematicVisible =
+        R_Cinematic_IsWorldMaterialPlayback() ||
+        (!SCR_IsMapLoadingCinematicActive() &&
+         cg_cinematicFullscreen->current.enabled);
+    if (R_Cinematic_IsStarted() && cgameCinematicVisible)
         UI_PaintCinematicSubtitles();
 #endif
 }
