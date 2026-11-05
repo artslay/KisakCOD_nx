@@ -406,9 +406,10 @@ static int g_switchBindCapturePendingButton = -1;
 
 static void Switch_DispatchCapturedBinding(int key)
 {
-    const uint32_t eventTime = Sys_Milliseconds();
-    CL_KeyEvent(0, key, 1, eventTime);
-    CL_KeyEvent(0, key, 0, eventTime);
+    // This is a bind-menu input, not a gameplay key press. Deliver the key
+    // directly to the UI so assigning a "+command" cannot emit an unmatched
+    // gameplay "-command" when the synthetic key-up is generated.
+    UI_KeyEvent(0, key, 1);
 }
 
 static bool Switch_CaptureGamepadBinding()
