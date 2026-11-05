@@ -1722,51 +1722,62 @@ void __cdecl GetPlayerStatRangeBitsSet(int localClientNum, OperandList *list, Op
     }
 }
 
+#ifdef __SWITCH__
+static bool UI_IsSwitchButtonDisplayName(const char *name)
+{
+    static const char *const switchButtonNames[] =
+    {
+        "A", "B", "X", "Y",
+        "L", "R", "ZL", "ZR", "L3", "R3",
+        "Minus", "D-Pad Left", "D-Pad Right", "D-Pad Down", "D-Pad Up",
+        "ZL + D-Pad Right"
+    };
+
+    for (const char *buttonName : switchButtonNames)
+    {
+        if (!I_stricmp(name, buttonName))
+            return true;
+    }
+    return false;
+}
+#endif
+
+static const char *UI_GetKeyBindingDisplayName(const char *name)
+{
+#ifdef __SWITCH__
+    // These names are literal platform labels, not StringEd lookup keys.
+    if (UI_IsSwitchButtonDisplayName(name))
+        return name;
+#endif
+
+    const char *translation = SEH_StringEd_GetString(name);
+    return translation ? translation : name;
+}
+
 int __cdecl GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys, bool single)
 {
-    char *v4; // eax
-    const char *v6; // [esp+4h] [ebp-120h]
-    char *translation; // [esp+10h] [ebp-114h]
-    const char *translationa; // [esp+10h] [ebp-114h]
-    const char *translation_4; // [esp+14h] [ebp-110h]
-    int bindCount; // [esp+18h] [ebp-10Ch]
-    char bindings[2][128]; // [esp+1Ch] [ebp-108h] BYREF
-    const char *conjunction; // [esp+120h] [ebp-4h]
+    int bindCount;
+    char bindings[2][128];
 
     bindCount = CL_GetKeyBinding(localClientNum, command, bindings);
     if (single && bindCount > 1)
         bindCount = 1;
-    if (bindCount)
+
+    if (bindCount == 1)
     {
-        if (bindCount == 1)
-        {
-            translation = (char *)SEH_StringEd_GetString(bindings[0]);
-            if (translation)
-                I_strncpyz(keys, translation, 256);
-            else
-                I_strncpyz(keys, bindings[0], 256);
-        }
-        else
-        {
-            if (bindCount != 2)
-                MyAssertHandler(".\\ui\\ui_shared.cpp", 5084, 0, "%s\n\t(bindCount) = %i", "(bindCount == 2)", bindCount);
-            translationa = SEH_StringEd_GetString(bindings[0]);
-            translation_4 = SEH_StringEd_GetString(bindings[1]);
-            conjunction = UI_SafeTranslateString("KEY_OR");
-            if (translation_4)
-                v6 = translation_4;
-            else
-                v6 = bindings[1];
-            if (translationa)
-                Com_sprintf(keys, 0x100u, "%s %s %s", translationa, conjunction, v6);
-            else
-                Com_sprintf(keys, 0x100u, "%s %s %s", bindings[0], conjunction, v6);
-        }
+        I_strncpyz(keys, UI_GetKeyBindingDisplayName(bindings[0]), 256);
+    }
+    else if (bindCount == 2)
+    {
+        const char *firstName = UI_GetKeyBindingDisplayName(bindings[0]);
+        const char *secondName = UI_GetKeyBindingDisplayName(bindings[1]);
+        const char *conjunction = UI_SafeTranslateString("KEY_OR");
+        Com_sprintf(keys, 256, "%s %s %s", firstName, conjunction, secondName);
     }
     else
     {
-        v4 = UI_SafeTranslateString("KEY_UNBOUND");
-        I_strncpyz(keys, v4, 256);
+        const char *unbound = UI_SafeTranslateString("KEY_UNBOUND");
+        I_strncpyz(keys, unbound, 256);
     }
     return bindCount;
 }
