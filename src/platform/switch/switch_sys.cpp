@@ -3756,7 +3756,8 @@ static bool Switch_LogIsHudDiagnostic(const char *msg)
     static constexpr const char *const kHudPrefixes[] =
     {
         "[KisakCOD][HUD",
-        "[KisakCOD][FPS HUD"
+        "[KisakCOD][FPS HUD",
+        "[KisakCOD][UI MENU PAINT GATE]"
     };
     for (const char *prefix : kHudPrefixes)
     {
@@ -3777,7 +3778,6 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
         "[KisakCOD][DVAR ORIGIN]",
         "[KisakCOD][DVAR SET CALLER]",
         "[KisakCOD][SAVED DVAR SCRIPT]",
-        "[KisakCOD][HUD GAME SUBTITLE FLOW]",
         "[KisakCOD][UI MENU PAINT GATE]",
         "[KisakCOD][FRONTEND MENU OPEN]",
         "[KisakCOD][CIN STATE]",
@@ -3850,14 +3850,13 @@ void Switch_LogWrite(const char *msg)
 
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
-    if (
-        (!Switch_LogIsImportant(msg) &&
-         !Switch_LogIsFxDiagnostic(msg) &&
-         !Switch_LogIsScriptDiagnostic(msg) &&
-         !Switch_LogIsPerformanceDiagnostic(msg) &&
-         !Switch_LogIsHudCinematicDiagnostic(msg) &&
-         !Switch_LogIsStartupMessage(msg) &&
-         !Switch_LogIsLevelLoadMessage(msg)))
+    if (!Switch_LogIsImportant(msg) &&
+        !Switch_LogIsFxDiagnostic(msg) &&
+        !Switch_LogIsScriptDiagnostic(msg) &&
+        !Switch_LogIsPerformanceDiagnostic(msg) &&
+        !Switch_LogIsHudCinematicDiagnostic(msg) &&
+        !Switch_LogIsStartupMessage(msg) &&
+        !Switch_LogIsLevelLoadMessage(msg))
         return;
     if (!Switch_LogIsImportant(msg) && Switch_LogIsVerboseTrace(msg))
         return;
