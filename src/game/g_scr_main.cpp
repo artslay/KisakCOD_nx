@@ -1663,6 +1663,9 @@ void GScr_SetSavedDvar()
         if (v5 == 34)
             *v4 = 39;
     }
+#ifdef KISAK_SWITCH
+    Switch_LogSavedDvarCall(String, v9);
+#endif
     if (Dvar_IsValidName(String))
     {
         Var = Dvar_FindVar(String);
