@@ -1152,6 +1152,7 @@ static const char *Switch_KeynumToDisplayName(int32_t keynum)
     {
     case K_TAB:          return "Minus";
     case K_ENTER:        return "A";
+    case K_ESCAPE:       return "B";
     case K_MOUSE1:       return "ZR";
     case K_AUX1:         return "B";
     case K_AUX2:         return "A";
