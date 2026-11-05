@@ -8177,11 +8177,24 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	timeRemaining = 1024;
 
 	// UI_Init can run before the game fastfile containing video/subtitles.csv is loaded.
-	// DB_FindXAssetHeader creates a default placeholder on a miss, so test the DB
-	// entry itself and keep retrying until the real fastfile asset becomes available.
-	if (IsFastFileLoad() &&
-		(!table || DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv")))
+	// A miss creates a default placeholder. The old pointer can remain non-null even
+	// after the DB entry is replaced by the real fastfile asset, so checking only
+	// DB_IsXAssetDefault() against the name is not enough to refresh that pointer.
+	// Retry at a low rate until the real table is available, including after the
+	// loading fastfile has finished (when IsFastFileLoad() is already false).
+	static uint32_t lastSubtitleTableLookup = 0;
+	static bool subtitleTableLookupAttempted = false;
+	static bool subtitleTableResolved = false;
+	const uint32_t subtitleNow = static_cast<uint32_t>(Sys_Milliseconds());
+	if (DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
+		subtitleTableResolved = false;
+
+	if (!subtitleTableResolved &&
+		(!subtitleTableLookupAttempted ||
+		 static_cast<uint32_t>(subtitleNow - lastSubtitleTableLookup) >= 250u))
 	{
+		lastSubtitleTableLookup = subtitleNow;
+		subtitleTableLookupAttempted = true;
 		StringTable *loadedTable =
 			DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv").stringTable;
 		if (loadedTable &&
@@ -8189,7 +8202,22 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 		{
 			table = loadedTable;
 			uiInfo.videoSubtitles = loadedTable;
+			subtitleTableResolved = true;
+#ifdef __SWITCH__
+			char tableTrace[192];
+			std::snprintf(
+				tableTrace, sizeof(tableTrace),
+				"[KisakCOD][HUD SUBTITLE TABLE] resolved rows=%d columns=%d\n",
+				loadedTable->rowCount,
+				loadedTable->columnCount);
+			Switch_LogWrite(tableTrace);
+#endif
 		}
+	}
+	else if (subtitleTableResolved)
+	{
+		// UI_Init can clear uiInfo while this function's static cache survives.
+		table = uiInfo.videoSubtitles;
 	}
 	if (!table)
 		return;
