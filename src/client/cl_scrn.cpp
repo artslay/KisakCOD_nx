@@ -37,43 +37,10 @@ std::atomic<uint32_t> g_switchPostCinematicDrawPresentCount{0};
 void Switch_WritePostCinematicRenderTrace(
     const char *phase, const char *detail, bool requireActive)
 {
-    if (requireActive &&
-        !g_switchPostCinematicRenderTraceActive.load(std::memory_order_relaxed))
-        return;
-
-    const uint64_t frame =
-        g_switchScreenFrameSequence.load(std::memory_order_relaxed);
-    const uint64_t startFrame =
-        g_switchPostCinematicTraceStartFrame.load(std::memory_order_relaxed);
-    const uint64_t drawSerial =
-        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
-    const uint64_t startDrawSerial =
-        g_switchPostCinematicTraceStartDrawSerial.load(std::memory_order_relaxed);
-    const uint64_t framesSinceSkip = frame >= startFrame ? frame - startFrame : 0;
-    const bool keyFramePhase =
-        phase &&
-        (std::strcmp(phase, "issue_commands_return") == 0 ||
-         std::strcmp(phase, "vk_present_result") == 0 ||
-         std::strcmp(phase, "vk_end_frame_abort") == 0 ||
-         std::strcmp(phase, "vk_end_frame_noop") == 0 ||
-         std::strcmp(phase, "skip_begin") == 0 ||
-         std::strcmp(phase, "skip_again") == 0 ||
-         std::strcmp(phase, "first_draw_present_seen") == 0 ||
-         std::strcmp(phase, "render_confirmed_two_draw_presents") == 0);
-    if (requireActive && !keyFramePhase && framesSinceSkip >= 4 && frame % 30u != 0u)
-        return;
-    char trace[1024];
-    std::snprintf(
-        trace, sizeof(trace),
-        "[KisakCOD][POST-CINE RENDER TRACE] frame=%llu sinceSkip=%llu phase=%s frameStage=%s drawSerial=%llu drawsSinceSkip=%llu detail=%s\n",
-        static_cast<unsigned long long>(frame),
-        static_cast<unsigned long long>(framesSinceSkip),
-        phase ? phase : "(unknown)",
-        g_switchFrameStage ? g_switchFrameStage : "(unknown)",
-        static_cast<unsigned long long>(drawSerial),
-        static_cast<unsigned long long>(drawSerial >= startDrawSerial ? drawSerial - startDrawSerial : 0),
-        detail ? detail : "-");
-    Switch_LogWrite(trace);
+    // Disabled: this high-volume diagnostic is no longer written to the log.
+    (void)phase;
+    (void)detail;
+    (void)requireActive;
 }
 }
 
