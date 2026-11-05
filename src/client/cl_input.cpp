@@ -41,7 +41,6 @@ namespace
 {
 float s_switchRightStickYaw = 0.0f;
 float s_switchRightStickPitch = 0.0f;
-bool s_switchPlayerWasDead = false;
 
 // Give the stick a small deadzone and a gentle response curve so tiny physical
 // fluctuations do not shake the view and small intentional movements are easier
@@ -80,6 +79,22 @@ void Switch_ResetRightStickSmoothing()
     s_switchRightStickYaw = 0.0f;
     s_switchRightStickPitch = 0.0f;
 }
+}
+
+void CL_SyncSwitchGamepadAnglesAfterSpawn(
+    const float *viewAngles,
+    const float *deltaAngles)
+{
+    if (!viewAngles || !deltaAngles)
+        return;
+
+    // SetClientViewAngle() has just established the authoritative player
+    // orientation and command delta. Convert it back to the client command
+    // angle space before the first post-spawn usercmd is built.
+    for (int i = 0; i < 3; ++i)
+        clients[0].viewangles[i] = viewAngles[i] - deltaAngles[i];
+
+    Switch_ResetRightStickSmoothing();
 }
 #endif
 
@@ -1059,29 +1074,14 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         return;
     }
 
-    // Pmove intentionally stops accepting view-angle changes while PM_DEAD.
-    // Do not keep changing the local command-space view angles during death:
-    // the server's dead camera is fixed at STAT_DEAD_YAW. On the first
-    // authoritative alive snapshot after respawn, rebuild command-space angles
-    // from world viewangles and delta_angles so camera, body, and movement agree.
+    // Do not feed look input while the authoritative snapshot is dead.
+    // Respawn synchronization is performed by ClientSpawn(), when the server
+    // establishes the new viewangles and delta_angles.
     const playerState_s &snapshotPs = clients[0].snap.ps;
     if (snapshotPs.pm_type >= PM_DEAD)
     {
-        s_switchPlayerWasDead = true;
         Switch_ResetRightStickSmoothing();
         return;
-    }
-
-    if (s_switchPlayerWasDead)
-    {
-        clients[0].viewangles[0] =
-            snapshotPs.viewangles[0] - snapshotPs.delta_angles[0];
-        clients[0].viewangles[1] =
-            snapshotPs.viewangles[1] - snapshotPs.delta_angles[1];
-        clients[0].viewangles[2] =
-            snapshotPs.viewangles[2] - snapshotPs.delta_angles[2];
-        s_switchPlayerWasDead = false;
-        Switch_ResetRightStickSmoothing();
     }
 
     const int controller = CL_ControllerIndexFromClientNum(0);
