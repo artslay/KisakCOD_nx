@@ -32,6 +32,15 @@ struct scrEvaluateGlob_t // sizeof=0x10
 };
 #ifndef KISAK_SWITCH
 static_assert(sizeof(scrEvaluateGlob_t) == 0x10);
+#else
+static_assert(sizeof(scrEvaluateGlob_t) == 0x20,
+              "script evaluator state must include native 64-bit pointers");
+static_assert(offsetof(scrEvaluateGlob_t, archivedCanonicalStrings) == 0x8,
+              "archived canonical-string pointer offset changed");
+static_assert(offsetof(scrEvaluateGlob_t, canonicalStringLookup) == 0x10,
+              "canonical-string lookup pointer offset changed");
+static_assert(offsetof(scrEvaluateGlob_t, freezeScope) == 0x18,
+              "script evaluator flags offset changed");
 #endif
 
 void __cdecl TRACK_scr_evaluate();
