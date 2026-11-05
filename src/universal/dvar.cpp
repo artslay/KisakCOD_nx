@@ -2765,6 +2765,24 @@ void __cdecl Dvar_SetFromString(dvar_s *dvar, char *string)
 
 void __cdecl Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSource source)
 {
+#ifdef __SWITCH__
+    if (dvar && dvar->name &&
+        (!strcmp(dvar->name, "compass") ||
+         !strcmp(dvar->name, "con_gameMsgWindow2Filter")))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DVAR SET CALLER] name=%s source=%s requested='%.96s' caller=%p\\n",
+            dvar->name,
+            Switch_DvarSourceName(source),
+            string ? string : "<null>",
+            __builtin_return_address(0));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     DvarValue result; // [esp+0h] [ebp-438h] BYREF
     DvarValue v4; // [esp+10h] [ebp-428h]
     char buf[1028]; // [esp+20h] [ebp-418h] BYREF
