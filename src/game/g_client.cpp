@@ -668,12 +668,6 @@ void __cdecl ClientSpawn(gentity_s *ent)
     }
 #endif
     SetClientViewAngle(ent, v13);
-#ifdef __SWITCH__
-    if (v3 == 0)
-    {
-        CL_SyncSwitchGamepadAnglesAfterSpawn(client->ps.viewangles, client->ps.delta_angles);
-    }
-#endif
     SV_LinkEntity(ent);
     v9 = client->ps.pm_flags | 0x100;
     client->ps.pm_time = 100;
@@ -692,6 +686,14 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->playerADSTargetTime = 0;
     client->ps.commandTime = level.time - 200;
     ClientThink(v3);
+#ifdef __SWITCH__
+    // Pmove in ClientThink may clamp or otherwise adjust the spawn angles.
+    // Synchronize the local command-space angles from the final server state.
+    if (v3 == 0)
+    {
+        CL_SyncSwitchGamepadAnglesAfterSpawn(client->ps.viewangles, client->ps.delta_angles);
+    }
+#endif
 #ifdef __SWITCH__
     if (switchTraceThisSpawn)
     {
