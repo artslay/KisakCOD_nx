@@ -109,16 +109,6 @@ static SwitchPendingSingleButton g_switchPendingSingleButtons[kSwitchBindButtonC
 static bool g_switchActiveChordKeys[kSwitchComboKeyCount] = {};
 static u64 g_switchChordConsumedButtons = 0;
 
-static bool Pressed(u64 mask)
-{
-    return IsDown(g_buttons, mask) && !IsDown(g_previousButtons, mask);
-}
-
-static bool Released(u64 mask)
-{
-    return !IsDown(g_buttons, mask) && IsDown(g_previousButtons, mask);
-}
-
 static int Switch_ComboPairIndex(int first, int second)
 {
     if (first == second || first < 0 || second < 0 ||
