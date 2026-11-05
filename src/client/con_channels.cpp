@@ -4,6 +4,11 @@
 #include <universal/com_files.h>
 #include <qcommon/cmd.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 struct PrintChannel // sizeof=0x21
 {                                       // ...
     char name[32];                      // ...
@@ -84,11 +89,17 @@ bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32
             ".\\client\\con_channels.cpp",
             209,
             0,
-            "%s\n\t(channel) = %i",
+            "%s\\n\\t(channel) = %i",
             "(channel >= 0 && channel < CON_MAX_CHANNELS)",
             channel);
     if (!pcGlob.openChannels[channel].name[0])
+    {
+#ifdef __SWITCH__
+        if (dest == CON_DEST_GAME3 && channel == CON_CHANNEL_SUBTITLE)
+            Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=visible channelOpen=0\n");
+#endif
         return 0;
+    }
     if (dest == CON_DEST_MINICON)
     {
         if (Con_IsNotifyChannel(channel))
@@ -97,7 +108,58 @@ bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32
     }
     if (dest == CON_DEST_CONSOLE && channel == CON_CHANNEL_DONT_FILTER)
         return 1;
-    if (Com_BitCheckAssert(pcGlob.filters[dest], channel, 32))
+
+    bool channelVisible = Com_BitCheckAssert(pcGlob.filters[dest], channel, 32);
+#ifdef __SWITCH__
+    if (dest == CON_DEST_GAME3 && channel == CON_CHANNEL_SUBTITLE)
+    {
+        // Rebuild this destination from its configured dvar if the live bitset
+        // has drifted. Custom filters remain authoritative; subtitles are not
+        // forced on when the configured list excludes them.
+        static bool switchSubtitleFilterRecoveryAttempted = false;
+        if (!channelVisible && !switchSubtitleFilterRecoveryAttempted)
+        {
+            switchSubtitleFilterRecoveryAttempted = true;
+            const char *configuredFilter = Dvar_GetString("con_gameMsgWindow2Filter");
+            if (configuredFilter && configuredFilter[0])
+            {
+                Con_InitChannelsForDestFromList(dest, configuredFilter);
+                channelVisible = Com_BitCheckAssert(pcGlob.filters[dest], channel, 32);
+
+                char recoveryTrace[256];
+                std::snprintf(
+                    recoveryTrace,
+                    sizeof(recoveryTrace),
+                    "[KisakCOD][HUD SUBTITLE FILTER] stage=rebuild configured='%.80s' open=1 filter=%d\n",
+                    configuredFilter,
+                    channelVisible ? 1 : 0);
+                Switch_LogWrite(recoveryTrace);
+            }
+        }
+
+        static int lastSubtitleFilterVisible = -1;
+        static uint32_t subtitleFilterTraceCount = 0;
+        const int visibleState = channelVisible ? 1 : 0;
+        if (visibleState != lastSubtitleFilterVisible || subtitleFilterTraceCount < 4u)
+        {
+            const char *configuredFilter = Dvar_GetString("con_gameMsgWindow2Filter");
+            char filterTrace[288];
+            std::snprintf(
+                filterTrace,
+                sizeof(filterTrace),
+                "[KisakCOD][HUD SUBTITLE FILTER] stage=route dest=%d channel=%u open=1 filter=%d configured='%.80s' flags=0x%x\n",
+                static_cast<int>(dest),
+                channel,
+                visibleState,
+                configuredFilter ? configuredFilter : "<null>",
+                static_cast<unsigned>(errorflags));
+            Switch_LogWrite(filterTrace);
+            lastSubtitleFilterVisible = visibleState;
+            ++subtitleFilterTraceCount;
+        }
+    }
+#endif
+    if (channelVisible)
         return 1;
     error = (errorflags >> 5) & 0x1F;
     return (error == 3 || error == 2) && Com_BitCheckAssert(pcGlob.filters[dest], CON_CHANNEL_ERROR, 32);
@@ -165,6 +227,24 @@ void __cdecl Con_InitGameMsgChannels()
         Con_InitChannelsForDestFromList(
             (print_msg_dest_t)(gameWindowIndexa + 3),
             con_gameMsgWindowNFilter[gameWindowIndexa]->current.string);
+#ifdef __SWITCH__
+    {
+        const bool subtitleOpen = pcGlob.openChannels[CON_CHANNEL_SUBTITLE].name[0] != 0;
+        const bool subtitleVisible =
+            subtitleOpen &&
+            Com_BitCheckAssert(pcGlob.filters[CON_DEST_GAME3], CON_CHANNEL_SUBTITLE, 32);
+        const char *configuredFilter = Dvar_GetString("con_gameMsgWindow2Filter");
+        char trace[288];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][HUD SUBTITLE FILTER] stage=init open=%d filter=%d configured='%.80s'\n",
+            subtitleOpen ? 1 : 0,
+            subtitleVisible ? 1 : 0,
+            configuredFilter ? configuredFilter : "<null>");
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *channelNames)
