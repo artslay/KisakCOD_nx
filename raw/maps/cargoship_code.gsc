@@ -3100,6 +3100,12 @@ jumptoRestoreBridgeHeroes()
 		if(isdefined(ai[i].spawner.nounload) && ai[i].spawner.nounload == true)
 			continue;
 
+		// A spawned actor can still be hidden and waiting for its seat when the
+		// bridge checkpoint fires. Do not read seat_pos or interrupt its attach
+		// thread until the helicopter link and seat animation are established.
+		while(!ai[i].fastrope_attached)
+			ai[i] waittill("fastrope_attached");
+
 		node = getnode(("seat" + ai[i].seat_pos), "targetname");
 
 		// This ends the actor's fast-rope thread and its pivot attachment thread.
