@@ -1,5 +1,9 @@
 #pragma once
 #include <cstdint>
+
+// HUD icon tokens contain a three-byte header followed by a native Material pointer.
+#define CONTXTCMD_HUDICON_HEADER_SIZE 3u
+#define CONTXTCMD_LEN_HUDICON (CONTXTCMD_HUDICON_HEADER_SIZE + sizeof(void *))
 //#include "r_material.h"
 
 struct Glyph // sizeof=0x18
