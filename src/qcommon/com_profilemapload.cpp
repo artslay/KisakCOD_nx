@@ -19,7 +19,7 @@ static const float PROFLOAD_BACKGROUND_COLOR[4] = { 0.0f, 0.0f, 0.0f, 0.8f };
 
 void __cdecl TRACK_com_profilemapload()
 {
-    track_static_alloc_internal(&mapLoadProfile, 43136, "mapLoadProfile", 0);
+    track_static_alloc_internal(&mapLoadProfile, sizeof(mapLoadProfile), "mapLoadProfile", 0);
 }
 
 bool __cdecl ProfLoad_IsActive()
