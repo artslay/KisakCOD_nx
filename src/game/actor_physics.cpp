@@ -131,7 +131,7 @@ static void Switch_LogAiGroundTrace(
 
 void __cdecl TRACK_actor_physics()
 {
-    track_static_alloc_internal(&g_apl, 92, "g_apl", 5);
+    track_static_alloc_internal(&g_apl, sizeof(g_apl), "g_apl", 5);
 }
 
 void __cdecl AIPhys_AddTouchEnt(int entityNum)
