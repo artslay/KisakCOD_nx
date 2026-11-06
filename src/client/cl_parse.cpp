@@ -276,7 +276,7 @@ const char *svc_strings[256] =
 
 void __cdecl TRACK_cl_parse()
 {
-    track_static_alloc_internal(svc_strings, 1024, "svc_strings", 9);
+    track_static_alloc_internal(svc_strings, sizeof(svc_strings), "svc_strings", 9);
 }
 
 void __cdecl SHOWNET(msg_t *msg, char *s)
