@@ -310,11 +310,11 @@ bool s_hasExactMatch;
 void __cdecl TRACK_cl_keys()
 {
     track_static_alloc_internal(playerKeys, static_cast<int>(sizeof(playerKeys)), "playerKeys", 10);
-    track_static_alloc_internal(&g_consoleField, 280, "g_consoleField", 10);
-    track_static_alloc_internal(historyEditLines, 8960, "historyEditLines", 10);
-    track_static_alloc_internal(keynames, 768, "keynames", 10);
-    track_static_alloc_internal(keynames_localized, 768, "keynames_localized", 10);
-    track_static_alloc_internal(s_shortestMatch, 1024, "s_shortestMatch", 3);
+    track_static_alloc_internal(&g_consoleField, sizeof(g_consoleField), "g_consoleField", 10);
+    track_static_alloc_internal(historyEditLines, sizeof(historyEditLines), "historyEditLines", 10);
+    track_static_alloc_internal(keynames, sizeof(keynames), "keynames", 10);
+    track_static_alloc_internal(keynames_localized, sizeof(keynames_localized), "keynames_localized", 10);
+    track_static_alloc_internal(s_shortestMatch, sizeof(s_shortestMatch), "s_shortestMatch", 3);
 }
 
 void __cdecl Field_DrawTextOverride(
