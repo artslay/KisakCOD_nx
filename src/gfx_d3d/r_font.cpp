@@ -237,7 +237,7 @@ int __cdecl R_TextWidth(const char *text, int maxChars, Font_s *font)
         }
         else if (letter == 94 && text && (*text == 1 || *text == 2))
         {
-            lineWidth += (font->pixelHeight * (text[2] - 16) + 16) / 32;
+            lineWidth += (font->pixelHeight * (text[1] - 16) + 16) / 32;
             if (maxWidth < lineWidth)
                 maxWidth = lineWidth;
             text += CONTXTCMD_LEN_HUDICON;
