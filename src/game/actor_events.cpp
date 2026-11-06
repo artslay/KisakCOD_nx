@@ -118,22 +118,13 @@ void __cdecl Actor_DumpEvents(actor_s *self, ai_event_t event, gentity_s *origin
 
 int __cdecl Actor_EventForName(const char *name)
 {
-    const $51E54BD14BE3E2EF9DA2A8BD94E6B80E *v2; // r31
-    int v3; // r29
-    unsigned int v4; // r30
-
-    v2 = g_ai_event_info;
-    v3 = 0;
-    v4 = 0;
-    while (!v2->name || I_stricmp(name, v2->name))
+    for (int i = 0; i < ARRAY_COUNT(g_ai_event_info); ++i)
     {
-        v4 += 12;
-        ++v3;
-        ++v2;
-        if (v4 >= 0x114)
-            return 0;
+        const char *eventName = g_ai_event_info[i].name;
+        if (eventName && !I_stricmp(name, eventName))
+            return i;
     }
-    return v3;
+    return 0;
 }
 
 // attributes: thunk
