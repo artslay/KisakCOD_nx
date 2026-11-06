@@ -1192,6 +1192,55 @@ void __cdecl Scr_NotifyNum(
 
     PROF_SCOPED("Scr_NotifyNum");
 
+#ifdef KISAK_SWITCH
+    // Trace only the Cargo Ship bridge choreography notifications. This records
+    // the actual recipient and GSC callsite without enabling general notify spam.
+    static uint32_t switchBridgeNotifyTraceCount = 0;
+    const char *switchNotifyName = SL_ConvertToStringSafe(stringValue);
+    if (switchBridgeNotifyTraceCount < 96u && switchNotifyName &&
+        (!std::strcmp(switchNotifyName, "bridge_react") ||
+         !std::strcmp(switchNotifyName, "already_dying") ||
+         !std::strcmp(switchNotifyName, "death_by_player")))
+    {
+        const gentity_s *switchNotifyEnt =
+            classnum == 0 && entnum < MAX_GENTITIES ? &g_entities[entnum] : nullptr;
+        const char *switchTargetName =
+            switchNotifyEnt && switchNotifyEnt->targetname
+                ? SL_ConvertToStringSafe(switchNotifyEnt->targetname) : "<none>";
+        const char *switchClassName =
+            switchNotifyEnt && switchNotifyEnt->classname
+                ? SL_ConvertToStringSafe(switchNotifyEnt->classname) : "<none>";
+        char *switchScriptFile = (char *)"";
+        int switchScriptLine = 0;
+        const char *switchCodePos = nullptr;
+        if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+        {
+            switchCodePos = scrVmPub.function_frame->fs.pos;
+            if (switchCodePos)
+                Scr_GetFileAndLine(
+                    switchCodePos, &switchScriptFile, &switchScriptLine);
+        }
+
+        char switchNotifyTrace[640];
+        std::snprintf(
+            switchNotifyTrace,
+            sizeof(switchNotifyTrace),
+            "[KisakCOD][AI SCRIPT NOTIFY] n=%u time=%d event=%s recipient=%u classnum=%u targetname=%s classname=%s source=%s:%d codePos=%p params=%u\n",
+            switchBridgeNotifyTraceCount++,
+            level.time,
+            switchNotifyName,
+            entnum,
+            classnum,
+            switchTargetName,
+            switchClassName,
+            switchScriptFile ? switchScriptFile : "",
+            switchScriptLine,
+            static_cast<const void *>(switchCodePos),
+            paramcount);
+        Switch_LogWrite(switchNotifyTrace);
+    }
+#endif
+
     SL_CheckExists(stringValue);
     varUsagePos = scrVarPub.varUsagePos;
     if (!scrVarPub.varUsagePos)
