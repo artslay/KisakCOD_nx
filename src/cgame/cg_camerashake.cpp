@@ -19,7 +19,7 @@ CameraShakeSet s_cameraShakeSet[1];
 
 void __cdecl TRACK_cg_camerashake()
 {
-    track_static_alloc_internal(s_cameraShakeSet, 148, "s_cameraShakeSet", 9);
+    track_static_alloc_internal(s_cameraShakeSet, sizeof(s_cameraShakeSet), "s_cameraShakeSet", 9);
 }
 
 void __cdecl CG_StartShakeCamera(int32_t localClientNum, float p, int32_t duration, float *src, float radius)
