@@ -9,7 +9,7 @@ uint8_t windingPool[12292];
 
 void __cdecl TRACK_cm_showcollision()
 {
-    track_static_alloc_internal(windingPool, 12292, "windingPool", 0);
+    track_static_alloc_internal(windingPool, sizeof(windingPool), "windingPool", 0);
 }
 
 void __cdecl CM_GetPlaneVec4Form(
