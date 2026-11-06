@@ -5234,7 +5234,7 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
                 0,
                 "%s",
                 "self->Path.wPathLen - 2 >= self->Path.wNegotiationStartNode");
-        v13 = (float *)&self->Physics.iTouchEnts[7 * self->Path.wPathLen + 27];
+        const float *dodgePathDir = self->Path.pts[self->Path.wPathLen - 2].fDir2D;
         v14 = 0;
         v15 = sqrtf((float)((float)(self->Physics.vWishDelta[0] * self->Physics.vWishDelta[0])
             + (float)(self->Physics.vWishDelta[1] * self->Physics.vWishDelta[1])));
@@ -5246,7 +5246,7 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
             v15 = (float)((float)v15 * (float)0.75);
             LeftOrRightDodge = (gentityFlags_t)Actor_Physics_GetLeftOrRightDodge(
                 self,
-                (float)(v13[1] * (float)v16) >= (double)(float)(*v13 * (float)v17),
+                (float)(dodgePathDir[1] * (float)v16) >= (double)(float)(dodgePathDir[0] * (float)v17),
                 v15);
             self->Physics.vVelocity[0] = v7;
             self->Physics.vVelocity[1] = v8;
