@@ -11584,24 +11584,13 @@ void __cdecl GScr_StopUseAnimTree(scr_entref_t entref)
 
 void GScr_GetNumVehicles()
 {
-    int v0; // r3
-    int *p_entNum; // r11
-
-    v0 = 0;
-    p_entNum = &s_vehicles[1].entNum;
-    do
+    int vehicleCount = 0;
+    for (int i = 0; i < ARRAY_COUNT(s_vehicles); ++i)
     {
-        if (*(p_entNum - 206) != ENTITYNUM_NONE)
-            ++v0;
-        if (*p_entNum != ENTITYNUM_NONE)
-            ++v0;
-        if (p_entNum[206] != ENTITYNUM_NONE)
-            ++v0;
-        if (p_entNum[412] != ENTITYNUM_NONE)
-            ++v0;
-        p_entNum += 824;
-    } while ((uintptr_t)p_entNum < (uintptr_t)&s_vehicles[64]);
-    Scr_AddInt(v0);
+        if (s_vehicles[i].entNum != ENTITYNUM_NONE)
+            ++vehicleCount;
+    }
+    Scr_AddInt(vehicleCount);
 }
 
 void GScr_PrecacheVehicle()
