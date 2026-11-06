@@ -203,101 +203,107 @@ void __cdecl Actor_ResumePopedState(actor_s *self, ai_state_t state)
 
 void __cdecl Actor_ThinkStateTransitions(actor_s *self)
 {
-    unsigned int v2; // r19
-    ai_state_t *p_eState; // r29
-    unsigned int stateLevel; // r7
-    ai_state_t v5; // r8
-    int v6; // r4
-    const char *v7; // r3
-    unsigned int v8; // r9
-    unsigned int v9; // r10
-    ai_state_t *eSimulatedState; // r11
-
     if (!self->transitionCount)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp", 268, 0, "%s", "self->transitionCount > 0");
-    v2 = 0;
-    if (self->transitionCount)
+        MyAssertHandler(
+            "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+            268,
+            0,
+            "%s",
+            "self->transitionCount > 0");
+
+    iassert(self->transitionCount <= ARRAY_COUNT(self->StateTransitions));
+
+    for (unsigned int transitionIndex = 0;
+         transitionIndex < self->transitionCount;
+         ++transitionIndex)
     {
-        p_eState = &self->StateTransitions[0].eState;
-        do
+        const ai_transition_cmd_t transition = self->StateTransitions[transitionIndex];
+        const unsigned int stateLevel = self->stateLevel;
+
+        if (stateLevel >= ARRAY_COUNT(self->eState))
+            MyAssertHandler(
+                "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                275,
+                0,
+                "self->stateLevel doesn't index ARRAY_COUNT( self->eState )\\n\\t%i not in [0, %i)",
+                stateLevel,
+                static_cast<int>(ARRAY_COUNT(self->eState)));
+
+        const ai_state_t currentState = self->eState[stateLevel];
+        if (currentState <= AIS_INVALID || currentState >= AIS_COUNT)
+            MyAssertHandler(
+                "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                276,
+                0,
+                "%s\\n\\t(self->eState[self->stateLevel]) = %i",
+                "(self->eState[self->stateLevel] > AIS_INVALID && self->eState[self->stateLevel] < AIS_COUNT)",
+                currentState);
+
+        switch (transition.eTransition)
         {
-            stateLevel = self->stateLevel;
-            if (stateLevel >= 5)
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
-                    275,
-                    0,
-                    "self->stateLevel doesn't index ARRAY_COUNT( self->eState )\n\t%i not in [0, %i)",
-                    stateLevel,
-                    5);
-            v5 = self->eState[self->stateLevel];
-            if (v5 <= AIS_INVALID || v5 >= AIS_COUNT)
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
-                    276,
-                    0,
-                    "%s\n\t(self->eState[self->stateLevel]) = %i",
-                    "(self->eState[self->stateLevel] > AIS_INVALID && self->eState[self->stateLevel] < AIS_COUNT)",
-                    v5);
-            v6 = *((unsigned int *)p_eState - 1);
-            switch (v6)
+        case AIS_TRANSITION_SET:
+            Actor_FinishState(self, transition.eState);
+            if (!static_cast<unsigned __int8>(Actor_StartState(self, transition.eState)) &&
+                !static_cast<unsigned __int8>(Actor_StartState(self, AIS_EXPOSED)))
             {
-            case 1:
-                Actor_FinishState(self, *p_eState);
-                if (!(unsigned __int8)Actor_StartState(self, *p_eState)
-                    && !(unsigned __int8)Actor_StartState(self, AIS_EXPOSED))
-                {
-                    MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp", 228, 0, "%s", "startSuccess");
-                }
-                break;
-            case 2:
-                if (self->stateLevel + 1 >= 5)
-                    MyAssertHandler(
-                        "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
-                        288,
-                        0,
-                        "%s",
-                        "self->stateLevel + 1 < ARRAY_COUNT( self->eState )");
-                Actor_SuspendState(self, *p_eState);
-                ++self->stateLevel;
-                if (!(unsigned __int8)Actor_StartState(self, *p_eState))
-                    Actor_ResumePopedState(self, *p_eState);
-                break;
-            case 3:
-                if (!self->stateLevel)
-                    MyAssertHandler(
-                        "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
-                        297,
-                        0,
-                        "%s",
-                        "self->stateLevel > 0");
-                iassert(self->stateLevel <= ARRAY_COUNT(self->eState));
-        Actor_FinishState(self, self->eState[self->stateLevel - 1]);
-                Actor_ResumePopedState(self, self->eState[self->stateLevel]);
-                break;
-            default:
-                if (!alwaysfails)
-                {
-                    v7 = va("invalid state transition %i", v6);
-                    MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp", 303, 0, v7);
-                }
-                break;
+                MyAssertHandler(
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                    228,
+                    0,
+                    "%s",
+                    "startSuccess");
             }
-            ++v2;
-            p_eState += 2;
-        } while (v2 < self->transitionCount);
+            break;
+
+        case AIS_TRANSITION_PUSH:
+            if (self->stateLevel + 1 >= ARRAY_COUNT(self->eState))
+                MyAssertHandler(
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                    288,
+                    0,
+                    "%s",
+                    "self->stateLevel + 1 < ARRAY_COUNT( self->eState )");
+            Actor_SuspendState(self, transition.eState);
+            ++self->stateLevel;
+            if (!static_cast<unsigned __int8>(Actor_StartState(self, transition.eState)))
+                Actor_ResumePopedState(self, transition.eState);
+            break;
+
+        case AIS_TRANSITION_POP:
+            if (!self->stateLevel)
+                MyAssertHandler(
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                    297,
+                    0,
+                    "%s",
+                    "self->stateLevel > 0");
+            iassert(self->stateLevel <= ARRAY_COUNT(self->eState));
+            Actor_FinishState(self, self->eState[self->stateLevel - 1]);
+            Actor_ResumePopedState(self, self->eState[self->stateLevel]);
+            break;
+
+        default:
+            if (!alwaysfails)
+            {
+                const char *message = va(
+                    "invalid state transition %i",
+                    static_cast<int>(transition.eTransition));
+                MyAssertHandler(
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_state.cpp",
+                    303,
+                    0,
+                    message);
+            }
+            break;
+        }
     }
-    v8 = self->stateLevel;
-    v9 = 0;
-    eSimulatedState = self->eSimulatedState;
+
+    const unsigned int stateLevel = self->stateLevel;
+    iassert(stateLevel < ARRAY_COUNT(self->eState));
     self->transitionCount = 0;
-    self->simulatedStateLevel = v8;
-    do
-    {
-        ++v9;
-        *eSimulatedState = *(eSimulatedState - 36);
-        ++eSimulatedState;
-    } while (v9 <= self->stateLevel);
+    self->simulatedStateLevel = stateLevel;
+    for (unsigned int i = 0; i <= stateLevel; ++i)
+        self->eSimulatedState[i] = self->eState[i];
 }
 
 void __cdecl Actor_SetSubState(actor_s *self, ai_substate_t eSubState)
