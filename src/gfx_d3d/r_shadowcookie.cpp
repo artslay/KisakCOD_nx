@@ -601,7 +601,14 @@ void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
         Vec3Mad(start, 10000.0, cookie->shadowViewParms->axis[0], end);
         radius = DObjGetRadius(sceneEnt->obj);
         drawSurfs = scene.cookie[cookieIndex].drawSurfs;
+#if defined(_WIN64) || defined(__SWITCH__)
+        // Preserve the full 0x100 receiver capacity with 64-bit pointers;
+        // the 32-bit overlay only consumed half as many bytes.
+        GfxSurface *surfaceScratch[0x100];
+        surfaces = surfaceScratch;
+#else
         surfaces = (GfxSurface **)&drawSurfs[128];
+#endif
         cookieDrawSurfCount = R_CylinderSurfaces(
             start,
             end,
@@ -610,7 +617,7 @@ void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
             5u,
             (int(__cdecl *)(int, void *))R_AllowBspShadowReceiver,
             &shadowReceiverCallback,
-            (GfxSurface **)&drawSurfs[128],
+            surfaces,
             0x100u);
         if (cookieDrawSurfCount)
         {
