@@ -1052,14 +1052,31 @@ void Scr_MergeChildBlocks(scr_block_s **childBlocks, int childCount, scr_block_s
 				childBlock->localVarsCount++;
 			}
 
+			// Keep initialization state attached to the local-variable slot
+			// while inserting an outer variable ahead of child-only variables.
 			while (j > i)
 			{
 				childBlock->localVars[j] = childBlock->localVars[j - 1];
+
+				const uint8_t fromMask = static_cast<uint8_t>(1u << ((j - 1) & 7));
+				const bool wasInitialized = (childBlock->localVarsInitBits[(j - 1) >> 3] & fromMask) != 0;
+				const uint8_t toMask = static_cast<uint8_t>(1u << (j & 7));
+				if (wasInitialized)
+					childBlock->localVarsInitBits[j >> 3] |= toMask;
+				else
+					childBlock->localVarsInitBits[j >> 3] &= static_cast<uint8_t>(~toMask);
+
 				j--;
 			}
 
 			childBlock->localVars[i].name = name;
 			childBlock->localVars[i].sourcePos = sourcePos;
+
+			const uint8_t initMask = static_cast<uint8_t>(1u << (i & 7));
+			if ((block->localVarsInitBits[i >> 3] & initMask) != 0)
+				childBlock->localVarsInitBits[i >> 3] |= initMask;
+			else
+				childBlock->localVarsInitBits[i >> 3] &= static_cast<uint8_t>(~initMask);
 		}
 	}
 }
