@@ -3095,7 +3095,7 @@ jumptoRestoreBridgeHeroes()
 		// Only touch actors owned by this fast-rope helicopter.
 		if(!isdefined(ai[i].spawner) || !isdefined(ai[i].spawner.heli))
 			continue;
-		if(ai[i].spawner.heli != level.heli)
+		if(ai[i].spawner.heli.targetname != level.heli.targetname)
 			continue;
 		if(isdefined(ai[i].spawner.nounload) && ai[i].spawner.nounload == true)
 			continue;
