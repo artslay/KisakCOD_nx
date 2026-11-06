@@ -58,9 +58,10 @@ int __cdecl Actor_FindThreatBiasGroupIndex(unsigned int name)
     if (!name)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_threat.cpp", 163, 0, "%s", "name");
 
-    const int groupCount = std::min(
-        g_threatBias.threatGroupCount,
-        static_cast<int>(ARRAY_COUNT(g_threatBias.groupName)));
+    const int maxGroupCount = static_cast<int>(ARRAY_COUNT(g_threatBias.groupName));
+    const int groupCount = g_threatBias.threatGroupCount < maxGroupCount
+        ? g_threatBias.threatGroupCount
+        : maxGroupCount;
     for (int i = 0; i < groupCount; ++i)
     {
         if (g_threatBias.groupName[i] == name)
