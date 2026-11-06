@@ -1196,7 +1196,7 @@ void __cdecl Scr_NotifyNum(
     // Trace only the Cargo Ship bridge choreography notifications. This records
     // the actual recipient and GSC callsite without enabling general notify spam.
     static uint32_t switchBridgeNotifyTraceCount = 0;
-    const char *switchNotifyName = SL_ConvertToStringSafe(stringValue);
+    const char *switchNotifyName = SL_ConvertToString(stringValue);
     if (switchBridgeNotifyTraceCount < 96u && switchNotifyName &&
         (!std::strcmp(switchNotifyName, "bridge_react") ||
          !std::strcmp(switchNotifyName, "already_dying") ||
