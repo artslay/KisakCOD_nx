@@ -5364,11 +5364,10 @@ void G_SaveVehicleInfo(SaveGame *save)
     for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
         vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
-        for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
-        {
-            if (info->sndIndices[soundIndex])
-                SaveMemory_SaveWrite(&info->sndIndices[soundIndex], sizeof(info->sndIndices[soundIndex]), save);
-        }
+        // Always serialize all six slots. The runtime indices can be zero
+        // at save time and nonzero by load time (or vice versa), so gating
+        // either side on the current value would misalign the following fields.
+        SaveMemory_SaveWrite(info->sndIndices, sizeof(info->sndIndices), save);
     }
 }
 
@@ -5377,11 +5376,7 @@ void G_LoadVehicleInfo(SaveGame *save)
     for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
         vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
-        for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
-        {
-            if (info->sndIndices[soundIndex])
-                SaveMemory_LoadRead(&info->sndIndices[soundIndex], sizeof(info->sndIndices[soundIndex]), save);
-        }
+        SaveMemory_LoadRead(info->sndIndices, sizeof(info->sndIndices), save);
     }
 }
 
