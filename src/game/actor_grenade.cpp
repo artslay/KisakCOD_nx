@@ -24,8 +24,8 @@ float g_vRefPos[3]{ 0.0f };
 
 void __cdecl TRACK_actor_grenade()
 {
-    track_static_alloc_internal(g_vGrenadeHint, 6144, "g_vGrenadeHint", 5);
-    track_static_alloc_internal(g_vRefPos, 12, "g_vRefPos", 5);
+    track_static_alloc_internal(g_vGrenadeHint, sizeof(g_vGrenadeHint), "g_vGrenadeHint", 5);
+    track_static_alloc_internal(g_vRefPos, sizeof(g_vRefPos), "g_vRefPos", 5);
 }
 
 void __cdecl SP_info_grenade_hint(gentity_s *ent)
