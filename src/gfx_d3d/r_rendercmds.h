@@ -8,11 +8,6 @@
 #include "r_material.h"
 #include <qcommon/com_pack.h>
 
-// Inline HUD-icon text tokens store a native Material pointer after three bytes
-// of control data. Keep the legacy 7-byte payload on 32-bit and use 11 bytes on ARM64.
-#define CONTXTCMD_HUDICON_HEADER_SIZE 3u
-#define CONTXTCMD_LEN_HUDICON (CONTXTCMD_HUDICON_HEADER_SIZE + sizeof(uintptr_t))
-
 enum CodeConstant : __int32; // r_state.h
 
 // Runtime-only sidecar pointers for the Switch 64-bit renderer.
