@@ -43,7 +43,7 @@ int g_accuGraphTime[2][128]; // [bufferIndex][weapIndex] (dword_82C31FB0)
 void __cdecl TRACK_actor_aim()
 {
     track_static_alloc_internal(g_accuracyGraphs, sizeof(g_accuracyGraphs), "g_accuracyGraphs", 0);
-    track_static_alloc_internal(g_accuGraphBuf, 0x10000, "g_accuGraphBuf", 0);
+    track_static_alloc_internal(g_accuGraphBuf, sizeof(g_accuGraphBuf), "g_accuGraphBuf", 0);
 }
 
 void __cdecl Actor_DrawDebugAccuracy(const float *pos, double scale, double rowHeight)
