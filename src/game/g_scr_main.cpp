@@ -29,6 +29,7 @@
 #include <server/server.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
 extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 extern void Switch_LogWrite(const char *msg);
 #endif
