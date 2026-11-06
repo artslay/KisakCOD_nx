@@ -5170,7 +5170,6 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
     int result; // r3
     int iHitEntnum; // r19
     gentityFlags_t v12; // r28
-    float *v13; // r25
     int v14; // r23
     double v15; // fp31
     double v16; // fp30
