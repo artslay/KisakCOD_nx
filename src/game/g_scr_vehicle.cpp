@@ -4266,33 +4266,17 @@ void G_FreeScrVehicles()
 
 void G_RestartScrVehicleInfo()
 {
-    int v0; // r27
-    char *v1; // r28
-    _WORD *v2; // r31
-    const char *v3; // r30
-    int v4; // r29
-
-    v0 = 0;
-    if (s_numVehicleInfos > 0)
+    for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        v1 = s_vehicleInfos[0].sndNames[VEH_LOW_IDLE_SND];
-        do
+        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
         {
-            v2 = (_WORD*)(v1 + 384);
-            v3 = v1;
-            v4 = 6;
-            do
+            if (info->sndIndices[soundIndex])
             {
-                if (*v2)
-                    *v2 = G_SoundAliasIndexPermanent(v3);
-                --v4;
-                ++v2;
-                v3 += 64;
-            } while (v4);
-            ++v0;
-            //v1 += 628;
-            v1 += sizeof(vehicle_info_t);
-        } while (v0 < s_numVehicleInfos);
+                info->sndIndices[soundIndex] =
+                    G_SoundAliasIndexPermanent(info->sndNames[soundIndex]);
+            }
+        }
     }
 }
 
@@ -5377,33 +5361,27 @@ void(* ScriptVehicle_GetMethod(const char **pName))(scr_entref_t)
 // of runtime gate state. A few bytes per vehicle-info-type is negligible.
 void G_SaveVehicleInfo(SaveGame *save)
 {
-    if (s_numVehicleInfos <= 0)
-        return;
-    uint16_t *sndIndices = (uint16_t *)s_vehicleInfos[0].sndIndices;
-    for (int v2 = 0; v2 < s_numVehicleInfos; ++v2)
+    for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        for (int i = 0; i < NUM_VEHICLE_SNDS; ++i)
+        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
         {
-            if (sndIndices[i])
-                SaveMemory_SaveWrite(&sndIndices[i], 2, save);
+            if (info->sndIndices[soundIndex])
+                SaveMemory_SaveWrite(&info->sndIndices[soundIndex], sizeof(info->sndIndices[soundIndex]), save);
         }
-        sndIndices += 314; // = sizeof(vehicle_info_t) / sizeof(uint16_t)
     }
 }
 
 void G_LoadVehicleInfo(SaveGame *save)
 {
-    if (s_numVehicleInfos <= 0)
-        return;
-    uint16_t *sndIndices = (uint16_t *)s_vehicleInfos[0].sndIndices;
-    for (int v2 = 0; v2 < s_numVehicleInfos; ++v2)
+    for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        for (int i = 0; i < NUM_VEHICLE_SNDS; ++i)
+        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
         {
-            if (sndIndices[i])
-                SaveMemory_LoadRead(&sndIndices[i], 2, save);
+            if (info->sndIndices[soundIndex])
+                SaveMemory_LoadRead(&info->sndIndices[soundIndex], sizeof(info->sndIndices[soundIndex]), save);
         }
-        sndIndices += 314;
     }
 }
 
