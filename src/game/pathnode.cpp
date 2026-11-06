@@ -92,10 +92,10 @@ NodeTypeToName priorityAllowedNodes[9] =
 
 void __cdecl TRACK_pathnode()
 {
-    track_static_alloc_internal(&g_path, 16512, "g_path", 6);
-    track_static_alloc_internal((void *)nodeColorTable, 320, "nodeColorTable", 5);
-    track_static_alloc_internal(nodeStringTable, 80, "nodeStringTable", 5);
-    track_static_alloc_internal(&debugPathBuf, 996, "debugPathBuf", 0);
+    track_static_alloc_internal(&g_path, sizeof(g_path), "g_path", 6);
+    track_static_alloc_internal((void *)nodeColorTable, sizeof(nodeColorTable), "nodeColorTable", 5);
+    track_static_alloc_internal(nodeStringTable, sizeof(nodeStringTable), "nodeStringTable", 5);
+    track_static_alloc_internal(&debugPathBuf, sizeof(debugPathBuf), "debugPathBuf", 0);
 }
 
 int __cdecl NodeTypeCanHavePriority(nodeType type)
