@@ -3492,9 +3492,11 @@ void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pat
             Scr_Error("G_SetPathnodeScriptVariable: vector is an unsupported script variable type for pathnodes");
             goto LABEL_7;
         case 5:
+        {
             const double parsedValue = atof(value);
             Scr_AddFloat(static_cast<float>(parsedValue));
             goto LABEL_7;
+        }
         case 6:
             v7 = atol(value);
             Scr_AddInt(v7);
