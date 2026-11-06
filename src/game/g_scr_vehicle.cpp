@@ -4515,62 +4515,57 @@ void CMD_VEH_SetWaitSpeed(scr_entref_t entref)
 
 void CMD_VEH_SetSpeedImmediate(scr_entref_t entref)
 {
-    gentity_s *Vehicle; // r30
-    float *p_nodeIdx; // r31
-    double v3; // fp12
-    //double _FP8; // fp8
-    double _FP11; // fp11
-    double v6; // fp11
-    double v7; // fp0
-    double v8; // fp13
-    double v9; // fp12
-    double v10; // fp0
+    gentity_s *vehicleEnt;
     float dir[3];
-    float _FP8;
 
     if (entref.classnum)
     {
         Scr_ObjectError("not an entity");
-        Vehicle = 0;
+        vehicleEnt = nullptr;
     }
     else
     {
-        Vehicle = VEH_GetVehicle(entref.entnum);
+        vehicleEnt = VEH_GetVehicle(entref.entnum);
     }
-    p_nodeIdx = (float *)&Vehicle->scr_vehicle->pathPos.nodeIdx;
-    CMD_VEH_Script_SetSpeed(Vehicle);
-    dir[0] = 0.0;
-    dir[1] = 0.0;
-    dir[2] = 0.0;
-    if (p_nodeIdx[150] <= 0.0 && p_nodeIdx[167] == 0.0 && p_nodeIdx[168] == 0.0 && p_nodeIdx[169] == 0.0)
-        goto LABEL_11;
-    dir[0] = p_nodeIdx[167] - Vehicle->r.currentOrigin[0];
-    dir[1] = p_nodeIdx[168] - Vehicle->r.currentOrigin[1];
-    v3 = (float)(p_nodeIdx[169] - Vehicle->r.currentOrigin[2]);
-    // PPC: _FP8 = -sqrtf(...); fsel f11, f8, f10, f11
-    // fsel(-mag, safe, mag): (mag == 0) ? safe : mag.
-    _FP8 = sqrtf((float)((float)(dir[0] * dir[0]) + (float)((float)((float)v3 * (float)v3) + (float)(dir[1] * dir[1]))));
-    if (_FP8 > 0.0f)
-        _FP11 = _FP8;
-    else
-        _FP11 = 1.0f;
-    v6 = (float)((float)1.0 / (float)_FP11);
-    v7 = (float)((float)v6 * dir[0]);
-    dir[0] = (float)v6 * dir[0];
-    v8 = (float)(dir[1] * (float)v6);
-    dir[1] = dir[1] * (float)v6;
-    v9 = (float)((float)v3 * (float)v6);
-    dir[2] = v9;
-    if (v7 == 0.0 && v8 == 0.0 && v9 == 0.0)
-        LABEL_11:
-    AngleVectors(Vehicle->r.currentAngles, dir, 0, 0);
-    v10 = p_nodeIdx[146];
-    p_nodeIdx[150] = p_nodeIdx[146];
-    p_nodeIdx[71] = (float)v10 * dir[0];
-    p_nodeIdx[72] = dir[1] * (float)v10;
-    p_nodeIdx[73] = dir[2] * (float)v10;
-}
 
+    scr_vehicle_s *vehicle = vehicleEnt->scr_vehicle;
+    CMD_VEH_Script_SetSpeed(vehicleEnt);
+
+    dir[0] = 0.0f;
+    dir[1] = 0.0f;
+    dir[2] = 0.0f;
+
+    if (vehicle->speed > 0.0f ||
+        vehicle->goalPosition[0] != 0.0f ||
+        vehicle->goalPosition[1] != 0.0f ||
+        vehicle->goalPosition[2] != 0.0f)
+    {
+        dir[0] = vehicle->goalPosition[0] - vehicleEnt->r.currentOrigin[0];
+        dir[1] = vehicle->goalPosition[1] - vehicleEnt->r.currentOrigin[1];
+        dir[2] = vehicle->goalPosition[2] - vehicleEnt->r.currentOrigin[2];
+
+        const float length = sqrtf(
+            dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        const float inverseLength = 1.0f / (length > 0.0f ? length : 1.0f);
+
+        dir[0] *= inverseLength;
+        dir[1] *= inverseLength;
+        dir[2] *= inverseLength;
+
+        if (dir[0] == 0.0f && dir[1] == 0.0f && dir[2] == 0.0f)
+            AngleVectors(vehicleEnt->r.currentAngles, dir, nullptr, nullptr);
+    }
+    else
+    {
+        AngleVectors(vehicleEnt->r.currentAngles, dir, nullptr, nullptr);
+    }
+
+    const float speed = vehicle->manualSpeed;
+    vehicle->speed = speed;
+    vehicle->phys.vel[0] = speed * dir[0];
+    vehicle->phys.vel[1] = speed * dir[1];
+    vehicle->phys.vel[2] = speed * dir[2];
+}
 void CMD_VEH_GetGoalSpeedMPH(scr_entref_t entref)
 {
     gentity_s *Vehicle; // r3
