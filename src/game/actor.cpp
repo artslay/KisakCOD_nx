@@ -4822,7 +4822,6 @@ int __cdecl SP_actor(gentity_s *ent)
     int v11; // r10
     actor_goal_s *p_scriptGoal; // r28
     actor_goal_s *p_codeGoal; // r11
-    int v14; // ctr
 
     ent->model = 0;
 #ifdef __SWITCH__
