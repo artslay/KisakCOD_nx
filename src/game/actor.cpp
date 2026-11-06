@@ -203,11 +203,11 @@ team_t __cdecl Sentient_EnemyTeam(unsigned int eTeam)
 
 void __cdecl TRACK_actor()
 {
-    track_static_alloc_internal((void *)actorMins, 12, "actorMins", 5);
-    track_static_alloc_internal((void *)actorMaxs, 12, "actorMaxs", 5);
-    track_static_alloc_internal((void *)g_actorAssumedSpeed, 8, "g_actorAssumedSpeed", 5);
-    track_static_alloc_internal((void *)meleeAttackOffsets, 32, "meleeAttackOffsets", 5);
-    track_static_alloc_internal(g_entinfoAITextNames, 24, "g_entinfoAITextNames", 0);
+    track_static_alloc_internal((void *)actorMins, sizeof(actorMins), "actorMins", 5);
+    track_static_alloc_internal((void *)actorMaxs, sizeof(actorMaxs), "actorMaxs", 5);
+    track_static_alloc_internal((void *)g_actorAssumedSpeed, sizeof(g_actorAssumedSpeed), "g_actorAssumedSpeed", 5);
+    track_static_alloc_internal((void *)meleeAttackOffsets, sizeof(meleeAttackOffsets), "meleeAttackOffsets", 5);
+    track_static_alloc_internal(g_entinfoAITextNames, sizeof(g_entinfoAITextNames), "g_entinfoAITextNames", 0);
 }
 
 void __cdecl VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache)
