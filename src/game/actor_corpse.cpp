@@ -710,107 +710,72 @@ void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
 
 int __cdecl Actor_BecomeCorpse(gentity_s *self)
 {
-    int FreeActorCorpseIndex; // r27
-    actor_s *actor; // r29
-    actor_prone_info_s *p_ProneInfo; // r31
-    unsigned int ActorIndex; // r28
-    int IsProne; // r3
-    unsigned int *v8; // r11
-    int v9; // ctr
-    int v10; // r26
-    trajectory_t *p_pos; // r31
-    char IsRagdollTrajectory; // r3
-    float *currentOrigin; // r4
-    trType_t trType; // r29
-    corpseInfo_t *v15; // r31
-    unsigned __int16 death; // r4
-    XAnimTree_s *v17; // r11
-    float *v18; // r6
-    int v19; // r5
-    actor_prone_info_s *v20; // r11
-    unsigned int *v21; // r9
-    actor_prone_info_s *v22; // r8
-    int v23; // ctr
-    int time; // r10
-    _BYTE v25[96]; // [sp+50h] [-60h] BYREF
-
-    FreeActorCorpseIndex = G_GetFreeActorCorpseIndex(1);
-    if (FreeActorCorpseIndex < 0)
+    const int corpseIndex = G_GetFreeActorCorpseIndex(1);
+    if (corpseIndex < 0)
         return 0;
-    actor = self->actor;
-    p_ProneInfo = &actor->ProneInfo;
-    ActorIndex = G_GetActorIndex(actor);
-    IsProne = BG_ActorIsProne(&actor->ProneInfo, level.time);
-    v8 = (unsigned int*)v25;
-    v9 = 6;
-    do
-    {
-        *v8 = *(unsigned int *)&p_ProneInfo->bCorpseOrientation;
-        p_ProneInfo = (actor_prone_info_s *)((char *)p_ProneInfo + 4);
-        ++v8;
-        --v9;
-    } while (v9);
-    if (IsProne || actor->eAnimMode == AI_ANIM_NOPHYSICS || (v10 = 1, self->tagInfo))
-        v10 = 0;
+
+    actor_s *actor = self->actor;
+    const unsigned int actorIndex = G_GetActorIndex(actor);
+    const int isProne = BG_ActorIsProne(&actor->ProneInfo, level.time);
+    actor_prone_info_s proneInfo = actor->ProneInfo;
+    bool orientCorpse = !isProne &&
+        actor->eAnimMode != AI_ANIM_NOPHYSICS &&
+        !self->tagInfo;
+
     Actor_EventListener_RemoveEntity(self->s.number);
     Actor_Free(actor);
     if (self->actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp", 576, 0, "%s", "self->actor == NULL");
     if (self->sentient)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp", 577, 0, "%s", "self->sentient == NULL");
+
     self->physicsObject = 1;
-    p_pos = &self->s.lerp.pos;
+    trajectory_t *position = &self->s.lerp.pos;
     self->handler = ENT_HANDLER_ACTOR_CORPSE;
     self->r.contents = CONTENTS_CORPSE;
     self->s.eType = ET_ACTOR_CORPSE;
     self->clipmask = 8519697;
-    IsRagdollTrajectory = Com_IsRagdollTrajectory(&self->s.lerp.pos);
-    currentOrigin = self->r.currentOrigin;
-    if (IsRagdollTrajectory)
+
+    const bool ragdollTrajectory = Com_IsRagdollTrajectory(position) != 0;
+    if (ragdollTrajectory)
     {
-        trType = p_pos->trType;
-        G_SetOrigin(self, currentOrigin);
-        v10 = 0;
-        p_pos->trType = trType;
+        const trType_t trajectoryType = position->trType;
+        G_SetOrigin(self, self->r.currentOrigin);
+        orientCorpse = false;
+        position->trType = trajectoryType;
     }
     else
     {
-        G_SetOrigin(self, currentOrigin);
-        p_pos->trType = TR_STATIONARY;
+        G_SetOrigin(self, self->r.currentOrigin);
+        position->trType = TR_STATIONARY;
     }
-    v15 = &g_scr_data.actorCorpseInfo[FreeActorCorpseIndex];
-    death = scr_const.death;
-    v17 = g_scr_data.actorXAnimTrees[ActorIndex];
-    g_scr_data.actorXAnimTrees[ActorIndex] = v15->tree;
-    v15->tree = v17;
-    v15->entnum = self->s.number;
+
+    corpseInfo_t *corpseInfo = &g_scr_data.actorCorpseInfo[corpseIndex];
+    const unsigned __int16 death = scr_const.death;
+    XAnimTree_s *tree = g_scr_data.actorXAnimTrees[actorIndex];
+    g_scr_data.actorXAnimTrees[actorIndex] = corpseInfo->tree;
+    corpseInfo->tree = tree;
+    corpseInfo->entnum = self->s.number;
+
     Scr_Notify(self, death, 0);
     Scr_FreeEntityNum(self->s.number, CLASS_NUM_ENTITY);
     G_DObjUpdate(self);
-    v20 = &g_scr_data.actorCorpseInfo[FreeActorCorpseIndex].proneInfo;
-    v21 = (unsigned int*)v25;
-    v22 = v20;
-    v23 = 6;
-    do
+
+    corpseInfo->proneInfo = proneInfo;
+    if (orientCorpse)
     {
-        *(unsigned int *)&v22->bCorpseOrientation = *v21++;
-        v22 = (actor_prone_info_s *)((char *)v22 + 4);
-        --v23;
-    } while (v23);
-    if (v10)
-    {
-        if (!v20->bCorpseOrientation)
+        if (!corpseInfo->proneInfo.bCorpseOrientation)
         {
-            time = level.time;
-            v20->bCorpseOrientation = 1;
-            v15->proneInfo.prone = 1;
-            v15->proneInfo.fTorsoPitch = 0.0;
-            v15->proneInfo.iProneTime = time;
-            v15->proneInfo.fWaistPitch = 0.0;
-            v15->proneInfo.iProneTrans = 500;
+            corpseInfo->proneInfo.bCorpseOrientation = 1;
+            corpseInfo->proneInfo.prone = 1;
+            corpseInfo->proneInfo.fTorsoPitch = 0.0f;
+            corpseInfo->proneInfo.iProneTime = level.time;
+            corpseInfo->proneInfo.fWaistPitch = 0.0f;
+            corpseInfo->proneInfo.iProneTrans = 500;
         }
         Actor_OrientCorpseToGround(self, 0);
     }
+
     SV_LinkEntity(self);
     return 1;
 }
