@@ -1469,9 +1469,9 @@ void CG_ModPrvLightValuesUpdate()
 
 void __cdecl TRACK_cg_modelpreviewer()
 {
-    track_static_alloc_internal(&g_mdlprv, 34904, "g_mdlprv", 0);
-    track_static_alloc_internal(mpDefaultDrawBoneOptions, 16, "mpDefaultDrawBoneOptions", 0);
-    track_static_alloc_internal(modPrvAnimBlendModeNames, 12, "modPrvAnimBlendModeNames", 0);
+    track_static_alloc_internal(&g_mdlprv, sizeof(g_mdlprv), "g_mdlprv", 0);
+    track_static_alloc_internal(mpDefaultDrawBoneOptions, sizeof(mpDefaultDrawBoneOptions), "mpDefaultDrawBoneOptions", 0);
+    track_static_alloc_internal(modPrvAnimBlendModeNames, sizeof(modPrvAnimBlendModeNames), "modPrvAnimBlendModeNames", 0);
 }
 
 void __cdecl CG_ModelPreviewerPauseAnim()
