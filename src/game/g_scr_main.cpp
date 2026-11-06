@@ -4083,7 +4083,9 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                                 for (const char *p = sourceBuffer->sourceBuf;
                                      p <= sourceEnd && lineNumber <= lastLine; ++p)
                                 {
-                                    if (p == sourceEnd || *p == '\n')
+                                    // Parsed script source buffers are NUL-separated by line.
+                                    // Scr_GetLineNumInternal() counts these NUL boundaries.
+                                    if (p == sourceEnd || *p == '\0')
                                     {
                                         if (lineNumber >= firstLine && lineNumber <= lastLine)
                                         {
