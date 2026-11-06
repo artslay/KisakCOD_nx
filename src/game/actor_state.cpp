@@ -56,9 +56,9 @@ const ai_state_t g_eSupercededStates[4][4] =
 
 void __cdecl TRACK_actor_state()
 {
-    track_static_alloc_internal((void *)g_eSimplificationRules, 64, "g_eSimplificationRules", 5);
-    track_static_alloc_internal((void *)g_eSupercedingStates, 64, "g_eSupercedingStates", 5);
-    track_static_alloc_internal((void *)g_eSupercededStates, 64, "g_eSupercededStates", 5);
+    track_static_alloc_internal((void *)g_eSimplificationRules, sizeof(g_eSimplificationRules), "g_eSimplificationRules", 5);
+    track_static_alloc_internal((void *)g_eSupercedingStates, sizeof(g_eSupercedingStates), "g_eSupercedingStates", 5);
+    track_static_alloc_internal((void *)g_eSupercededStates, sizeof(g_eSupercededStates), "g_eSupercededStates", 5);
 }
 
 void __cdecl Actor_SetDefaultState(actor_s *actor)
