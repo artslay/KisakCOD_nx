@@ -36,7 +36,7 @@ unsigned int __cdecl Com_BlockChecksum32(const void *buffer, unsigned int length
 
 void __cdecl TRACK_save_memory()
 {
-    track_static_alloc_internal(&saveMemoryGlob, 4722040, "saveMemoryGlob", 10);
+    track_static_alloc_internal(&saveMemoryGlob, sizeof(saveMemoryGlob), "saveMemoryGlob", 10);
 }
 
 MemoryFile * SaveMemory_GetMemoryFile(SaveGame *save)
