@@ -141,13 +141,15 @@ const actor_fields_s sentientfields[9] =
 
 const actor_fields_s entfields[8] =
 {
-  { "health", 324, F_INT, NULL, NULL },
-  { "maxhealth", 328, F_INT, NULL, NULL },
-  { "targetname", 292, F_STRING, NULL, NULL },
-  { "classname", 284, F_STRING, &ActorScr_ReadOnly, NULL },
-  { "spawnflags", 300, F_INT, NULL, NULL },
-  { "model", 280, F_MODEL, &ActorScr_ReadOnly, NULL },
-  { "takedamage", 277, F_INT, NULL, NULL },
+  // The AI console command uses these fields relative to actor->ent.
+  // Keep them on the native gentity_s layout on 64-bit targets.
+  { "health", static_cast<int>(offsetof(gentity_s, health)), F_INT, NULL, NULL },
+  { "maxhealth", static_cast<int>(offsetof(gentity_s, maxHealth)), F_INT, NULL, NULL },
+  { "targetname", static_cast<int>(offsetof(gentity_s, targetname)), F_STRING, NULL, NULL },
+  { "classname", static_cast<int>(offsetof(gentity_s, classname)), F_STRING, &ActorScr_ReadOnly, NULL },
+  { "spawnflags", static_cast<int>(offsetof(gentity_s, spawnflags)), F_INT, NULL, NULL },
+  { "model", static_cast<int>(offsetof(gentity_s, model)), F_MODEL, &ActorScr_ReadOnly, NULL },
+  { "takedamage", static_cast<int>(offsetof(gentity_s, takedamage)), F_BYTE, NULL, NULL },
   { NULL, 0, F_INT, NULL, NULL }
 };
 
