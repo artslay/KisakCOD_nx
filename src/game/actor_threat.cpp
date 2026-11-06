@@ -35,9 +35,9 @@ int g_skipDebugString;
 
 void __cdecl TRACK_actor_threat()
 {
-    track_static_alloc_internal(&g_threatBias, 1060, "g_threatBias", 5);
-    track_static_alloc_internal(g_threatDebugStrings, 640, "g_threatDebugStrings", 5);
-    track_static_alloc_internal(g_threatDebugLabels, 40, "g_threatDebugLabels", 5);
+    track_static_alloc_internal(&g_threatBias, sizeof(g_threatBias), "g_threatBias", 5);
+    track_static_alloc_internal(g_threatDebugStrings, sizeof(g_threatDebugStrings), "g_threatDebugStrings", 5);
+    track_static_alloc_internal(g_threatDebugLabels, sizeof(g_threatDebugLabels), "g_threatDebugLabels", 5);
 }
 
 void __cdecl Actor_InitThreatBiasGroups()
