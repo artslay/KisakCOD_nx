@@ -108,8 +108,10 @@ int __cdecl Actor_TeamMoveCalcMovementDir(team_move_context_t *context, ai_teamm
 
     vVelDirSelf = context->vVelDirSelf;
     self = context->self;
-    *(double *)context->vVelSelf = *(double *)context->self->Physics.vVelocity;
-    *(double *)context->vVelDirSelf = *(double *)context->vVelSelf;
+    context->vVelSelf[0] = context->self->Physics.vVelocity[0];
+    context->vVelSelf[1] = context->self->Physics.vVelocity[1];
+    context->vVelDirSelf[0] = context->vVelSelf[0];
+    context->vVelDirSelf[1] = context->vVelSelf[1];
     v6 = Vec2Normalize(context->vVelDirSelf);
     if (v6 >= 1.0)
         goto LABEL_8;
