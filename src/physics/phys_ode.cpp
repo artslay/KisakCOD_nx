@@ -101,7 +101,7 @@ void __cdecl ODE_ForEachBody(dxWorld *world, T func)
 
 void __cdecl TRACK_phys()
 {
-    track_static_alloc_internal(&physGlob, 156936, "physGlob", 9);
+    track_static_alloc_internal(&physGlob, sizeof(physGlob), "physGlob", 9);
 }
 
 cmd_function_s Phys_Stop_f_VAR;
