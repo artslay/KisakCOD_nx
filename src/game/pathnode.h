@@ -183,6 +183,33 @@ struct pathnode_t // sizeof=0x80 (SP/MP Same)
     pathnode_transient_t transient;
 };
 
+#ifdef __SWITCH__
+// pathnode_transient_t contains native pathnode_t pointers. Its three pointer
+// fields expand from 32-bit to 64-bit, so the runtime node stride is native-width.
+static_assert(sizeof(pathnode_constant_t) == 0x48);
+static_assert(offsetof(pathnode_constant_t, Links) == 0x40);
+static_assert(sizeof(pathnode_dynamic_t) == 0x20);
+static_assert(sizeof(pathnode_transient_t) == 0x30);
+static_assert(offsetof(pathnode_transient_t, pNextOpen) == 0x08);
+static_assert(offsetof(pathnode_transient_t, pPrevOpen) == 0x10);
+static_assert(offsetof(pathnode_transient_t, pParent) == 0x18);
+static_assert(sizeof(pathnode_t) == 0x98);
+
+// The node-field table in pathnode.cpp uses offsets into constant. These
+// offsets precede Links and therefore remain unchanged on the 64-bit layout.
+static_assert(offsetof(pathnode_constant_t, type) == 0);
+static_assert(offsetof(pathnode_constant_t, spawnflags) == 4);
+static_assert(offsetof(pathnode_constant_t, targetname) == 6);
+static_assert(offsetof(pathnode_constant_t, script_linkName) == 8);
+static_assert(offsetof(pathnode_constant_t, script_noteworthy) == 10);
+static_assert(offsetof(pathnode_constant_t, target) == 12);
+static_assert(offsetof(pathnode_constant_t, animscript) == 14);
+static_assert(offsetof(pathnode_constant_t, vOrigin) == 20);
+static_assert(offsetof(pathnode_constant_t, fAngle) == 32);
+static_assert(offsetof(pathnode_constant_t, fRadius) == 44);
+static_assert(offsetof(pathnode_constant_t, minUseDistSq) == 48);
+#endif
+
 
 struct pathbasenode_t // sizeof=0x10
 {
