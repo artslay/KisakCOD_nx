@@ -10,7 +10,7 @@ enum DevEventType : __int32
     EVENT_SAVE = 0x5,
 };
 
-struct DevGraph // sizeof=0x20
+struct DevGraph // sizeof=0x20 on the original 32-bit engine
 {                                       // ...
     float (*knots)[2];                  // ...
     int *knotCount;                     // ...
@@ -24,6 +24,13 @@ struct DevGraph // sizeof=0x20
     // padding byte
     // padding byte
 };
+#ifdef __SWITCH__
+static_assert(offsetof(DevGraph, eventCallback) == 0x18);
+static_assert(offsetof(DevGraph, textCallback) == 0x20);
+static_assert(offsetof(DevGraph, data) == 0x28);
+static_assert(offsetof(DevGraph, disableEditingEndPoints) == 0x30);
+static_assert(sizeof(DevGraph) == 0x38);
+#endif
 struct GraphFloat // sizeof=0x168
 {                                       // ...
     char name[64];
