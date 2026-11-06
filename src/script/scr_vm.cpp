@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "scr_vm.h"
+#include "scr_variable.h"
 
 #include "scr_animtree.h"
 #include "scr_debugger.h"
@@ -1192,55 +1193,6 @@ void __cdecl Scr_NotifyNum(
 
     PROF_SCOPED("Scr_NotifyNum");
 
-#ifdef KISAK_SWITCH
-    // Trace only the Cargo Ship bridge choreography notifications. This records
-    // the actual recipient and GSC callsite without enabling general notify spam.
-    static uint32_t switchBridgeNotifyTraceCount = 0;
-    const char *switchNotifyName = SL_ConvertToString(stringValue);
-    if (switchBridgeNotifyTraceCount < 96u && switchNotifyName &&
-        (!std::strcmp(switchNotifyName, "bridge_react") ||
-         !std::strcmp(switchNotifyName, "already_dying") ||
-         !std::strcmp(switchNotifyName, "death_by_player")))
-    {
-        const gentity_s *switchNotifyEnt =
-            classnum == 0 && entnum < MAX_GENTITIES ? &g_entities[entnum] : nullptr;
-        const char *switchTargetName =
-            switchNotifyEnt && switchNotifyEnt->targetname
-                ? SL_ConvertToStringSafe(switchNotifyEnt->targetname) : "<none>";
-        const char *switchClassName =
-            switchNotifyEnt && switchNotifyEnt->classname
-                ? SL_ConvertToStringSafe(switchNotifyEnt->classname) : "<none>";
-        char *switchScriptFile = (char *)"";
-        int switchScriptLine = 0;
-        const char *switchCodePos = nullptr;
-        if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
-        {
-            switchCodePos = scrVmPub.function_frame->fs.pos;
-            if (switchCodePos)
-                Scr_GetFileAndLine(
-                    switchCodePos, &switchScriptFile, &switchScriptLine);
-        }
-
-        char switchNotifyTrace[640];
-        std::snprintf(
-            switchNotifyTrace,
-            sizeof(switchNotifyTrace),
-            "[KisakCOD][AI SCRIPT NOTIFY] n=%u time=%d event=%s recipient=%u classnum=%u targetname=%s classname=%s source=%s:%d codePos=%p params=%u\n",
-            switchBridgeNotifyTraceCount++,
-            level.time,
-            switchNotifyName,
-            entnum,
-            classnum,
-            switchTargetName,
-            switchClassName,
-            switchScriptFile ? switchScriptFile : "",
-            switchScriptLine,
-            static_cast<const void *>(switchCodePos),
-            paramcount);
-        Switch_LogWrite(switchNotifyTrace);
-    }
-#endif
-
     SL_CheckExists(stringValue);
     varUsagePos = scrVarPub.varUsagePos;
     if (!scrVarPub.varUsagePos)
@@ -1310,6 +1262,65 @@ void __cdecl VM_Notify(uint32_t notifyListOwnerId, uint32_t stringValue, Variabl
     VariableValueInternal_u* tempValue; // [esp+54h] [ebp-Ch]
     uint32_t selfId; // [esp+58h] [ebp-8h]
     uint32_t notifyListEntry; // [esp+5Ch] [ebp-4h]
+
+#ifdef KISAK_SWITCH
+    // GSC "self notify(...)" executes OP_notify -> VM_Notify directly.
+    // Trace here, not only in Scr_NotifyNum, so script-originated events are visible.
+    static uint32_t switchBridgeNotifyTraceCount = 0;
+    const char *switchNotifyName = SL_ConvertToString(stringValue);
+    if (switchBridgeNotifyTraceCount < 96u && switchNotifyName &&
+        (!std::strcmp(switchNotifyName, "bridge_react") ||
+         !std::strcmp(switchNotifyName, "already_dying") ||
+         !std::strcmp(switchNotifyName, "death_by_player")))
+    {
+        uint32_t switchRecipient = 0xFFFFFFFFu;
+        uint32_t switchClassNum = 0xFFFFFFFFu;
+        const gentity_s *switchNotifyEnt = nullptr;
+        if (notifyListOwnerId && GetObjectType(notifyListOwnerId) == VAR_ENTITY)
+        {
+            const scr_entref_t switchEntRef = Scr_GetEntityIdRef(notifyListOwnerId);
+            switchRecipient = switchEntRef.entnum;
+            switchClassNum = switchEntRef.classnum;
+            if (switchClassNum == 0u && switchRecipient < MAX_GENTITIES)
+                switchNotifyEnt = &g_entities[switchRecipient];
+        }
+
+        const char *switchTargetName =
+            switchNotifyEnt && switchNotifyEnt->targetname
+                ? SL_ConvertToStringSafe(switchNotifyEnt->targetname) : "<none>";
+        const char *switchClassName =
+            switchNotifyEnt && switchNotifyEnt->classname
+                ? SL_ConvertToStringSafe(switchNotifyEnt->classname) : "<none>";
+        char *switchScriptFile = (char *)"";
+        int switchScriptLine = 0;
+        const char *switchCodePos = nullptr;
+        if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+        {
+            switchCodePos = scrVmPub.function_frame->fs.pos;
+            if (switchCodePos && Scr_IsInOpcodeMemory(switchCodePos))
+                Scr_GetFileAndLine(
+                    switchCodePos, &switchScriptFile, &switchScriptLine);
+        }
+
+        char switchNotifyTrace[768];
+        std::snprintf(
+            switchNotifyTrace,
+            sizeof(switchNotifyTrace),
+            "[KisakCOD][AI SCRIPT NOTIFY] n=%u time=%d event=%s owner=%u recipient=%u classnum=%u targetname=%s classname=%s source=%s:%d codePos=%p\n",
+            switchBridgeNotifyTraceCount++,
+            level.time,
+            switchNotifyName,
+            notifyListOwnerId,
+            switchRecipient,
+            switchClassNum,
+            switchTargetName,
+            switchClassName,
+            switchScriptFile ? switchScriptFile : "",
+            switchScriptLine,
+            static_cast<const void *>(switchCodePos));
+        Switch_LogWrite(switchNotifyTrace);
+    }
+#endif
 
     notifyListId = FindVariable(notifyListOwnerId, 0x18000u);
     if (notifyListId)

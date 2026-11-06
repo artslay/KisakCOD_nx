@@ -59,13 +59,29 @@ static void Switch_LogBridgeHeroAnim(
     const actor_s *actor,
     int bDelayForActor)
 {
-    if (!ent || !ent->targetname || g_switchBridgeHeroAnimTraceCount >= 96u)
+    if (!ent || g_switchBridgeHeroAnimTraceCount >= 96u)
         return;
 
-    const char *targetName = SL_ConvertToStringSafe(ent->targetname);
-    if (!targetName ||
-        (std::strcmp(targetName, "price") != 0 &&
-         std::strcmp(targetName, "alavi") != 0))
+    const char *targetName = ent->targetname
+        ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
+    char *scriptFile = (char *)"";
+    int scriptLine = 0;
+    const char *codePos = nullptr;
+    if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+    {
+        codePos = scrVmPub.function_frame->fs.pos;
+        if (codePos)
+            Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+    }
+
+    const bool isBridgeHero =
+        targetName &&
+        (!I_stricmp(targetName, "price") || !I_stricmp(targetName, "alavi"));
+    const bool isCargoShipScript =
+        scriptFile && std::strstr(scriptFile, "cargoship") != nullptr;
+    // Keep Price/Alavi regardless of caller, and include actor animation calls
+    // originating in the Cargo Ship script even if targetname is not populated.
+    if (!isBridgeHero && !(actor && isCargoShipScript))
         return;
 
     const unsigned int stateLevel = actor ? actor->stateLevel : 0u;
@@ -80,17 +96,7 @@ static void Switch_LogBridgeHeroAnim(
     const int transitionState = actor && transitionCount
         ? static_cast<int>(actor->StateTransitions[0].eState) : -1;
 
-    char *scriptFile = (char *)"";
-    int scriptLine = 0;
-    const char *codePos = nullptr;
-    if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
-    {
-        codePos = scrVmPub.function_frame->fs.pos;
-        if (codePos)
-            Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
-    }
-
-    char trace[640];
+    char trace[768];
     std::snprintf(
         trace,
         sizeof(trace),
@@ -99,7 +105,7 @@ static void Switch_LogBridgeHeroAnim(
         phase ? phase : "unknown",
         level.time,
         ent->s.number,
-        targetName,
+        targetName ? targetName : "<none>",
         ent->classname ? SL_ConvertToStringSafe(ent->classname) : "<none>",
         bDelayForActor,
         stateLevel,
