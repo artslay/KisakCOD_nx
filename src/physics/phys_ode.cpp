@@ -60,6 +60,12 @@ struct PhysWorldArchiveData
 static_assert(sizeof(Jitter) == 0x24, "physics jitter save record changed");
 static_assert(sizeof(PhysWorldArchiveData) == 0xCC,
     "physics world save record must retain the 32-bit wire layout");
+#if defined(KISAK_SWITCH) || defined(__SWITCH__)
+static_assert(sizeof(PhysWorldData) == 0xD8,
+    "Switch PhysWorldData must include native callback pointer alignment");
+static_assert(offsetof(PhysWorldData, collisionCallback) == 0x10);
+static_assert(offsetof(PhysWorldData, jitterRegions) == 0x20);
+#endif
 
 bool physInited;
 
