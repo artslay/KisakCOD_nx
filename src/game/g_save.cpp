@@ -47,6 +47,10 @@ static_assert(offsetof(tagInfo_s, name) == 2 * sizeof(void *));
 static_assert(offsetof(tagInfo_s, index) == 2 * sizeof(void *) + 4);
 static_assert(offsetof(tagInfo_s, axis) == 2 * sizeof(void *) + 8);
 static_assert(offsetof(tagInfo_s, parentInvAxis) == 2 * sizeof(void *) + 56);
+static_assert(offsetof(gclient_s, groundTiltEntNum) == 46104);
+static_assert(sizeof(scr_vehicle_s) == 0x338);
+static_assert(sizeof(TurretInfo) == 188);
+static_assert(sizeof(threat_bias_t) == 1060);
 static_assert(
     offsetof(scr_data_t, dogAnim) ==
     offsetof(scr_data_t, anim) + sizeof(AnimScriptList));
@@ -1336,7 +1340,7 @@ void __cdecl ReadSentient(sentient_s *sentient, SaveGame *save)
 
 void __cdecl WriteVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
 {
-    unsigned __int8 v5[824]; // [sp+60h] [-350h] BYREF
+    unsigned __int8 v5[sizeof(scr_vehicle_s)]; // [sp+60h] [-350h] BYREF
 
     iassert(save);
 
@@ -1360,22 +1364,22 @@ void __cdecl ReadVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
     SaveMemory_LoadRead(&v4, 4, save);
     if (v4)
     {
-        G_ReadStruct(vehicleFields, (unsigned __int8 *)pVehicle, 824, save);
+        G_ReadStruct(vehicleFields, (unsigned __int8 *)pVehicle, sizeof(scr_vehicle_s), save);
         pVehicle->infoIdx = ReadVehicleIndex(save);
     }
 }
 
 void __cdecl WriteTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
 {
-    unsigned __int8 v5[200]; // [sp+60h] [-E0h] BYREF
+    unsigned __int8 v5[sizeof(TurretInfo)]; // [sp+60h] [-E0h] BYREF
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1508, 0, "%s", "save");
-    memcpy(v5, pTurretInfo, 0xBCu);
+    memcpy(v5, pTurretInfo, sizeof(v5));
     unsigned int v4 = pTurretInfo->inuse;
     SaveMemory_SaveWrite(&v4, 4, save);
     if (v4)
-        G_WriteStruct(turretFields, (unsigned __int8 *)pTurretInfo, v5, 188, save);
+        G_WriteStruct(turretFields, (unsigned __int8 *)pTurretInfo, v5, sizeof(TurretInfo), save);
 }
 
 void __cdecl ReadTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
@@ -1387,7 +1391,7 @@ void __cdecl ReadTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1527, 0, "%s", "save");
     SaveMemory_LoadRead(&v4, 4, save);
     if (v4)
-        G_ReadStruct(turretFields, (unsigned __int8 *)pTurretInfo, 188, save);
+        G_ReadStruct(turretFields, (unsigned __int8 *)pTurretInfo, sizeof(TurretInfo), save);
 }
 
 void __cdecl WritePathNodes(SaveGame *save)
@@ -1613,17 +1617,17 @@ void __cdecl ReadBadPlaces(SaveGame *save)
 
 void __cdecl WriteThreatBiasGroups(SaveGame *save)
 {
-    unsigned __int8 v2[1064]; // [sp+50h] [-440h] BYREF
+    unsigned __int8 v2[sizeof(threat_bias_t)]; // [sp+50h] [-440h] BYREF
 
-    memcpy(v2, &g_threatBias, 0x424u);
+    memcpy(v2, &g_threatBias, sizeof(v2));
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1686, 0, "%s", "save");
-    G_WriteStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, v2, 1060, save);
+    G_WriteStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, v2, sizeof(threat_bias_t), save);
 }
 
 void __cdecl ReadThreatBiasGroups(SaveGame *save)
 {
-    G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, 1060, save);
+    G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, sizeof(threat_bias_t), save);
 }
 
 void __cdecl WriteAIEventListeners(SaveGame *save)
