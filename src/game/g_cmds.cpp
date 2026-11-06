@@ -235,6 +235,8 @@ void __cdecl Cmd_Give_f(gentity_s *ent)
     OffhandClass offhandClass; // r11
     int inuse; // r11
 
+    clientNum = static_cast<int>(ent - g_entities);
+
     if (level.demoplaying)
     {
         v3 = SV_DemoCheatsOk();
@@ -731,7 +733,7 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
     int ok; // r30
     int v3; // r3
     const char *v4; // r4
-    int v5; // r11
+    int clientNum; // r11
     int v6; // r30
     pathnode_t *v7; // r3
     int v8; // r3
@@ -765,7 +767,9 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
             }
             v8 = Path_NodeCount();
             v4 = va(aPrint, v8);
-            v5 = (unsigned __int64)(875407347LL * ((char *)ent - (char *)g_entities)) >> 32;
+            // Use the real entity-array index; the old reciprocal multiply
+            // encoded the 32-bit sizeof(gentity_s) == 628 layout.
+            clientNum = static_cast<int>(ent - g_entities);
         }
         else
         {
@@ -778,7 +782,7 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
         v4 = "print \"GAME_CHEATSNOTENABLED\"";
         v5 = (unsigned __int64)(875407347LL * ((char *)ent - (char *)g_entities)) >> 32;
     }
-    SV_GameSendServerCommand((v5 >> 7) + ((unsigned int)v5 >> 31), v4);
+    SV_GameSendServerCommand(clientNum, v4);
 }
 
 void __cdecl Cmd_InterruptCamera_f(gentity_s *ent)
