@@ -52,9 +52,9 @@ uint32_t bg_lastParsedWeaponIndex;
 
 void __cdecl TRACK_bg_weapons()
 {
-    track_static_alloc_internal(bg_weapAmmoTypes, 512, "bg_weapAmmoTypes", 9);
-    track_static_alloc_internal(bg_sharedAmmoCaps, 512, "bg_sharedAmmoCaps", 9);
-    track_static_alloc_internal(bg_weapClips, 512, "bg_weapClips", 9);
+    track_static_alloc_internal(bg_weapAmmoTypes, sizeof(bg_weapAmmoTypes), "bg_weapAmmoTypes", 9);
+    track_static_alloc_internal(bg_sharedAmmoCaps, sizeof(bg_sharedAmmoCaps), "bg_sharedAmmoCaps", 9);
+    track_static_alloc_internal(bg_weapClips, sizeof(bg_weapClips), "bg_weapClips", 9);
 }
 
 void __cdecl BG_LoadPenetrationDepthTable()
