@@ -47,6 +47,75 @@ extern void Switch_LogWrite(const char *msg);
 #include "actor_state.h"
 #include <script/scr_memorytree.h>
 
+#ifdef __SWITCH__
+// Narrowly trace scripted-animation lifecycle for the two bridge scene heroes.
+// This determines whether execute_ai_solo actually starts/stops Price and Alavi.
+static uint32_t g_switchBridgeHeroAnimTraceCount = 0;
+
+static void Switch_LogBridgeHeroAnim(
+    const char *phase,
+    const gentity_s *ent,
+    const actor_s *actor,
+    int bDelayForActor)
+{
+    if (!ent || !ent->targetname || g_switchBridgeHeroAnimTraceCount >= 96u)
+        return;
+
+    const char *targetName = SL_ConvertToStringSafe(ent->targetname);
+    if (!targetName ||
+        (std::strcmp(targetName, "price") != 0 &&
+         std::strcmp(targetName, "alavi") != 0))
+        return;
+
+    const unsigned int stateLevel = actor ? actor->stateLevel : 0u;
+    const unsigned int simLevel = actor ? actor->simulatedStateLevel : 0u;
+    const int state = actor && stateLevel < ARRAY_COUNT(actor->eState)
+        ? static_cast<int>(actor->eState[stateLevel]) : -1;
+    const int simState = actor && simLevel < ARRAY_COUNT(actor->eSimulatedState)
+        ? static_cast<int>(actor->eSimulatedState[simLevel]) : -1;
+    const unsigned int transitionCount = actor ? actor->transitionCount : 0u;
+    const int transitionType = actor && transitionCount
+        ? static_cast<int>(actor->StateTransitions[0].eTransition) : -1;
+    const int transitionState = actor && transitionCount
+        ? static_cast<int>(actor->StateTransitions[0].eState) : -1;
+
+    char *scriptFile = (char *)"";
+    int scriptLine = 0;
+    const char *codePos = nullptr;
+    if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+    {
+        codePos = scrVmPub.function_frame->fs.pos;
+        if (codePos)
+            Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+    }
+
+    char trace[640];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][AI SCRIPT ANIM] n=%u phase=%s time=%d ent=%u targetname=%s class=%s delayActor=%d stateLevel=%u state=%d simLevel=%u simState=%d transitions=%u transition0=%d:%d scripted=%u source=%s:%d codePos=%p\n",
+        g_switchBridgeHeroAnimTraceCount++,
+        phase ? phase : "unknown",
+        level.time,
+        ent->s.number,
+        targetName,
+        ent->classname ? SL_ConvertToStringSafe(ent->classname) : "<none>",
+        bDelayForActor,
+        stateLevel,
+        state,
+        simLevel,
+        simState,
+        transitionCount,
+        transitionType,
+        transitionState,
+        ent->scripted ? 1u : 0u,
+        scriptFile ? scriptFile : "",
+        scriptLine,
+        static_cast<const void *>(codePos));
+    Switch_LogWrite(trace);
+}
+#endif
+
 // The original 32-bit build used double precision for these timing calculations.
 // Keep the intermediate width explicit on Switch, where long double is 16 bytes.
 static int Scr_RoundSecondsToMilliseconds(float seconds)
@@ -11568,6 +11637,9 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
     v14 = Scr_GetConstString(0);
     actor = Entity->actor;
     v16 = v14;
+#ifdef __SWITCH__
+    Switch_LogBridgeHeroAnim("animscripted_enter", Entity, actor, bDelayForActor);
+#endif
     if (!actor)
         goto LABEL_32;
     if (!actor->Physics.bIsAlive)
@@ -11595,6 +11667,9 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
     }
     if (bDelayForActor)
     {
+#ifdef __SWITCH__
+        Switch_LogBridgeHeroAnim("animscripted_before_push", Entity, actor, bDelayForActor);
+#endif
         Actor_PushState(actor, AIS_SCRIPTEDANIM);
         Actor_KillAnimScript(actor);
         scripted = Entity->scripted;
@@ -11624,6 +11699,9 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
         Scr_AddConstString(v16);
         v28 = Scr_ExecEntThread(Entity, g_scr_data.scripted_init, 6u);
         Scr_FreeThread(v28);
+#ifdef __SWITCH__
+        Switch_LogBridgeHeroAnim("animscripted_after_init", Entity, actor, bDelayForActor);
+#endif
     }
     else
     {
@@ -11645,6 +11723,9 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
 
 void __cdecl G_StopAnimScripted(gentity_s *ent)
 {
+#ifdef __SWITCH__
+    Switch_LogBridgeHeroAnim("stop_before", ent, ent ? ent->actor : nullptr, 1);
+#endif
     actor_s *actor; // r3
     animscripted_s *scripted; // r30
     XAnimTree_s *pAnimTree; // r29
@@ -11672,6 +11753,9 @@ void __cdecl G_StopAnimScripted(gentity_s *ent)
         MT_Free((unsigned char*)scripted, 96);
         ent->scripted = 0;
     }
+#ifdef __SWITCH__
+    Switch_LogBridgeHeroAnim("stop_after", ent, actor, 1);
+#endif
 }
 
 void __cdecl ScrCmd_stopanimscripted(scr_entref_t entref)
