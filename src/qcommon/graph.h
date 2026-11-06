@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 enum DevEventType : __int32
 {                                       // ...
     EVENT_ACTIVATE = 0x0,
