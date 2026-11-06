@@ -417,6 +417,11 @@ struct actor_s
 static_assert(sizeof(actor_s) == 0x1e90, "actor_s size drift vs CoD3SP IDA");
 static_assert(offsetof(actor_s, sentientInfo) == 0x834, "actor_s.sentientInfo offset drift vs CoD3SP IDA");
 static_assert(sizeof(sentient_info_t) == 0x28, "sentient_info_t size drift vs CoD3SP IDA");
+#else
+static_assert(offsetof(sentient_info_t, pLastKnownNode) == 0x28,
+    "ARM64 sentient_info_t pointer offset changed");
+static_assert(sizeof(sentient_info_t) == 0x30,
+    "ARM64 sentient_info_t must include full native pathnode pointer");
 #endif
 
 int __cdecl Path_IsValidClaimNode(const pathnode_t *node);
