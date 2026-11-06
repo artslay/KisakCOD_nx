@@ -672,12 +672,12 @@ void CG_RegisterDvars()
 
 void __cdecl TRACK_cg_main()
 {
-    track_static_alloc_internal(&cgDC, 3448, "cgDC", 34);
-    track_static_alloc_internal(cgArray, 192072, "cgArray", 9);
-    track_static_alloc_internal(cgsArray, 1112, "cgsArray", 9);
-    track_static_alloc_internal(cg_entitiesArray, 809472, "cg_entitiesArray", 9);
-    track_static_alloc_internal(cg_weaponsArray, 9216, "cg_weaponsArray", 9);
-    track_static_alloc_internal(cg_entityOriginArray, 26112, "cg_entityOriginArray", 9);
+    track_static_alloc_internal(&cgDC, sizeof(cgDC), "cgDC", 34);
+    track_static_alloc_internal(cgArray, sizeof(cgArray), "cgArray", 9);
+    track_static_alloc_internal(cgsArray, sizeof(cgsArray), "cgsArray", 9);
+    track_static_alloc_internal(cg_entitiesArray, sizeof(cg_entitiesArray), "cg_entitiesArray", 9);
+    track_static_alloc_internal(cg_weaponsArray, sizeof(cg_weaponsArray), "cg_weaponsArray", 9);
+    track_static_alloc_internal(cg_entityOriginArray, sizeof(cg_entityOriginArray), "cg_entityOriginArray", 9);
 }
 
 void __cdecl CG_GetDObjOrientation(int localClientNum, int dobjHandle, float (*axis)[3], float *origin)
