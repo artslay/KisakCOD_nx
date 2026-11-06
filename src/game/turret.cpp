@@ -24,7 +24,7 @@ TurretInfo turretInfoStore[32];
 
 void __cdecl TRACK_turret()
 {
-    track_static_alloc_internal(turretInfoStore, 6016, "turretInfoStore", 9);
+    track_static_alloc_internal(turretInfoStore, sizeof(turretInfoStore), "turretInfoStore", 9);
 }
 
 void __cdecl G_InitTurrets()
