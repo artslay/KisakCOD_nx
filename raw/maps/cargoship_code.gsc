@@ -3106,6 +3106,9 @@ jumptoRestoreBridgeHeroes()
 		ai[i] notify("overtakenow");
 		ai[i] thread jumptoBridgeActor(node.origin);
 	}
+
+	// Let the actor threads detach from the old helicopter/pivots before overtake-now.
+	wait .1;
 }
 
 jumptoBridgeActor(org)
