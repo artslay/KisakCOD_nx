@@ -4206,36 +4206,16 @@ static const BuiltinMethodDef methods_0[89] =
 
 void(__cdecl *__cdecl Player_GetMethod(const char **pName))(scr_entref_t)
 {
-    int v1; // r6
-    unsigned int v2; // r5
-    const BuiltinMethodDef *i; // r7
-    const char *actionString; // r10
-    const char *v5; // r11
-    int v6; // r8
-
-    v1 = 0;
-    v2 = 0;
-    for (i = methods_0; ; ++i)
+    for (int i = 0; i < ARRAY_COUNT(methods_0); ++i)
     {
-        actionString = i->actionString;
-        v5 = *pName;
-        do
+        const char *actionString = methods_0[i].actionString;
+        if (actionString && !strcmp(*pName, actionString))
         {
-            v6 = (unsigned __int8)*v5 - *(unsigned __int8 *)actionString;
-            if (!*v5)
-                break;
-            ++v5;
-            ++actionString;
-        } while (!v6);
-        if (!v6)
-            break;
-        v2 += 12;
-        ++v1;
-        if (v2 >= 0x42C)
-            return 0;
+            *pName = methods_0[i].actionString;
+            return methods_0[i].actionFunc;
+        }
     }
-    *pName = methods_0[v1].actionString;
-    return methods_0[v1].actionFunc;
+    return nullptr;
 }
 
 void __cdecl G_AddCommandNotify(unsigned __int16 notify)
