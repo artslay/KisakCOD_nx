@@ -708,9 +708,8 @@ void __cdecl Actor_Pain(
     unsigned int stateLevel; // r7
     int v18; // r8
     double v19; // fp1
-    double v20; // fp31
-    long double v21; // fp2
-    long double v22; // fp2
+    float damageYawTurns;
+    float damageYawWholeTurns;
     unsigned __int16 HitLocationString; // r3
     WeaponDef *WeaponDef; // r30
     sentient_s *sentient; // r4
@@ -753,10 +752,9 @@ void __cdecl Actor_Pain(
             v18);
     actor->iDamageTaken = iDamage;
     v19 = vectoyaw(vDir);
-    v20 = (float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778);
-    *(double *)&v21 = (float)((float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
-    v22 = floor(v21);
-    actor->iDamageYaw = (int)(float)((float)((float)v20 - (float)*(double *)&v22) * (float)360.0);
+    damageYawTurns = (static_cast<float>(v19) - self->r.currentAngles[1]) * 0.0027777778f;
+    damageYawWholeTurns = static_cast<float>(floor(static_cast<double>(damageYawTurns + 0.5f)));
+    actor->iDamageYaw = static_cast<int>((damageYawTurns - damageYawWholeTurns) * 360.0f);
     actor->damageDir[0] = *vDir;
     actor->damageDir[1] = vDir[1];
     actor->damageDir[2] = vDir[2];
@@ -812,9 +810,8 @@ void __cdecl Actor_Die(
     unsigned int stateLevel; // r7
     int v17; // r8
     double v18; // fp1
-    double v19; // fp31
-    long double v20; // fp2
-    long double v21; // fp2
+    float damageYawTurns;
+    float damageYawWholeTurns;
     unsigned __int16 HitLocationString; // r3
     WeaponDef *WeaponDef; // r29
 
@@ -872,10 +869,9 @@ void __cdecl Actor_Die(
         actor->damageDir[1] = vDir[1];
         actor->damageDir[2] = vDir[2];
         v18 = vectoyaw(vDir);
-        v19 = (float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778);
-        *(double *)&v20 = (float)((float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
-        v21 = floor(v20);
-        actor->iDamageYaw = (int)(float)((float)((float)v19 - (float)*(double *)&v21) * (float)360.0);
+        damageYawTurns = (static_cast<float>(v18) - self->r.currentAngles[1]) * 0.0027777778f;
+        damageYawWholeTurns = static_cast<float>(floor(static_cast<double>(damageYawTurns + 0.5f)));
+        actor->iDamageYaw = static_cast<int>((damageYawTurns - damageYawWholeTurns) * 360.0f);
         HitLocationString = G_GetHitLocationString(hitLoc);
         Scr_SetString(&actor->damageHitLoc, HitLocationString);
         if (pInflictor)
@@ -1142,7 +1138,7 @@ bool __cdecl Actor_ShouldMoveAwayFromCloseEnt(actor_s *self)
 void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
 {
     double v7; // fp31
-    long double v8; // fp2
+    float normalizedPitchTurns;
     double v9; // fp28
     double v10; // fp29
     double v11; // fp26
@@ -1169,18 +1165,16 @@ void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
             50.0f);
     else
         self->fProneLastDiff = 360.0;
-    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * (float)0.0027777778);
-    v8 = floor((float)((float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch)
-        * (float)0.0027777778)
-        + (float)0.5));
-    v9 = (float)((float)((float)v7 - (float)*(double *)&v8) * (float)360.0);
+    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * 0.0027777778f);
+    normalizedPitchTurns = static_cast<float>(floor(static_cast<double>(static_cast<float>(v7) + 0.5f)));
+    v9 = (static_cast<float>(v7) - normalizedPitchTurns) * 360.0f;
     if (self->fProneLastDiff != v9)
     {
         v10 = 0.0;
         v11 = 0.0;
         if (v9 >= 0.0)
         {
-            v11 = (float)(self->fInvProneAnimHighPitch * (float)((float)((float)v7 - (float)*(double *)&v8) * (float)360.0));
+            v11 = self->fInvProneAnimHighPitch * static_cast<float>(v9);
             if (v11 > 0.99f)
                 v11 = 0.99f;
             v12 = 1.0;
@@ -1188,7 +1182,7 @@ void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
         }
         else
         {
-            v10 = (float)(self->fInvProneAnimLowPitch * (float)((float)((float)v7 - (float)*(double *)&v8) * (float)360.0));
+            v10 = self->fInvProneAnimLowPitch * static_cast<float>(v9);
             if (v10 > 0.99f)
                 v10 = 0.99f;
             v12 = 1.0;
@@ -2209,7 +2203,7 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 {
     path_t *pPath; // r30
     int iHitEntnum; // r4
-    long double lookAheadLen; // fp2
+    double lookAheadLen;
     double calculatedLen; // fp12
     int moveHistoryIndex; // r29
     float vWishDir[3];
