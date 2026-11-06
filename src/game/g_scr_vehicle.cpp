@@ -5150,47 +5150,46 @@ void CMD_VEH_SetVehicleLookatText(scr_entref_t entref)
 
 void HELI_CancelAIMove(gentity_s *ent)
 {
-    scr_vehicle_s *scr_vehicle; // r11
-    float *origin; // r31
-    double value; // fp0
-    double v5; // fp13
-    double v6; // fp11
-    float v7[4]; // [sp+50h] [-80h] BYREF
-    float v8[4]; // [sp+60h] [-70h] BYREF
-    float v9[3]; // [sp+70h] [-60h] BYREF
-    float v10[3]; // [sp+7Ch] [-54h] BYREF
-    float v11[8]; // [sp+88h] [-48h] BYREF
+    scr_vehicle_s *scr_vehicle;
+    double value;
+    double maxRoll;
+    double angleRoll;
+    float angles[4] = {};
+    float forward[3];
+    float right[3];
+    float up[8];
+    float tiltInput[3];
 
     if (!ent)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_helicopter.cpp", 341, 0, "%s", "ent");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 341, 0, "%s", "ent");
     if (!ent->scr_vehicle)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_helicopter.cpp", 342, 0, "%s", "ent->scr_vehicle");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 342, 0, "%s", "ent->scr_vehicle");
+
     scr_vehicle = ent->scr_vehicle;
-    origin = scr_vehicle->phys.origin;
     VEH_GetVehicleInfo(scr_vehicle->infoIdx);
-    v7[0] = 0.0;
-    v7[1] = origin[7];
-    v7[2] = 0.0;
-    AngleVectors(v7, v9, v10, v11);
-    v11[3] = 0.0;
-    v11[4] = 0.0;
-    v11[5] = 0.0;
+
+    angles[1] = scr_vehicle->phys.angles[1];
+    AngleVectors(angles, forward, right, up);
+    up[3] = 0.0f;
+    up[4] = 0.0f;
+    up[5] = 0.0f;
+
     value = vehHelicopterMaxPitch->current.value;
     if (value <= 0.0)
         value = 1.0;
-    v5 = vehHelicopterMaxRoll->current.value;
-    if (v5 <= 0.0)
-        v5 = 1.0;
-    v6 = origin[8];
-    v8[0] = origin[6] / (float)value;
-    v8[1] = (float)v6 / (float)v5;
-    v8[2] = 0.0;
-    MatrixTransformVector(v8, (const mat3x3&)v9, origin + 55);
-    origin[58] = 0.0;
-    origin[59] = 0.0;
-    origin[60] = 0.0;
-}
+    maxRoll = vehHelicopterMaxRoll->current.value;
+    if (maxRoll <= 0.0)
+        maxRoll = 1.0;
 
+    angleRoll = scr_vehicle->phys.angles[2];
+    tiltInput[0] = scr_vehicle->phys.angles[0] / static_cast<float>(value);
+    tiltInput[1] = static_cast<float>(angleRoll) / static_cast<float>(maxRoll);
+    tiltInput[2] = 0.0f;
+    MatrixTransformVector(tiltInput, (const mat3x3&)forward, scr_vehicle->phys.worldTilt);
+    scr_vehicle->phys.worldTiltVel[0] = 0.0f;
+    scr_vehicle->phys.worldTiltVel[1] = 0.0f;
+    scr_vehicle->phys.worldTiltVel[2] = 0.0f;
+}
 void VEH_CancelAIMove(gentity_s *ent)
 {
     scr_vehicle_s *scr_vehicle; // r11
