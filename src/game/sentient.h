@@ -59,6 +59,9 @@ struct SentientGlobals
     int sampleTime[2];
 };
 
+static_assert(sizeof(SentientGlobals) == 10 * sizeof(uint32_t),
+    "SentientGlobals scalar archive layout changed");
+
 struct vis_cache_t
 {
     bool bVisible;
