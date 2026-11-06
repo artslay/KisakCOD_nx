@@ -970,7 +970,7 @@ void __cdecl CG_ModPrvLoadAnimations(const char *animationFilename)
         fromCurrentIndex = g_mdlprv.anim.fromCurrentIndex;
         if (g_mdlprv.anim.fromCurrentIndex >= 0)
         {
-            if (g_mdlprv.anim.toCurrentIndex >= 0 && *(unsigned int *)(modPrvAnimBlendMode + 12) == 1)
+            if (g_mdlprv.anim.toCurrentIndex >= 0 && modPrvAnimBlendMode->current.integer == 1)
                 value = modPrvAnimBlendWeight->current.value;
             else
                 value = (float)((float)1.0 - modPrvAnimBlendWeight->current.value);
@@ -981,7 +981,7 @@ void __cdecl CG_ModPrvLoadAnimations(const char *animationFilename)
         }
         if (g_mdlprv.anim.toCurrentIndex >= 0)
         {
-            if (fromCurrentIndex >= 0 && *(unsigned int *)(modPrvAnimBlendMode + 12) == 1)
+            if (fromCurrentIndex >= 0 && modPrvAnimBlendMode->current.integer == 1)
                 XAnimSetGoalWeightKnobAll(g_mdlprv.model.currentObj, 2, 0, 1.0, 1.0, 1.0, 0, 0, 1);// KISAKTODO: args sus
             //g_mdlprv.anim.isToLooped = (_cntlzw(XAnimIsLooped(v6, 2u)) & 0x20) == 0;
             g_mdlprv.anim.isToLooped = XAnimIsLooped(xAnims, 2);
@@ -1154,7 +1154,7 @@ LABEL_15:
     {
         if (fromCurrentIndex >= 0 && v1 >= 1.0)
         {
-            if (*(unsigned int *)(modPrvAnimBlendMode + 12) == 1)
+            if (modPrvAnimBlendMode->current.integer == 1)
                 value = modPrvAnimBlendWeight->current.value;
             else
                 value = (float)((float)1.0 - modPrvAnimBlendWeight->current.value);
