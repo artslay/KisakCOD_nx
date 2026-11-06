@@ -3599,14 +3599,10 @@ void __cdecl G_SpawnPathnodeDynamic()
                         --v3;
                     } while (v3);
 
-                    p_transient = &v1->transient;
-                    v5 = 7;
-                    do
-                    {
-                        p_transient->iSearchFrame = 0;
-                        p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-                        --v5;
-                    } while (v5);
+                    // pathnode_transient_t contains native pointers on Switch.
+                    // The original seven 32-bit stores only cleared 28 bytes and
+                    // left the upper portions of the 64-bit path pointers stale.
+                    memset(&v1->transient, 0, sizeof(v1->transient));
                 }
                 G_ParsePathnodeScriptFields(v1);
                 YawVectors(v1->constant.fAngle, forward, NULL);
