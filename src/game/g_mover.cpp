@@ -31,8 +31,8 @@ pushed_t *pushed_p;
 
 void __cdecl TRACK_g_mover()
 {
-    track_static_alloc_internal(pushed, 45056, "pushed", 9);
-    track_static_alloc_internal(hintStrings, 20, "hintStrings", 9);
+    track_static_alloc_internal(pushed, sizeof(pushed), "pushed", 9);
+    track_static_alloc_internal(hintStrings, sizeof(hintStrings), "hintStrings", 9);
 }
 
 gentity_s *__cdecl G_TestEntityPosition(gentity_s *ent, float *vOrigin)
