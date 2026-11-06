@@ -691,7 +691,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_ACTOR:
@@ -705,7 +705,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_SENTIENT:
@@ -719,7 +719,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_SENTIENTHANDLE:
@@ -749,7 +749,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_TURRETINFO:
@@ -763,7 +763,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_THREAD:
@@ -801,7 +801,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_PATHNODE:
@@ -819,7 +819,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_TYPE_TAG_INFO:
