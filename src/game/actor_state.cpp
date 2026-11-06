@@ -138,9 +138,11 @@ int __cdecl Actor_GetNextPopedState(actor_s *self)
 
     stateLevel = self->stateLevel;
     if (stateLevel)
-        return *((unsigned int *)&self->species + stateLevel);
-    else
-        return 1;
+    {
+        iassert(stateLevel <= ARRAY_COUNT(self->eState));
+        return self->eState[stateLevel - 1];
+    }
+    return 1;
 }
 
 int __cdecl Actor_ResumeState(actor_s *self, ai_state_t ePrevState)
@@ -163,9 +165,14 @@ int __cdecl Actor_ResumeState(actor_s *self, ai_state_t ePrevState)
         return 1;
     stateLevel = self->stateLevel;
     if (stateLevel)
-        Actor_FinishState(self, *((ai_state_t *)&self->species + stateLevel));
+    {
+        iassert(stateLevel <= ARRAY_COUNT(self->eState));
+        Actor_FinishState(self, self->eState[stateLevel - 1]);
+    }
     else
+    {
         Actor_FinishState(self, AIS_EXPOSED);
+    }
     return 0;
 }
 
@@ -264,7 +271,8 @@ void __cdecl Actor_ThinkStateTransitions(actor_s *self)
                         0,
                         "%s",
                         "self->stateLevel > 0");
-                Actor_FinishState(self, *((ai_state_t *)&self->species + self->stateLevel));
+                iassert(self->stateLevel <= ARRAY_COUNT(self->eState));
+        Actor_FinishState(self, self->eState[self->stateLevel - 1]);
                 Actor_ResumePopedState(self, self->eState[self->stateLevel]);
                 break;
             default:
