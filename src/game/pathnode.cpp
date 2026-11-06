@@ -804,29 +804,11 @@ void Path_InitLinkInfoArray()
 
 void __cdecl Path_InitNodeDynamic(pathnode_t *loadNode)
 {
-    pathnode_dynamic_t *p_dynamic; // r11
-    int v3; // ctr
-    pathnode_transient_t *p_transient; // r11
-    int v5; // ctr
     double v6; // fp13
     float v7[4]; // [sp+50h] [-20h] BYREF
 
-    p_dynamic = &loadNode->dynamic;
-    v3 = 8;
-    do
-    {
-        p_dynamic->pOwner = (SentientHandle)0;
-        p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-        --v3;
-    } while (v3);
-    p_transient = &loadNode->transient;
-    v5 = 7;
-    do
-    {
-        p_transient->iSearchFrame = 0;
-        p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-        --v5;
-    } while (v5);
+    memset(&loadNode->dynamic, 0, sizeof(loadNode->dynamic));
+    memset(&loadNode->transient, 0, sizeof(loadNode->transient));
 
     YawVectors(loadNode->constant.fAngle, v7, NULL);
     v6 = v7[1];
@@ -840,10 +822,6 @@ void __cdecl Path_InitNodesDynamic()
     unsigned int v1; // r28
     int v2; // r30
     pathnode_t *v3; // r31
-    pathnode_dynamic_t *p_dynamic; // r11
-    int v5; // ctr
-    pathnode_transient_t *p_transient; // r11
-    int v7; // ctr
     float v8[16]; // [sp+50h] [-40h] BYREF
 
     v1 = 0;
@@ -853,22 +831,8 @@ void __cdecl Path_InitNodesDynamic()
         do
         {
             v3 = &gameWorldSp.path.nodes[v2];
-            p_dynamic = &gameWorldSp.path.nodes[v2].dynamic;
-            v5 = 8;
-            do
-            {
-                p_dynamic->pOwner = (SentientHandle)0;
-                p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-                --v5;
-            } while (v5);
-            p_transient = &v3->transient;
-            v7 = 7;
-            do
-            {
-                p_transient->iSearchFrame = 0;
-                p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-                --v7;
-            } while (v7);
+            memset(&v3->dynamic, 0, sizeof(v3->dynamic));
+            memset(&v3->transient, 0, sizeof(v3->transient));
 
             YawVectors(v3->constant.fAngle, v8, NULL);
             v3->constant.forward[0] = v8[0];
