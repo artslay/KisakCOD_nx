@@ -575,7 +575,7 @@ void __cdecl SV_LoadGame_f()
     if (sv_cmd_args.argc[nesting] <= 1)
         v1 = "";
     else
-        v1 = (char *)*((unsigned int *)sv_cmd_args.argv[nesting] + 1);
+        v1 = (char *)sv_cmd_args.argv[nesting][1];
     if (!*v1)
     {
         Com_Printf(CON_CHANNEL_DONT_FILTER, "You must specify a savegame to load\n");
@@ -912,7 +912,7 @@ void SV_ScriptProfile_f()
   if (sv_cmd_args.argc[nesting] <= 1)
     v1 = "";
   else
-    v1 = (const char *)*((unsigned int *)sv_cmd_args.argv[nesting] + 1);
+    v1 = (const char *)sv_cmd_args.argv[nesting][1];
   v2 = atof(v1);
   Scr_DoProfile((float)*(double *)&v2);
 }
@@ -938,7 +938,7 @@ void SV_ScriptBuiltin_f()
     if (sv_cmd_args.argc[nesting] <= 1)
         v1 = "";
     else
-        v1 = (const char *)*((unsigned int *)sv_cmd_args.argv[nesting] + 1);
+        v1 = (const char *)sv_cmd_args.argv[nesting][1];
     v2 = atof(v1);
     Scr_DoProfileBuiltin((float)*(double *)&v2);
 }
