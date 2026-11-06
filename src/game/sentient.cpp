@@ -681,19 +681,8 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
 
 void __cdecl G_InitSentients()
 {
-    SentientGlobals *v0; // r11
-    int v1; // ctr
-    int i; // r11
-
-    v0 = &glob;
-    v1 = 10;
-    do
-    {
-        v0->lastTime = 0;
-        v0 = (SentientGlobals *)((char *)v0 + 4);
-        --v1;
-    } while (v1);
-    for (i = 0; i < 33; ++i)
+    memset(&glob, 0, sizeof(glob));
+    for (int i = 0; i < MAX_SENTIENTS; ++i)
         level.sentients[i].inuse = 0;
     Actor_InitThreatBiasGroups();
 }
