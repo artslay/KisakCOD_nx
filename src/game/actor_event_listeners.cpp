@@ -46,8 +46,8 @@ int g_listenerCount;
 
 void __cdecl TRACK_actor_event_listener()
 {
-    track_static_alloc_internal(g_AIEVlisteners, 256, "g_AIEVlisteners", 5);
-    track_static_alloc_internal(g_AIEV_scrConst_table, 92, "g_AIEV_scrConst_table", 5);
+    track_static_alloc_internal(g_AIEVlisteners, sizeof(g_AIEVlisteners), "g_AIEVlisteners", 5);
+    track_static_alloc_internal(g_AIEV_scrConst_table, sizeof(g_AIEV_scrConst_table), "g_AIEV_scrConst_table", 5);
 }
 
 void __cdecl Actor_EventListener_Init()
