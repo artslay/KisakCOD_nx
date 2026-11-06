@@ -256,9 +256,6 @@ void __cdecl SV_Init()
 
 void __cdecl SV_Shutdown(const char *finalmsg)
 {
-    serverStatic_t *v1; // r11
-    int v2; // ctr
-
     if (com_sv_running && com_sv_running->current.enabled)
     {
         //LSP_LogStringEvenIfControllerIsInactive("server shutdown");
