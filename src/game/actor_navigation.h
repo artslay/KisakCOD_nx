@@ -62,6 +62,13 @@ struct actor_goal_s
     gentity_s *volume;
 };
 
+#ifdef __SWITCH__
+static_assert(sizeof(actor_goal_s) == 0x28,
+    "ARM64 actor_goal_s must retain both native pointer fields");
+static_assert(offsetof(actor_goal_s, node) == 0x18);
+static_assert(offsetof(actor_goal_s, volume) == 0x20);
+#endif
+
 struct actor_s;
 struct pathnode_t;
 enum ai_stance_e : __int32;
