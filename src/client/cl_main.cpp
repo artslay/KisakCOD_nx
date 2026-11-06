@@ -140,10 +140,10 @@ const dvar_s *arcadeScore[19]{ 0 };
 
 void __cdecl TRACK_cl_main()
 {
-    track_static_alloc_internal(clientUIActives, 20, "clientUIActives", 9);
-    track_static_alloc_internal(clients, 633532, "clients", 9);
-    track_static_alloc_internal(clientConnections, 271392, "clientConnections", 9);
-    track_static_alloc_internal(&cls, 612, "cls", 9);
+    track_static_alloc_internal(clientUIActives, sizeof(clientUIActives), "clientUIActives", 9);
+    track_static_alloc_internal(clients, sizeof(clients), "clients", 9);
+    track_static_alloc_internal(clientConnections, sizeof(clientConnections), "clientConnections", 9);
+    track_static_alloc_internal(&cls, sizeof(cls), "cls", 9);
 }
 
 int __cdecl CL_GetLocalClientActiveCount()
