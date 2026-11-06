@@ -443,11 +443,9 @@ int __cdecl G_WorldDirToScreenPos(
     const float *worldDir,
     float *outScreenPos)
 {
-    long double v9; // fp2
     int result; // r3
     double v11; // fp28
     double v12; // fp27
-    long double v13; // fp2
     double v14; // fp31
     double v15; // fp30
     float v16[4]; // [sp+50h] [-90h] BYREF
@@ -459,12 +457,13 @@ int __cdecl G_WorldDirToScreenPos(
     MatrixTransposeTransformVector(worldDir, (const mat3x3&)v17, v16);
     if (v16[0] <= 0.0)
         return 0;
-    *(double *)&v9 = (float)((float)(DEG2RAD( (float)fov_x )) * (float)0.5);
+    const double halfFovRadians = static_cast<float>(
+        static_cast<float>(DEG2RAD(static_cast<float>(fov_x))) * 0.5f);
     v11 = (float)((float)((float)1.0 / v16[0]) * v16[1]);
     v12 = (float)((float)((float)1.0 / v16[0]) * v16[2]);
-    v13 = tan(v9);
-    v14 = (float)*(double *)&v13;
-    v15 = (float)((float)*(double *)&v13 * (float)0.75);
+    const float tanHalfFovX = static_cast<float>(tan(halfFovRadians));
+    v14 = tanHalfFovX;
+    v15 = static_cast<float>(tanHalfFovX * 0.75f);
     if (v14 <= 0.0)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_targets.cpp", 373, 1, "%s", "tanHalfFovX > 0");
     if (v15 <= 0.0)
