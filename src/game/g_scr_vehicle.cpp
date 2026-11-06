@@ -4171,11 +4171,23 @@ void G_PrecacheDefaultVehicle()
     G_GetWeaponIndexForName(s_vehicleInfos[VehicleInfoFromName].turretWeapon);
 }
 
+#ifdef __SWITCH__
+static_assert(sizeof(scr_vehicle_s) == 0x338,
+    "SP vehicle record stride changed from the original 0x338-byte record");
+static_assert(offsetof(scr_vehicle_s, targetEnt) - offsetof(scr_vehicle_s, entNum) == 49 * sizeof(int),
+    "SP vehicle entNum/targetEnt relation changed");
+static_assert(offsetof(scr_vehicle_s, targetEnt) - offsetof(scr_vehicle_s, hasTarget) == 5 * sizeof(int),
+    "SP vehicle hasTarget/targetEnt relation changed");
+#endif
+
 void G_FreeVehicleRefs(gentity_s *ent)
 {
     if ((ent->flags & 0x800000u) == 0)
         return;
 
+    // The original 32-bit loop checked four s_vehicles records per iteration:
+    // targetEnt, targetEnt + 206 ints, +412 ints and +618 ints. Since one
+    // scr_vehicle_s is 0x338 bytes (206 ints), walk every record directly.
     for (int i = 0; i < ARRAY_COUNT(s_vehicles); ++i)
     {
         scr_vehicle_s *vehicle = &s_vehicles[i];
