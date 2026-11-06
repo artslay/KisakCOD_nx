@@ -4075,7 +4075,7 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                                     Scr_GetLineNum(sourceBufferIndex, sourcePosition);
                                 const uint32_t firstLine =
                                     currentLine > 55u ? currentLine - 55u : 0u;
-                                const uint32_t lastLine = currentLine + 6u;
+                                const uint32_t lastLine = currentLine + 80u;
                                 uint32_t lineNumber = 0;
                                 const char *lineStart = sourceBuffer->sourceBuf;
                                 const char *sourceEnd = sourceBuffer->sourceBuf + sourceBuffer->len;
