@@ -63,7 +63,7 @@ cm_world_t cm_world;
 
 void __cdecl TRACK_cm_world()
 {
-    track_static_alloc_internal(&cm_world, 28700, "cm_world", 25);
+    track_static_alloc_internal(&cm_world, sizeof(cm_world), "cm_world", 25);
 }
 
 void __cdecl CM_LinkWorld()
