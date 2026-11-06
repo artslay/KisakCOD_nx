@@ -277,7 +277,9 @@ void __cdecl Actor_ThinkStateTransitions(actor_s *self)
                     0,
                     "%s",
                     "self->stateLevel > 0");
-            iassert(self->stateLevel <= ARRAY_COUNT(self->eState));
+            // The resume path below indexes eState[stateLevel] directly.
+            // Unlike the [stateLevel - 1] access above, this requires a strict bound.
+            iassert(self->stateLevel < ARRAY_COUNT(self->eState));
             Actor_FinishState(self, self->eState[self->stateLevel - 1]);
             Actor_ResumePopedState(self, self->eState[self->stateLevel]);
             break;
