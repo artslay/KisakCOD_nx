@@ -29,7 +29,6 @@
 #include <server/server.h>
 #ifdef __SWITCH__
 #include <cstdio>
-#include <cstring>
 extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -47,76 +46,6 @@ extern void Switch_LogWrite(const char *msg);
 #include <script/scr_main.h>
 #include "actor_state.h"
 #include <script/scr_memorytree.h>
-
-#ifdef __SWITCH__
-// Narrowly trace scripted-animation lifecycle for the two bridge scene heroes.
-// This determines whether execute_ai_solo actually starts/stops Price and Alavi.
-static uint32_t g_switchBridgeHeroAnimTraceCount = 0;
-
-static void Switch_LogBridgeHeroAnim(
-    const char *phase,
-    const gentity_s *ent,
-    const actor_s *actor,
-    int bDelayForActor)
-{
-    if (!ent || g_switchBridgeHeroAnimTraceCount >= 96u)
-        return;
-
-    const char *targetName = ent->targetname
-        ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
-    char *scriptFile = (char *)"";
-    int scriptLine = 0;
-    const char *codePos = nullptr;
-    if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
-    {
-        codePos = scrVmPub.function_frame->fs.pos;
-        if (codePos)
-            Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
-    }
-
-    // Capture the actor scripted-animation lifecycle during the bridge sequence.
-    // The called helper can live outside cargoship.gsc and hero targetnames may be unset.
-    if (!actor || level.time < 9000 || level.time > 18000)
-        return;
-
-    const unsigned int stateLevel = actor ? actor->stateLevel : 0u;
-    const unsigned int simLevel = actor ? actor->simulatedStateLevel : 0u;
-    const int state = actor && stateLevel < ARRAY_COUNT(actor->eState)
-        ? static_cast<int>(actor->eState[stateLevel]) : -1;
-    const int simState = actor && simLevel < ARRAY_COUNT(actor->eSimulatedState)
-        ? static_cast<int>(actor->eSimulatedState[simLevel]) : -1;
-    const unsigned int transitionCount = actor ? actor->transitionCount : 0u;
-    const int transitionType = actor && transitionCount
-        ? static_cast<int>(actor->StateTransitions[0].eTransition) : -1;
-    const int transitionState = actor && transitionCount
-        ? static_cast<int>(actor->StateTransitions[0].eState) : -1;
-
-    char trace[768];
-    std::snprintf(
-        trace,
-        sizeof(trace),
-        "[KisakCOD][AI SCRIPT ANIM] n=%u phase=%s time=%d ent=%u targetname=%s class=%s delayActor=%d stateLevel=%u state=%d simLevel=%u simState=%d transitions=%u transition0=%d:%d scripted=%u source=%s:%d codePos=%p\n",
-        g_switchBridgeHeroAnimTraceCount++,
-        phase ? phase : "unknown",
-        level.time,
-        ent->s.number,
-        targetName ? targetName : "<none>",
-        ent->classname ? SL_ConvertToStringSafe(ent->classname) : "<none>",
-        bDelayForActor,
-        stateLevel,
-        state,
-        simLevel,
-        simState,
-        transitionCount,
-        transitionType,
-        transitionState,
-        ent->scripted ? 1u : 0u,
-        scriptFile ? scriptFile : "",
-        scriptLine,
-        static_cast<const void *>(codePos));
-    Switch_LogWrite(trace);
-}
-#endif
 
 // The original 32-bit build used double precision for these timing calculations.
 // Keep the intermediate width explicit on Switch, where long double is 16 bytes.
@@ -4073,182 +4002,6 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
         dir = from;
     }
 
-#ifdef __SWITCH__
-    if (ent->actor)
-    {
-        static unsigned switchAiScriptDamageTraceCount = 0;
-        if (switchAiScriptDamageTraceCount < 256u)
-        {
-            char *scriptFile = (char *)"";
-            int scriptLine = 0;
-            const char *codePos = nullptr;
-            if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
-            {
-                codePos = scrVmPub.function_frame->fs.pos;
-                if (codePos)
-                    Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
-            }
-
-            char scriptSourceLine[256] = "<unavailable>";
-            char scriptFunction[160] = "<unavailable>";
-            if (codePos && Scr_IsInOpcodeMemory(codePos))
-            {
-                // Match Scr_GetFileAndLine: its working path uses the nearest
-                // previous opcode lookup, not an exact-position lookup.
-                OpcodeLookup *sourceLookup = Scr_GetPrevSourcePosOpcodeLookup(codePos);
-                if (sourceLookup &&
-                    sourceLookup->sourcePosIndex < scrParserGlob.sourcePosLookupLen &&
-                    sourceLookup->sourcePosCount &&
-                    sourceLookup->sourcePosCount <=
-                        scrParserGlob.sourcePosLookupLen - sourceLookup->sourcePosIndex)
-                {
-                    const uint32_t sourceBufferIndex = Scr_GetSourceBuffer(codePos);
-                    const uint32_t sourcePosition =
-                        scrParserGlob.sourcePosLookup[sourceLookup->sourcePosIndex].sourcePos;
-                    if (sourceBufferIndex < scrParserPub.sourceBufferLookupLen)
-                    {
-                        const SourceBufferInfo *sourceBuffer =
-                            &scrParserPub.sourceBufferLookup[sourceBufferIndex];
-                        if (sourceBuffer->sourceBuf && sourceBuffer->len >= 0 &&
-                            sourcePosition <= static_cast<uint32_t>(sourceBuffer->len))
-                        {
-                            char rawSourceLine[1028] = {};
-                            int sourceColumn = 0;
-                            Scr_GetLineInfo(sourceBuffer->sourceBuf, sourcePosition,
-                                &sourceColumn, rawSourceLine);
-                            std::snprintf(scriptSourceLine, sizeof(scriptSourceLine), "%s",
-                                rawSourceLine);
-
-                            char rawFunctionLine[1028] = {};
-                            Scr_GetFunctionInfo(sourceBuffer->sourceBuf, sourcePosition,
-                                rawFunctionLine);
-                            std::snprintf(scriptFunction, sizeof(scriptFunction), "%s",
-                                rawFunctionLine);
-
-                            for (char *ch = scriptFunction; *ch; ++ch)
-                            {
-                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
-                                    *ch = ' ';
-                            }
-                            for (char *ch = scriptSourceLine; *ch; ++ch)
-                            {
-                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
-                                    *ch = ' ';
-                            }
-
-                            // Dump bounded source context once so the reason this
-                            // intentionally lethal script line is reached is visible.
-                            static bool switchAiScriptContextLogged = false;
-                            if (!switchAiScriptContextLogged)
-                            {
-                                switchAiScriptContextLogged = true;
-                                const uint32_t currentLine =
-                                    Scr_GetLineNum(sourceBufferIndex, sourcePosition);
-                                const uint32_t firstLine =
-                                    currentLine > 55u ? currentLine - 55u : 0u;
-                                const uint32_t lastLine = currentLine + 80u;
-                                uint32_t lineNumber = 0;
-                                const char *lineStart = sourceBuffer->sourceBuf;
-                                const char *sourceEnd = sourceBuffer->sourceBuf + sourceBuffer->len;
-
-                                for (const char *p = sourceBuffer->sourceBuf;
-                                     p <= sourceEnd && lineNumber <= lastLine; ++p)
-                                {
-                                    // Parsed script source buffers are NUL-separated by line.
-                                    // Scr_GetLineNumInternal() counts these NUL boundaries.
-                                    if (p == sourceEnd || *p == '\0')
-                                    {
-                                        if (lineNumber >= firstLine && lineNumber <= lastLine)
-                                        {
-                                            char contextLine[256] = {};
-                                            size_t lineLength = static_cast<size_t>(p - lineStart);
-                                            if (lineLength >= sizeof(contextLine))
-                                                lineLength = sizeof(contextLine) - 1;
-                                            std::memcpy(contextLine, lineStart, lineLength);
-                                            for (char *ch = contextLine; *ch; ++ch)
-                                            {
-                                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
-                                                    *ch = ' ';
-                                            }
-                                            Com_Printf(CON_CHANNEL_SERVER,
-                                                "[KisakCOD][AI SCRIPT CONTEXT] line=%u text=[%s]\n",
-                                                lineNumber + 1u, contextLine);
-                                        }
-                                        ++lineNumber;
-                                        lineStart = p + 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            const actor_s *scriptActor = ent->actor;
-            const unsigned int actorStateLevel =
-                scriptActor ? scriptActor->stateLevel : 0u;
-            const int actorState = scriptActor &&
-                actorStateLevel < ARRAY_COUNT(scriptActor->eState)
-                ? static_cast<int>(scriptActor->eState[actorStateLevel]) : -1;
-            const int actorSubState = scriptActor &&
-                actorStateLevel < ARRAY_COUNT(scriptActor->eSubState)
-                ? static_cast<int>(scriptActor->eSubState[actorStateLevel]) : -1;
-            const unsigned int actorScriptedState =
-                scriptActor && Actor_InScriptedState(scriptActor) ? 1u : 0u;
-            const unsigned int actorAllowDeath =
-                scriptActor && scriptActor->allowDeath ? 1u : 0u;
-            const unsigned int actorDelayedDeath =
-                scriptActor && scriptActor->delayedDeath ? 1u : 0u;
-            const unsigned int actorSimulatedStateLevel =
-                scriptActor ? scriptActor->simulatedStateLevel : 0u;
-            const unsigned int actorTransitionCount =
-                scriptActor ? scriptActor->transitionCount : 0u;
-            const int actorTransition0Type = scriptActor && actorTransitionCount > 0u
-                ? static_cast<int>(scriptActor->StateTransitions[0].eTransition) : -1;
-            const int actorTransition0State = scriptActor && actorTransitionCount > 0u
-                ? static_cast<int>(scriptActor->StateTransitions[0].eState) : -1;
-            const int simState0 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[0]) : -1;
-            const int simState1 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[1]) : -1;
-            const int simState2 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[2]) : -1;
-            const int simState3 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[3]) : -1;
-            const int simState4 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[4]) : -1;
-            const int state0 = scriptActor ? static_cast<int>(scriptActor->eState[0]) : -1;
-            const int state1 = scriptActor ? static_cast<int>(scriptActor->eState[1]) : -1;
-            const int state2 = scriptActor ? static_cast<int>(scriptActor->eState[2]) : -1;
-            const int state3 = scriptActor ? static_cast<int>(scriptActor->eState[3]) : -1;
-            const int state4 = scriptActor ? static_cast<int>(scriptActor->eState[4]) : -1;
-            const unsigned int entityScripted = ent->scripted ? 1u : 0u;
-            const char *targetClass = ent->classname
-                ? SL_ConvertToStringSafe(ent->classname) : "<none>";
-            const char *targetName = ent->targetname
-                ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
-            const char *attackerClass = attacker && attacker->classname
-                ? SL_ConvertToStringSafe(attacker->classname) : "<none>";
-            const char *attackerName = attacker && attacker->targetname
-                ? SL_ConvertToStringSafe(attacker->targetname) : "<none>";
-            const char *inflictorClass = inflictor && inflictor->classname
-                ? SL_ConvertToStringSafe(inflictor->classname) : "<none>";
-            const char *inflictorName = inflictor && inflictor->targetname
-                ? SL_ConvertToStringSafe(inflictor->targetname) : "<none>";
-
-            Com_Printf(
-                CON_CHANNEL_SERVER,
-                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d actorStateLevel=%u actorState=%d actorSubState=%d scriptedState=%u allowDeath=%u delayedDeath=%u simLevel=%u simStack=[%d,%d,%d,%d,%d] stateStack=[%d,%d,%d,%d,%d] transitions=%u transition0=%d:%d entityScripted=%u amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d function=[%s] sourceLine=[%s] codePos=%p\n",
-                switchAiScriptDamageTraceCount++,
-                ent->s.number, targetName, targetClass, ent->health, ent->maxHealth,
-                actorStateLevel, actorState, actorSubState, actorScriptedState,
-                actorAllowDeath, actorDelayedDeath,
-                actorSimulatedStateLevel,
-                simState0, simState1, simState2, simState3, simState4,
-                state0, state1, state2, state3, state4,
-                actorTransitionCount, actorTransition0Type, actorTransition0State,
-                entityScripted, damage, source[0], source[1], source[2],
-                attacker ? attacker->s.number : -1, attackerName, attackerClass,
-                inflictor ? inflictor->s.number : -1, inflictorName, inflictorClass,
-                scriptFile ? scriptFile : "", scriptLine, scriptFunction, scriptSourceLine,
-                static_cast<const void *>(codePos));
-        }
-    }
-#endif
     G_Damage(
         ent,
         inflictor,
@@ -11639,9 +11392,6 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
     v14 = Scr_GetConstString(0);
     actor = Entity->actor;
     v16 = v14;
-#ifdef __SWITCH__
-    Switch_LogBridgeHeroAnim("animscripted_enter", Entity, actor, bDelayForActor);
-#endif
     if (!actor)
         goto LABEL_32;
     if (!actor->Physics.bIsAlive)
@@ -11669,9 +11419,6 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
     }
     if (bDelayForActor)
     {
-#ifdef __SWITCH__
-        Switch_LogBridgeHeroAnim("animscripted_before_push", Entity, actor, bDelayForActor);
-#endif
         Actor_PushState(actor, AIS_SCRIPTEDANIM);
         Actor_KillAnimScript(actor);
         scripted = Entity->scripted;
@@ -11701,9 +11448,6 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
         Scr_AddConstString(v16);
         v28 = Scr_ExecEntThread(Entity, g_scr_data.scripted_init, 6u);
         Scr_FreeThread(v28);
-#ifdef __SWITCH__
-        Switch_LogBridgeHeroAnim("animscripted_after_init", Entity, actor, bDelayForActor);
-#endif
     }
     else
     {
@@ -11725,9 +11469,6 @@ void __cdecl ScrCmd_animscriptedInternal(scr_entref_t entref, int bDelayForActor
 
 void __cdecl G_StopAnimScripted(gentity_s *ent)
 {
-#ifdef __SWITCH__
-    Switch_LogBridgeHeroAnim("stop_before", ent, ent ? ent->actor : nullptr, 1);
-#endif
     actor_s *actor; // r3
     animscripted_s *scripted; // r30
     XAnimTree_s *pAnimTree; // r29
@@ -11755,9 +11496,6 @@ void __cdecl G_StopAnimScripted(gentity_s *ent)
         MT_Free((unsigned char*)scripted, 96);
         ent->scripted = 0;
     }
-#ifdef __SWITCH__
-    Switch_LogBridgeHeroAnim("stop_after", ent, actor, 1);
-#endif
 }
 
 void __cdecl ScrCmd_stopanimscripted(scr_entref_t entref)

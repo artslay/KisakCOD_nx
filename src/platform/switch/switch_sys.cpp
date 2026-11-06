@@ -3708,13 +3708,7 @@ static bool Switch_LogIsScriptDiagnostic(const char *msg)
     {
         "[KisakCOD][SCRIPT RETURN]",
         "[KisakCOD][SCRIPT OBJECT ARG UNDEFINED]",
-        "[KisakCOD][SCRIPT VECTOR ARG UNDEFINED]",
-        "[KisakCOD][AI SCRIPT DAMAGE]",
-        "[KisakCOD][AI SCRIPT CONTEXT]",
-        "[KisakCOD][AI SCRIPT NOTIFY]",
-        "[KisakCOD][AI SCRIPT ANIM]",
-        "[KisakCOD][AI DEATH]",
-        "[KisakCOD][AI STATE]"
+        "[KisakCOD][SCRIPT VECTOR ARG UNDEFINED]"
     };
     for (const char *prefix : kScriptDiagnosticPrefixes)
     {
