@@ -4131,6 +4131,10 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                 scriptActor ? scriptActor->simulatedStateLevel : 0u;
             const unsigned int actorTransitionCount =
                 scriptActor ? scriptActor->transitionCount : 0u;
+            const int actorTransition0Type = scriptActor && actorTransitionCount > 0u
+                ? static_cast<int>(scriptActor->StateTransitions[0].eTransition) : -1;
+            const int actorTransition0State = scriptActor && actorTransitionCount > 0u
+                ? static_cast<int>(scriptActor->StateTransitions[0].eState) : -1;
             const int simState0 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[0]) : -1;
             const int simState1 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[1]) : -1;
             const int simState2 = scriptActor ? static_cast<int>(scriptActor->eSimulatedState[2]) : -1;
@@ -4157,7 +4161,7 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
 
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d actorStateLevel=%u actorState=%d actorSubState=%d scriptedState=%u allowDeath=%u delayedDeath=%u simLevel=%u simStack=[%d,%d,%d,%d,%d] stateStack=[%d,%d,%d,%d,%d] transitions=%u entityScripted=%u amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d function=[%s] sourceLine=[%s] codePos=%p\n",
+                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d actorStateLevel=%u actorState=%d actorSubState=%d scriptedState=%u allowDeath=%u delayedDeath=%u simLevel=%u simStack=[%d,%d,%d,%d,%d] stateStack=[%d,%d,%d,%d,%d] transitions=%u transition0=%d:%d entityScripted=%u amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d function=[%s] sourceLine=[%s] codePos=%p\n",
                 switchAiScriptDamageTraceCount++,
                 ent->s.number, targetName, targetClass, ent->health, ent->maxHealth,
                 actorStateLevel, actorState, actorSubState, actorScriptedState,
@@ -4165,8 +4169,8 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                 actorSimulatedStateLevel,
                 simState0, simState1, simState2, simState3, simState4,
                 state0, state1, state2, state3, state4,
-                actorTransitionCount, entityScripted,
-                damage, source[0], source[1], source[2],
+                actorTransitionCount, actorTransition0Type, actorTransition0State,
+                entityScripted, damage, source[0], source[1], source[2],
                 attacker ? attacker->s.number : -1, attackerName, attackerClass,
                 inflictor ? inflictor->s.number : -1, inflictorName, inflictorClass,
                 scriptFile ? scriptFile : "", scriptLine, scriptFunction, scriptSourceLine,
