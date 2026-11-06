@@ -499,14 +499,14 @@ cmd_function_s* Cmd_FindCommand(const char* cmdName)
 
 void __cdecl TRACK_cmd()
 {
-    track_static_alloc_internal(&cmd_args, 132, "cmd_args", 10);
-    track_static_alloc_internal(&cmd_argsPrivate, 10280, "cmd_argsPrivate", 10);
-    track_static_alloc_internal(cmd_textArray, 12, "cmd_textArray", 10);
-    track_static_alloc_internal(cmd_text_buf, 0x10000, "cmd_text_buf", 10);
-    track_static_alloc_internal(&sv_cmd_args, 132, "sv_cmd_args", 10);
-    track_static_alloc_internal(&sv_cmd_argsPrivate, 10280, "sv_cmd_argsPrivate", 10);
-    track_static_alloc_internal(&sv_cmd_text, 12, "sv_cmd_text", 10);
-    track_static_alloc_internal(sv_cmd_text_buf, 0x10000, "sv_cmd_text_buf", 10);
+    track_static_alloc_internal(&cmd_args, sizeof(cmd_args), "cmd_args", 10);
+    track_static_alloc_internal(&cmd_argsPrivate, sizeof(cmd_argsPrivate), "cmd_argsPrivate", 10);
+    track_static_alloc_internal(cmd_textArray, sizeof(cmd_textArray), "cmd_textArray", 10);
+    track_static_alloc_internal(cmd_text_buf, sizeof(cmd_text_buf), "cmd_text_buf", 10);
+    track_static_alloc_internal(&sv_cmd_args, sizeof(sv_cmd_args), "sv_cmd_args", 10);
+    track_static_alloc_internal(&sv_cmd_argsPrivate, sizeof(sv_cmd_argsPrivate), "sv_cmd_argsPrivate", 10);
+    track_static_alloc_internal(&sv_cmd_text, sizeof(sv_cmd_text), "sv_cmd_text", 10);
+    track_static_alloc_internal(sv_cmd_text_buf, sizeof(sv_cmd_text_buf), "sv_cmd_text_buf", 10);
 }
 
 void __cdecl _Cmd_Wait_f()
