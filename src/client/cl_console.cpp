@@ -963,7 +963,7 @@ char __cdecl CL_ConsolePrint_AddLine(
                 }
                 bcassert(
                     con.lineOffset,
-                    sizeof(con.textTempLine) - (CONTXTCMD_LEN_HUDICON + 1));
+                    sizeof(con.textTempLine) - CONTXTCMD_LEN_HUDICON);
                 con.textTempLine[con.lineOffset++] = 94;
                 memcpy(
                     &con.textTempLine[con.lineOffset],
