@@ -55,23 +55,18 @@ void __cdecl Actor_ClearThreatBiasGroups()
 
 int __cdecl Actor_FindThreatBiasGroupIndex(unsigned int name)
 {
-    int result; // r3
-    threat_bias_t *v3; // r11
-
     if (!name)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_threat.cpp", 163, 0, "%s", "name");
-    result = 0;
-    v3 = &g_threatBias;
-    if (g_threatBias.threatGroupCount <= 0)
-        return -1;
-    while (v3->groupName[0] != name)
+
+    const int groupCount = std::min(
+        g_threatBias.threatGroupCount,
+        static_cast<int>(ARRAY_COUNT(g_threatBias.groupName)));
+    for (int i = 0; i < groupCount; ++i)
     {
-        ++result;
-        v3 = (threat_bias_t *)((char *)v3 + 2);
-        if (result >= g_threatBias.threatGroupCount)
-            return -1;
+        if (g_threatBias.groupName[i] == name)
+            return i;
     }
-    return result;
+    return -1;
 }
 
 void __cdecl Actor_CreateThreatBiasGroup(unsigned int name)
