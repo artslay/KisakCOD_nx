@@ -3570,8 +3570,6 @@ void __cdecl G_SpawnPathnodeDynamic()
 {
     unsigned int v0; // r6
     pathnode_t *v1; // r31
-    pathnode_dynamic_t *p_dynamic; // r11
-    int v3; // ctr
     nodeType type; // r30
     float forward[3];
 
@@ -3588,18 +3586,10 @@ void __cdecl G_SpawnPathnodeDynamic()
                 v1 = &gameWorldSp.path.nodes[g_path.actualNodeCount++];
                 if (g_path.actualNodeCount > gameWorldSp.path.nodeCount)
                 {
-                    p_dynamic = &v1->dynamic;
-                    v3 = 8;
-                    do
-                    {
-                        p_dynamic->pOwner = (SentientHandle)0;
-                        p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-                        --v3;
-                    } while (v3);
-
-                    // pathnode_transient_t contains native pointers on Switch.
-                    // The original seven 32-bit stores only cleared 28 bytes and
-                    // left the upper portions of the 64-bit path pointers stale.
+                    // Clear the complete native runtime state. In particular,
+                    // pathnode_transient_t contains 64-bit pointers on Switch;
+                    // the original fixed 32-bit stores left stale pointer halves.
+                    memset(&v1->dynamic, 0, sizeof(v1->dynamic));
                     memset(&v1->transient, 0, sizeof(v1->transient));
                 }
                 G_ParsePathnodeScriptFields(v1);
