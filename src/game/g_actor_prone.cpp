@@ -90,18 +90,10 @@ actor_prone_info_s *__cdecl G_BypassForCG_GetClientActorProneInfo(int iEntNum)
 void __cdecl G_InitActorProneInfo(actor_s *actor)
 {
     actor_prone_info_s *p_ProneInfo; // r11
-    int v3; // ctr
 
     if (!actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_actor_prone.cpp", 56, 0, "%s", "actor");
-    p_ProneInfo = &actor->ProneInfo;
-    v3 = 6;
-    do
-    {
-        *(unsigned int *)&p_ProneInfo->bCorpseOrientation = 0;
-        p_ProneInfo = (actor_prone_info_s *)((char *)p_ProneInfo + 4);
-        --v3;
-    } while (v3);
+    memset(&actor->ProneInfo, 0, sizeof(actor->ProneInfo));
 }
 
 void __cdecl G_ActorEnterProne(actor_s *actor, unsigned int iTransTime)
