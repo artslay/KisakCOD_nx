@@ -43,6 +43,24 @@ static_assert(sizeof(PhysObjUserData) == 0x78,
     "Switch PhysObjUserData must include native 64-bit pointer alignment");
 #endif
 
+// Keep the legacy 32-bit save wire layout for the three physics worlds.
+// collisionCallback is runtime-only and must never be serialized as an address.
+struct PhysWorldArchiveData
+{
+    int timeLastSnapshot;
+    int timeLastUpdate;
+    float timeNowLerpFrac;
+    uint32_t reservedCallback;
+    int numJitterRegions;
+    bool useContactCentroids;
+    uint8_t padding[3];
+    Jitter jitterRegions[5];
+};
+
+static_assert(sizeof(Jitter) == 0x24, "physics jitter save record changed");
+static_assert(sizeof(PhysWorldArchiveData) == 0xCC,
+    "physics world save record must retain the 32-bit wire layout");
+
 bool physInited;
 
 const dvar_t *phys_contact_erp;
@@ -2845,15 +2863,46 @@ void Phys_SetGravityDir(float *down)
 
 void Phys_ArchiveState(MemoryFile *memFile)
 {
+    PhysWorldArchiveData archivedWorldData[ARRAY_COUNT(physGlob.worldData)]{};
+
     if (MemFile_IsWriting(memFile))
     {
-        MemFile_WriteData(memFile, 612, physGlob.worldData);
-        MemFile_WriteData(memFile, 12, physGlob.gravityDirection);
+        for (unsigned int i = 0; i < ARRAY_COUNT(physGlob.worldData); ++i)
+        {
+            const PhysWorldData &source = physGlob.worldData[i];
+            PhysWorldArchiveData &destination = archivedWorldData[i];
+
+            destination.timeLastSnapshot = source.timeLastSnapshot;
+            destination.timeLastUpdate = source.timeLastUpdate;
+            destination.timeNowLerpFrac = source.timeNowLerpFrac;
+            destination.reservedCallback = 0;
+            destination.numJitterRegions = source.numJitterRegions;
+            destination.useContactCentroids = source.useContactCentroids;
+            memcpy(destination.jitterRegions, source.jitterRegions, sizeof(destination.jitterRegions));
+        }
+
+        MemFile_WriteData(memFile, sizeof(archivedWorldData), archivedWorldData);
+        MemFile_WriteData(memFile, sizeof(physGlob.gravityDirection), physGlob.gravityDirection);
     }
     else
     {
-        MemFile_ReadData(memFile, 612, (unsigned char*)physGlob.worldData);
-        MemFile_ReadData(memFile, 12, (unsigned char*)physGlob.gravityDirection);
+        MemFile_ReadData(memFile, sizeof(archivedWorldData), archivedWorldData);
+
+        for (unsigned int i = 0; i < ARRAY_COUNT(physGlob.worldData); ++i)
+        {
+            PhysWorldData &destination = physGlob.worldData[i];
+            const PhysWorldArchiveData &source = archivedWorldData[i];
+
+            destination.timeLastSnapshot = source.timeLastSnapshot;
+            destination.timeLastUpdate = source.timeLastUpdate;
+            destination.timeNowLerpFrac = source.timeNowLerpFrac;
+            destination.numJitterRegions = source.numJitterRegions;
+            destination.useContactCentroids = source.useContactCentroids;
+            memcpy(destination.jitterRegions, source.jitterRegions, sizeof(destination.jitterRegions));
+            // Preserve the runtime callback installed by Phys_Init / game code.
+        }
+
+        MemFile_ReadData(memFile, sizeof(physGlob.gravityDirection), physGlob.gravityDirection);
     }
 }
 
