@@ -648,7 +648,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 if (scrVmPub.function_count >= 32)
                     goto LABEL_19;
                 *localId = 0;
-                result = *(char**)pos;
+                memcpy(&result, pos, sizeof(result));
                 break;
             case 'S':
             case 'W':
@@ -829,7 +829,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 value.type = (Vartype_t)type;
                 AddRefToValue(type, value.u);
                 Scr_CastBool(&value);
-                v14 = *(_WORD*)pos;
+                memcpy(&v14, pos, sizeof(v14));
                 pos += 2;
                 if (scrVarPub.error_message)
                     goto LABEL_67;
@@ -846,7 +846,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 value.type = (Vartype_t)v7;
                 AddRefToValue(v7, value.u);
                 Scr_CastBool(&value);
-                v13 = *(_WORD*)pos;
+                memcpy(&v13, pos, sizeof(v13));
                 pos += 2;
                 if (scrVarPub.error_message)
                     goto LABEL_67;
@@ -857,13 +857,15 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 else
                     return (char*)pos;
             case 98:
-                return (char*)&pos[*(_DWORD*)pos + 4];
+                memcpy(&v9, pos, sizeof(v9));
+                return const_cast<char *>(pos + v9 + sizeof(v9));
             case 99:
-                return (char*)&pos[-*(uint16_t*)pos + 2];
+                memcpy(&v13, pos, sizeof(v13));
+                return const_cast<char *>(pos - v13 + sizeof(v13));
             case 124:
-                jumpOffset = *reinterpret_cast<const uintptr_t *>(pos);
+                memcpy(&jumpOffset, pos, sizeof(jumpOffset));
                 posb = pos + sizeof(uintptr_t) + jumpOffset;
-                v12 = *reinterpret_cast<const uint16_t *>(posb);
+                memcpy(&v12, posb, sizeof(v12));
                 posa = posb + sizeof(uint16_t);
                 caseCount = v12;
                 v9 = top->type;
@@ -885,7 +887,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2516, 0, "%s", "caseValue");
                 break;
             case 125:
-                v12 = *reinterpret_cast<const uint16_t *>(pos);
+                memcpy(&v12, pos, sizeof(v12));
                 return const_cast<char *>(pos + sizeof(uint16_t) + SCR_SWITCH_ENTRY_SIZE * v12);
             default:
                 if (!alwaysfails)
@@ -902,10 +904,10 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             }
             do
             {
-                v11 = *reinterpret_cast<const uintptr_t *>(posa);
-                posc = posa + sizeof(uintptr_t);
-                v10 = *reinterpret_cast<const char * const *>(posc);
-                posa = posc + sizeof(const char *);
+                memcpy(&v11, posa, sizeof(v11));
+                posc = posa + sizeof(v11);
+                memcpy(&v10, posc, sizeof(v10));
+                posa = posc + sizeof(v10);
                 if (v11 == caseValue)
                 {
                     if (!v10)
