@@ -108,7 +108,7 @@ const float con_outputBarSize = 10.0f;
 
 void __cdecl TRACK_cl_console()
 {
-    track_static_alloc_internal(&con, 84684, "con", 10);
+    track_static_alloc_internal(&con, sizeof(con), "con", 10);
 }
 
 void __cdecl Con_ToggleConsole()
