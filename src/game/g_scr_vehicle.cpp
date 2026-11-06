@@ -4173,35 +4173,17 @@ void G_PrecacheDefaultVehicle()
 
 void G_FreeVehicleRefs(gentity_s *ent)
 {
-    int *p_targetEnt; // r11
+    if ((ent->flags & 0x800000u) == 0)
+        return;
 
-    if ((ent->flags & 0x800000) != 0)
+    for (int i = 0; i < ARRAY_COUNT(s_vehicles); ++i)
     {
-        p_targetEnt = &s_vehicles[0].targetEnt;
-        do
+        scr_vehicle_s *vehicle = &s_vehicles[i];
+        if (vehicle->entNum != ENTITYNUM_NONE && vehicle->targetEnt == ent->s.number)
         {
-            if (*(p_targetEnt - 49) != ENTITYNUM_NONE && *p_targetEnt == ent->s.number)
-            {
-                *p_targetEnt = ENTITYNUM_NONE;
-                *(p_targetEnt - 5) = 0;
-            }
-            if (p_targetEnt[157] != ENTITYNUM_NONE && p_targetEnt[206] == ent->s.number)
-            {
-                p_targetEnt[206] = ENTITYNUM_NONE;
-                p_targetEnt[201] = 0;
-            }
-            if (p_targetEnt[363] != ENTITYNUM_NONE && p_targetEnt[412] == ent->s.number)
-            {
-                p_targetEnt[412] = ENTITYNUM_NONE;
-                p_targetEnt[407] = 0;
-            }
-            if (p_targetEnt[569] != ENTITYNUM_NONE && p_targetEnt[618] == ent->s.number)
-            {
-                p_targetEnt[618] = ENTITYNUM_NONE;
-                p_targetEnt[613] = 0;
-            }
-            p_targetEnt += 824;
-        } while ((uintptr_t)p_targetEnt < (uintptr_t)&s_vehicles[64]);
+            vehicle->targetEnt = ENTITYNUM_NONE;
+            vehicle->hasTarget = 0;
+        }
     }
 }
 
