@@ -26,6 +26,8 @@ struct actor_prone_info_s
         float fBodyRoll;
     };
 };
+static_assert(sizeof(actor_prone_info_s) == 24,
+    "actor_prone_info_s must remain a six-dword value record");
 
 int __cdecl BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime);
 int __cdecl BG_ActorGoalIsProne(actor_prone_info_s *pInfo);
