@@ -3572,8 +3572,6 @@ void __cdecl G_SpawnPathnodeDynamic()
     pathnode_t *v1; // r31
     pathnode_dynamic_t *p_dynamic; // r11
     int v3; // ctr
-    pathnode_transient_t *p_transient; // r11
-    int v5; // ctr
     nodeType type; // r30
     float forward[3];
 
