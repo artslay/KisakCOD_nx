@@ -605,15 +605,15 @@ char *__cdecl BG_GetPlayerAnimTypeName(int32_t index)
 
 void __cdecl TRACK_bg_weapons_load_obj()
 {
-    track_static_alloc_internal(szWeapOverlayReticleNames, 8, "szWeapOverlayReticleNames", 9);
-    track_static_alloc_internal(szWeapStanceNames, 12, "szWeapStanceNames", 9);
-    track_static_alloc_internal(weaponDefFields, 6024, "weaponDefFields", 9);
-    track_static_alloc_internal(&bg_defaultWeaponDefs, 2168, "bg_defaultWeaponDefs", 9);
-    track_static_alloc_internal(penetrateTypeNames, 16, "penetrateTypeNames", 9);
-    track_static_alloc_internal(szWeapTypeNames, 16, "szWeapTypeNames", 9);
-    track_static_alloc_internal(szWeapClassNames, 40, "szWeapClassNames", 9);
-    track_static_alloc_internal(g_playerAnimTypeNames, 256, "g_playerAnimTypeNames", 9);
-    track_static_alloc_internal(szWeapInventoryTypeNames, 16, "szWeapInventoryTypeNames", 9);
+    track_static_alloc_internal(szWeapOverlayReticleNames, sizeof(szWeapOverlayReticleNames), "szWeapOverlayReticleNames", 9);
+    track_static_alloc_internal(szWeapStanceNames, sizeof(szWeapStanceNames), "szWeapStanceNames", 9);
+    track_static_alloc_internal(weaponDefFields, sizeof(weaponDefFields), "weaponDefFields", 9);
+    track_static_alloc_internal(&bg_defaultWeaponDefs, sizeof(bg_defaultWeaponDefs), "bg_defaultWeaponDefs", 9);
+    track_static_alloc_internal(penetrateTypeNames, sizeof(penetrateTypeNames), "penetrateTypeNames", 9);
+    track_static_alloc_internal(szWeapTypeNames, sizeof(szWeapTypeNames), "szWeapTypeNames", 9);
+    track_static_alloc_internal(szWeapClassNames, sizeof(szWeapClassNames), "szWeapClassNames", 9);
+    track_static_alloc_internal(g_playerAnimTypeNames, sizeof(g_playerAnimTypeNames), "g_playerAnimTypeNames", 9);
+    track_static_alloc_internal(szWeapInventoryTypeNames, sizeof(szWeapInventoryTypeNames), "szWeapInventoryTypeNames", 9);
 }
 
 const char *__cdecl BG_GetWeaponTypeName(weapType_t type)
