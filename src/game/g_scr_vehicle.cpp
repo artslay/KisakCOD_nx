@@ -4547,10 +4547,10 @@ void CMD_VEH_SetSpeedImmediate(scr_entref_t entref)
     dir[1] = 0.0f;
     dir[2] = 0.0f;
 
-    if (vehicle->speed > 0.0f ||
-        vehicle->goalPosition[0] != 0.0f ||
-        vehicle->goalPosition[1] != 0.0f ||
-        vehicle->goalPosition[2] != 0.0f)
+    if (!(vehicle->speed <= 0.0f &&
+          vehicle->goalPosition[0] == 0.0f &&
+          vehicle->goalPosition[1] == 0.0f &&
+          vehicle->goalPosition[2] == 0.0f))
     {
         dir[0] = vehicle->goalPosition[0] - vehicleEnt->r.currentOrigin[0];
         dir[1] = vehicle->goalPosition[1] - vehicleEnt->r.currentOrigin[1];
