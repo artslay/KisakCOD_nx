@@ -875,18 +875,18 @@ const NetFieldList s_netFieldList[18] =
 
 void __cdecl TRACK_msg()
 {
-    track_static_alloc_internal(&msgHuff, 19476, "msgHuff", 9);
+    track_static_alloc_internal(&msgHuff, sizeof(msgHuff), "msgHuff", 9);
     //track_static_alloc_internal(kbitmask, 132, "kbitmask", 9);
-    track_static_alloc_internal((void *)entityStateFields, 944, "entityStateFields", 9);
-    track_static_alloc_internal((void *)eventEntityStateFields, 944, "eventEntityStateFields", 9);
-    track_static_alloc_internal((void *)playerEntityStateFields, 944, "playerEntityStateFields", 9);
-    track_static_alloc_internal((void *)corpseEntityStateFields, 944, "corpseEntityStateFields", 9);
-    track_static_alloc_internal((void *)missileEntityStateFields, 944, "missileEntityStateFields", 9);
-    track_static_alloc_internal((void *)itemEntityStateFields, 944, "itemEntityStateFields", 9);
-    track_static_alloc_internal((void *)playerStateFields, 2256, "playerStateFields", 9);
-    track_static_alloc_internal((void *)fxStateFields, 944, "fxStateFields", 9);
-    track_static_alloc_internal((void *)scriptMoverStateFields, 944, "scriptMoverStateFields", 9);
-    track_static_alloc_internal((void *)msg_hData, 1024, "msg_hData", 9);
+    track_static_alloc_internal((void *)entityStateFields, sizeof(entityStateFields), "entityStateFields", 9);
+    track_static_alloc_internal((void *)eventEntityStateFields, sizeof(eventEntityStateFields), "eventEntityStateFields", 9);
+    track_static_alloc_internal((void *)playerEntityStateFields, sizeof(playerEntityStateFields), "playerEntityStateFields", 9);
+    track_static_alloc_internal((void *)corpseEntityStateFields, sizeof(corpseEntityStateFields), "corpseEntityStateFields", 9);
+    track_static_alloc_internal((void *)missileEntityStateFields, sizeof(missileEntityStateFields), "missileEntityStateFields", 9);
+    track_static_alloc_internal((void *)itemEntityStateFields, sizeof(itemEntityStateFields), "itemEntityStateFields", 9);
+    track_static_alloc_internal((void *)playerStateFields, sizeof(playerStateFields), "playerStateFields", 9);
+    track_static_alloc_internal((void *)fxStateFields, sizeof(fxStateFields), "fxStateFields", 9);
+    track_static_alloc_internal((void *)scriptMoverStateFields, sizeof(scriptMoverStateFields), "scriptMoverStateFields", 9);
+    track_static_alloc_internal((void *)msg_hData, sizeof(msg_hData), "msg_hData", 9);
 }
 
 const NetFieldList *__cdecl MSG_GetStateFieldListForEntityType(int eType)
