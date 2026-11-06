@@ -2810,35 +2810,15 @@ void __cdecl ActorCmd_SetTalkToSpecies(scr_entref_t entref)
 
 void(__cdecl *__cdecl Actor_GetMethod(const char **pName))(scr_entref_t)
 {
-    int v1; // r6
-    unsigned int v2; // r5
-    const BuiltinMethodDef *i; // r7
-    const char *actionString; // r10
-    const char *v5; // r11
-    int v6; // r8
-
-    v1 = 0;
-    v2 = 0;
-    for (i = methods; ; ++i)
+    for (int i = 0; i < ARRAY_COUNT(methods); ++i)
     {
-        actionString = i->actionString;
-        v5 = *pName;
-        do
+        const char *actionString = methods[i].actionString;
+        if (actionString && !strcmp(*pName, actionString))
         {
-            v6 = (unsigned __int8)*v5 - *(unsigned __int8 *)actionString;
-            if (!*v5)
-                break;
-            ++v5;
-            ++actionString;
-        } while (!v6);
-        if (!v6)
-            break;
-        v2 += 12;
-        ++v1;
-        if (v2 >= 0x4E0)
-            return 0;
+            *pName = methods[i].actionString;
+            return methods[i].actionFunc;
+        }
     }
-    *pName = methods[v1].actionString;
-    return methods[v1].actionFunc;
+    return nullptr;
 }
 
