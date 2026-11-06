@@ -10903,37 +10903,17 @@ void __cdecl GScr_IsRagdoll(scr_entref_t entref)
 
 void(__cdecl *__cdecl BuiltIn_GetMethod(const char **pName, int *type))(scr_entref_t)
 {
-    int v2; // r6
-    unsigned int v3; // r31
-    const BuiltinMethodDef *i; // r7
-    const char *actionString; // r10
-    const char *v6; // r11
-    int v7; // r8
-
-    v2 = 0;
-    v3 = 0;
-    for (i = methods_2; ; ++i)
+    for (int i = 0; i < ARRAY_COUNT(methods_2); ++i)
     {
-        actionString = i->actionString;
-        v6 = *pName;
-        do
+        const char *actionString = methods_2[i].actionString;
+        if (actionString && !strcmp(*pName, actionString))
         {
-            v7 = (unsigned __int8)*v6 - *(unsigned __int8 *)actionString;
-            if (!*v6)
-                break;
-            ++v6;
-            ++actionString;
-        } while (!v7);
-        if (!v7)
-            break;
-        v3 += 12;
-        ++v2;
-        if (v3 >= 0x7C8)
-            return 0;
+            *pName = methods_2[i].actionString;
+            *type = methods_2[i].type;
+            return methods_2[i].actionFunc;
+        }
     }
-    *pName = methods_2[v2].actionString;
-    *type = methods_2[v2].type;
-    return methods_2[v2].actionFunc;
+    return nullptr;
 }
 
 void(__cdecl *__cdecl Scr_GetMethod(const char **pName, int *type))(scr_entref_t __struct_ptr)
