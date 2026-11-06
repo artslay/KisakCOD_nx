@@ -286,8 +286,8 @@ int __cdecl Actor_Grenade_GetTossPositionsFromHints(
     const unsigned int method,
     float *vLand)
 {
-    long double v7; // fp2
-    long double v8; // fp2
+    double hintArcRadians;
+    double hintArcCosine;
     double v9; // fp29
     int v10; // r26
     unsigned int v11; // r30
@@ -302,9 +302,10 @@ int __cdecl Actor_Grenade_GetTossPositionsFromHints(
     float dirHintToFrom[2];   // was v20 (BYREF) + v21
 
     //Profile_Begin(351);
-    *(double *)&v7 = (float)DEG2RAD( (float)((float)(ai_debugGrenadeHintArc->current.value * (float)0.5) + (float)180.0) );
-    v8 = cos(v7);
-    v9 = (float)*(double *)&v8;
+    hintArcRadians = static_cast<float>(
+        DEG2RAD(static_cast<float>(ai_debugGrenadeHintArc->current.value * 0.5f + 180.0f)));
+    hintArcCosine = cos(hintArcRadians);
+    v9 = static_cast<float>(hintArcCosine);
     if (!level.grenadeHintCount)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp",
