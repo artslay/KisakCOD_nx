@@ -767,18 +767,15 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
             }
             v8 = Path_NodeCount();
             v4 = va(aPrint, v8);
-            ;
         }
         else
         {
             v4 = aPrintGameUsage;
-            ;
         }
     }
     else
     {
         v4 = "print \"GAME_CHEATSNOTENABLED\"";
-        ;
     }
     SV_GameSendServerCommand(clientNum, v4);
 }
