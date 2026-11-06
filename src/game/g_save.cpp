@@ -42,6 +42,11 @@ extern int g_switchPlayerInputTraceFrames;
 // SF_ANIMSCRIPT serializes indices across the adjacent human and dog tables.
 // These checks prevent another ABI change from silently invalidating that map.
 static_assert(sizeof(scr_animscript_t) == 8);
+static_assert(sizeof(tagInfo_s) == 2 * sizeof(void *) + 8 + 96);
+static_assert(offsetof(tagInfo_s, name) == 2 * sizeof(void *));
+static_assert(offsetof(tagInfo_s, index) == 2 * sizeof(void *) + 4);
+static_assert(offsetof(tagInfo_s, axis) == 2 * sizeof(void *) + 8);
+static_assert(offsetof(tagInfo_s, parentInvAxis) == 2 * sizeof(void *) + 56);
 static_assert(
     offsetof(scr_data_t, dogAnim) ==
     offsetof(scr_data_t, anim) + sizeof(AnimScriptList));
@@ -877,11 +882,11 @@ void __cdecl WriteField2(const saveField_t *field, unsigned __int8 *base, SaveGa
         v11 = *(const void **)&base[ofs];
         if (!v11)
             return;
-        memcpy(v21, v11, 0x70u);
+        memcpy(v21, v11, sizeof(tagInfo_s));
         v12 = SaveMemory_GetMemoryFile(save);
         v13 = MemFile_GetUsedSize(v12);
         //ProfMem_Begin("tagInfo", v13);
-        G_WriteStruct(tagInfoFields, *(unsigned __int8 **)&base[ofs], v21, 112, save);
+        G_WriteStruct(tagInfoFields, *(unsigned __int8 **)&base[ofs], v21, sizeof(tagInfo_s), save);
         goto LABEL_12;
     case SF_TYPE_SCRIPTED:
         v8 = *(const void **)&base[ofs];
@@ -1063,9 +1068,9 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     case SF_TYPE_TAG_INFO:
         if (ReadSavePointerSlot(v7))
         {
-            v25 = (unsigned __int8 *)MT_Alloc(112, MT_TYPE_TAG_INFO);
+            v25 = (unsigned __int8 *)MT_Alloc(sizeof(tagInfo_s), MT_TYPE_TAG_INFO);
             *(uintptr_t *)v7 = (uintptr_t)v25;
-            G_ReadStruct(tagInfoFields, v25, 112, save);
+            G_ReadStruct(tagInfoFields, v25, sizeof(tagInfo_s), save);
         }
         break;
     case SF_TYPE_SCRIPTED:
