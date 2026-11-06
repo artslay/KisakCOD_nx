@@ -3083,9 +3083,8 @@ void __cdecl ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_main.cpp", 3240, 0, "%s", "weapDef->iClipSize >= 0");
         if (WeaponDef->iClipSize < Int)
             Int = WeaponDef->iClipSize;
-        v8 = (char *)Entity + 12 * v4;
-        *((unsigned int *)v8 + 88) = v3;
-        *((unsigned int *)v8 + 89) = Int;
+        Entity->item[v4].ammoCount = v3;
+        Entity->item[v4].clipAmmoCount = Int;
     }
 }
 
