@@ -15,7 +15,7 @@ int statCount;
 
 void __cdecl TRACK_statmonitor()
 {
-    track_static_alloc_internal(stats, 56, "stats", 10);
+    track_static_alloc_internal(stats, sizeof(stats), "stats", 10);
 }
 
 void __cdecl StatMon_Warning(int type, int duration, const char *materialName)
