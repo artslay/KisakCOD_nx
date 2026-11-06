@@ -608,6 +608,18 @@ int __cdecl ReadVehicleIndex(SaveGame *save)
     return G_GetVehicleInfoIndex(v5);
 }
 
+static uintptr_t ReadSavePointerSlot(const void *slot)
+{
+    uintptr_t value = 0;
+    memcpy(&value, slot, sizeof(value));
+    return value;
+}
+
+static void WriteSavePointerSlot(void *slot, uintptr_t value)
+{
+    memcpy(slot, &value, sizeof(value));
+}
+
 void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, unsigned __int8 *original)
 {
     EntHandle *v3; // r28
@@ -638,7 +650,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v3->number = 1;
         break;
     case SF_ENTITY:
-        if (*(unsigned int *)v3)
+        if (ReadSavePointerSlot(v3))
         {
             v4 = static_cast<unsigned int>(
                 *reinterpret_cast<gentity_s * const *>(v3) - g_entities + 1);
@@ -649,7 +661,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         else
         {
-            *(unsigned int *)v3 = 0;
+            WriteSavePointerSlot(v3, 0);
         }
         break;
     case SF_ENTHANDLE:
@@ -669,7 +681,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         break;
     case SF_CLIENT:
-        if (*reinterpret_cast<gclient_s * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             v7 = static_cast<unsigned int>(
                 *reinterpret_cast<gclient_s * const *>(v3) - level.clients + 1);
@@ -683,7 +695,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         break;
     case SF_ACTOR:
-        if (*reinterpret_cast<actor_s * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             v8 = static_cast<unsigned int>(
                 *reinterpret_cast<actor_s * const *>(v3) - level.actors + 1);
@@ -697,7 +709,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         break;
     case SF_SENTIENT:
-        if (*reinterpret_cast<sentient_s * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             v9 = static_cast<unsigned int>(
                 *reinterpret_cast<sentient_s * const *>(v3) - level.sentients + 1);
@@ -727,7 +739,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         break;
     case SF_VEHICLE:
-        if (*reinterpret_cast<scr_vehicle_s * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             v11 = static_cast<unsigned int>(
                 *reinterpret_cast<scr_vehicle_s * const *>(v3) - level.vehicles + 1);
@@ -741,7 +753,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         }
         break;
     case SF_TURRETINFO:
-        if (*reinterpret_cast<TurretInfo * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             v12 = static_cast<unsigned int>(
                 *reinterpret_cast<TurretInfo * const *>(v3) - level.turrets + 1);
@@ -797,7 +809,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             Path_SaveIndex(*reinterpret_cast<const pathnode_t * const *>(v3)));
         break;
     case SF_ANIMTREE:
-        if (*reinterpret_cast<const XAnimTree_s * const *>(v3))
+        if (ReadSavePointerSlot(v3))
         {
             anims = XAnimGetAnims(*reinterpret_cast<const XAnimTree_s * const *>(v3));
             iassert(anims);
