@@ -197,7 +197,7 @@ float __cdecl AngleDelta(float a1, float a2)
 
 void __cdecl TRACK_com_math()
 {
-    track_static_alloc_internal(bytedirs, 1944, "bytedirs", 10);
+    track_static_alloc_internal(bytedirs, sizeof(bytedirs), "bytedirs", 10);
 }
 
 float __cdecl random()
