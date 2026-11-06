@@ -1534,7 +1534,10 @@ void __cdecl dxPostProcessIslands(PhysWorld worldIndex)
         }
     }
     dJointGroupEmpty(physGlob.contactgroup[worldIndex]);
-    physGlob.space[51 * worldIndex - 149] = 0;
+    // The original 32-bit decomp expression addressed
+    // worldData[worldIndex].numJitterRegions through the old 204-byte stride.
+    // Indexing through space[] scales by native pointer width and corrupts memory on ARM64.
+    physGlob.worldData[worldIndex].numJitterRegions = 0;
     seconds = world->seconds;
     bodyEnableCount = 0;
     for (bodyIter = world->firstbody; bodyIter; bodyIter = (dxBody *)bodyIter->next)
