@@ -96,6 +96,7 @@ fastrope_ai_think(spawner)
 	self.fastrope_pivot = pivot;
 	self linkto(pivot);
 	pivot.ai = self;
+	pivot.ai.fastrope_attached = false;
 	pivot.ai hide();
 	
 	//if there is a custom animation for the entire ride - this ends this thread
@@ -331,6 +332,13 @@ fastrope_waiton_helicopter(pivot)
 	self.heli endon("overtakenow");
 	if(!self.heli.ready)
 		self.heli waittill ("ready");
+
+	// Do not begin the unload path until the independent attach thread has
+	// assigned a real seat, selected its fast-rope anim set, and started the
+	// matching helicopter animation. Otherwise the hidden actor reaches
+	// anim_single_solo("grab") with its original "price"/"alavi" animname.
+	while(!pivot.ai.fastrope_attached)
+		pivot.ai waittill("fastrope_attached");
 }
 
 fastrope_attach_helicopter(pivot)
@@ -389,6 +397,8 @@ fastrope_attach_helicopter(pivot)
 		
 		pivot notify("custom_all");
 		pivot.ai thread fastrope_ai_think_hack( getanimlength(level.scr_anim[pivot.ai.animname]["custom_all" + self.heli.targetname]), .25 );
+		pivot.ai.fastrope_attached = true;
+		pivot.ai notify("fastrope_attached");
 		return;
 	}
 	
@@ -399,10 +409,14 @@ fastrope_attach_helicopter(pivot)
 		pivot linkto(pivot.ai);
 		
 		self.heli.model anim_single_solo(pivot.ai, "custom_ride" + self.heli.targetname, "tag_detach");
+		pivot.ai.fastrope_attached = true;
+		pivot.ai notify("fastrope_attached");
 		if(self.heli.ready)
 			return;
 	}
 	self.heli.model thread anim_loop_solo(pivot.ai, "idle", "tag_detach", ("stop_" + index));
+	pivot.ai.fastrope_attached = true;
+	pivot.ai notify("fastrope_attached");
 }
 
 fastrope_free_seat(pivot)
