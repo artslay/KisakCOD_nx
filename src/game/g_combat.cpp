@@ -62,9 +62,9 @@ unsigned __int16 g_HitLocConstNames[19]{ 0 };
 
 void __cdecl TRACK_g_combat()
 {
-    track_static_alloc_internal(g_fHitLocDamageMult, 76, "g_fHitLocDamageMult", 9);
-    track_static_alloc_internal(g_HitLocNames, 76, "g_HitLocNames", 9);
-    track_static_alloc_internal(g_HitLocConstNames, 38, "g_HitLocConstNames", 9);
+    track_static_alloc_internal(g_fHitLocDamageMult, sizeof(g_fHitLocDamageMult), "g_fHitLocDamageMult", 9);
+    track_static_alloc_internal(g_HitLocNames, sizeof(g_HitLocNames), "g_HitLocNames", 9);
+    track_static_alloc_internal(g_HitLocConstNames, sizeof(g_HitLocConstNames), "g_HitLocConstNames", 9);
 }
 
 void __cdecl G_HitLocStrcpy(unsigned __int8 *pMember, const char *pszKeyValue)
