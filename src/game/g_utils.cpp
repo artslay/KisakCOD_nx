@@ -29,8 +29,8 @@ XModel *cached_models[512]{ NULL };
 
 void __cdecl TRACK_g_utils()
 {
-    track_static_alloc_internal(entityTypeNames, 68, "entityTypeNames", 9);
-    track_static_alloc_internal(cached_models, 2048, "cached_models", 9);
+    track_static_alloc_internal(entityTypeNames, sizeof(entityTypeNames), "entityTypeNames", 9);
+    track_static_alloc_internal(cached_models, sizeof(cached_models), "cached_models", 9);
 }
 
 static bool dumpedOnce = false;
