@@ -228,9 +228,9 @@ void __cdecl Actor_Grenade_GetTossPositions(
 {
     WeaponDef *weapDef; // r28
     double v8; // fp12
-    int v9; // r11
-    int v10; // r10
-    int v11; // r11
+    int v9; // surface type index
+    float parallelBounce;
+    float perpendicularBounce;
     double v12; // fp11
     double v13; // fp0
     // KISAKFIX: v14/v15/v16 vec3 passed as &v14 to G_MissileTrace. Pack into array.
@@ -255,27 +255,29 @@ void __cdecl Actor_Grenade_GetTossPositions(
     else
         v9 = SURF_TYPEINDEX(v18.surfaceFlags);
 
-    v10 = 4 * ((unsigned __int8)v9 + 368);
-    v11 = 4 * ((unsigned __int8)v9 + 397);
+    iassert(v9 >= 0 && v9 < ARRAY_COUNT(weapDef->parallelBounce));
+    parallelBounce = weapDef->parallelBounce[v9];
+    perpendicularBounce = weapDef->perpendicularBounce[v9];
+
+    // The original byte offsets (368 + surfaceType) and (397 + surfaceType)
+    // address these two WeaponDef arrays in the 32-bit layout. Use the members
+    // directly so the calculation follows the native AArch64 WeaponDef layout.
     v12 = (float)((float)(vTargetPos[1] - vFrom[1])
         * (float)((float)1.0
-            - (float)((float)((float)(*(float *)((char *)&weapDef->szInternalName + v11)
-                - *(float *)((char *)&weapDef->szInternalName + v10))
+            - (float)((float)((float)(perpendicularBounce - parallelBounce)
                 * (float)0.93970001)
-                + *(float *)((char *)&weapDef->szInternalName + v10))));
+                + parallelBounce)));
     v13 = (float)((float)(vTargetPos[2] - vFrom[2])
         * (float)((float)1.0
-            - (float)((float)((float)(*(float *)((char *)&weapDef->szInternalName + v11)
-                - *(float *)((char *)&weapDef->szInternalName + v10))
+            - (float)((float)((float)(perpendicularBounce - parallelBounce)
                 * (float)0.93970001)
-                + *(float *)((char *)&weapDef->szInternalName + v10))));
+                + parallelBounce)));
     *vLand = *vFrom
         + (float)((float)(*vTargetPos - *vFrom)
             * (float)((float)1.0
-                - (float)((float)((float)(*(float *)((char *)&weapDef->szInternalName + v11)
-                    - *(float *)((char *)&weapDef->szInternalName + v10))
+                - (float)((float)((float)(perpendicularBounce - parallelBounce)
                     * (float)0.93970001)
-                    + *(float *)((char *)&weapDef->szInternalName + v10))));
+                    + parallelBounce)));
     vLand[1] = vFrom[1] + (float)v12;
     vLand[2] = vFrom[2] + (float)v13;
 }
