@@ -1490,63 +1490,49 @@ gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
     const float *position,
     double radius)
 {
-    int v8; // r27
-    unsigned int v9; // r30
-    const float *i; // r31
-    sentient_s *v11; // r11
-    int v12; // r10
-    __int64 v13; // r10
-    gentity_s *ent; // r11
-    const actor_s *actor; // r3
-    bool v16; // cr58
-
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 3772, 0, "%s", "self");
     if (!position)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 3773, 0, "%s", "position");
     if (radius == 0.0 && !volume)
-        return 0;
-    v8 = 0;
-    v9 = 0;
-    for (i = self->sentientInfo[0].vLastKnownPos; ; i += 10)
+        return nullptr;
+
+    for (int index = 0; index < ARRAY_COUNT(self->sentientInfo); ++index)
     {
-        v11 = &level.sentients[v9];
-        if (!level.sentients[v9].inuse)
-            goto LABEL_21;
-        v12 = *((unsigned int *)i - 2);
-        if (!v12)
-            goto LABEL_21;
-        if (level.time - v12 > 10000)
-            goto LABEL_21;
-        if (v11->eTeam == self->sentient->eTeam)
-            goto LABEL_21;
-        ent = v11->ent;
-        if (ent->health == 0)
-            goto LABEL_21;
-        actor = ent->actor;
-        if (actor)
-        {
-            if (actor->ignoreForFixedNodeSafeCheck || Actor_IsDying(actor))
-                goto LABEL_21;
-        }
+        const sentient_s *candidate = &level.sentients[index];
+        const sentient_info_t *info = &self->sentientInfo[index];
+
+        if (!candidate->inuse)
+            continue;
+        if (!info->lastKnownPosTime || level.time - info->lastKnownPosTime > 10000)
+            continue;
+        if (candidate->eTeam == self->sentient->eTeam)
+            continue;
+
+        const gentity_s *ent = candidate->ent;
+        if (!ent || ent->health == 0)
+            continue;
+
+        const actor_s *actor = ent->actor;
+        if (actor && (actor->ignoreForFixedNodeSafeCheck || Actor_IsDying(actor)))
+            continue;
+
         if (!volume)
-            break;
-        if (self->fixedNodeSafeVolumeRadiusSq >= (double)Vec2DistanceSq(i, volume->r.currentOrigin))
         {
-            v16 = SV_EntityContact(i, i, volume) == 0;
-            goto LABEL_20;
+            if (Actor_PointNearPoint(position, info->vLastKnownPos, radius))
+                return candidate->ent;
+            continue;
         }
-    LABEL_21:
-        ++v9;
-        ++v8;
-        if (v9 >= 33)
-            return 0;
+
+        if (self->fixedNodeSafeVolumeRadiusSq >=
+                static_cast<double>(Vec2DistanceSq(info->vLastKnownPos, volume->r.currentOrigin)) &&
+            SV_EntityContact(info->vLastKnownPos, info->vLastKnownPos, volume))
+        {
+            return candidate->ent;
+        }
     }
-    v16 = !Actor_PointNearPoint(position, i, radius);
-LABEL_20:
-    if (v16)
-        goto LABEL_21;
-    return level.sentients[v8].ent;
+
+    return nullptr;
 }
 
 int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
