@@ -1117,14 +1117,11 @@ float __cdecl Path_GetDebugStringScale(const float *cameraPos, const float *orig
 
 void __cdecl Path_DrawDebugNodeBox(const pathnode_t *node)
 {
-    long double v5; // fp2
-    double v6; // fp31
+    double angleRadians;
+    float sine;
+    float cosine;
     double v7; // fp12
     double v8; // fp13
-    long double v9; // fp2
-    double v10; // fp0
-    double v11; // fp31
-    long double v12; // fp2
     nodeType type; // r11
     float maxs[3]; // [sp+50h] [-70h] BYREF
     float mins[3]; // [sp+60h] [-60h] BYREF
@@ -1144,23 +1141,19 @@ void __cdecl Path_DrawDebugNodeBox(const pathnode_t *node)
     G_DebugBox(node->constant.vOrigin, mins, maxs, node->constant.fAngle, nodeColorTable[node->constant.type], 1, 0);
     if ((node->constant.spawnflags & 0x8000) != 0)
     {
-        v6 = (float)(DEG2RAD( node->constant.fAngle ));
-        *(double *)&v5 = v6;
+        angleRadians = static_cast<float>(DEG2RAD(node->constant.fAngle));
         v7 = (float)((float)(node->constant.vOrigin[2] + maxs[2]) + (float)(node->constant.vOrigin[2] + mins[2]));
         v8 = (float)((float)((float)(node->constant.vOrigin[1] + maxs[1]) + (float)(node->constant.vOrigin[1] + mins[1]))
             * (float)0.5);
         centerPt[0] = (float)((float)(node->constant.vOrigin[0] + maxs[0]) + (float)(node->constant.vOrigin[0] + mins[0])) * (float)0.5;
         centerPt[1] = v8;
         centerPt[2] = (float)v7 * (float)0.5;
-        v9 = sin(v5);
-        v10 = *(double *)&v9;
-        *(double *)&v9 = v6;
-        v11 = (float)v10;
-        v12 = cos(v9);
+        sine = static_cast<float>(sin(angleRadians));
+        cosine = static_cast<float>(cos(angleRadians));
         type = node->constant.type;
         v23[2] = centerPt[2];
-        v23[1] = (float)((float)v11 * maxs[0]) + centerPt[1];
-        v23[0] = (float)((float)*(double *)&v12 * maxs[0]) + centerPt[0];
+        v23[1] = sine * maxs[0] + centerPt[1];
+        v23[0] = cosine * maxs[0] + centerPt[0];
         G_DebugLine(centerPt, v23, nodeColorTable[type], 1);
     }
 }
@@ -3518,7 +3511,6 @@ void __cdecl Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam)
 void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pathnode_t *ent)
 {
     unsigned int Field; // r30
-    long double v6; // fp2
     int v7; // r3
     unsigned int v8; // r3
     const char *v9; // r3
@@ -3536,8 +3528,8 @@ void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pat
             Scr_Error("G_SetPathnodeScriptVariable: vector is an unsupported script variable type for pathnodes");
             goto LABEL_7;
         case 5:
-            v6 = atof(value);
-            Scr_AddFloat((float)*(double *)&v6);
+            const double parsedValue = atof(value);
+            Scr_AddFloat(static_cast<float>(parsedValue));
             goto LABEL_7;
         case 6:
             v7 = atol(value);
