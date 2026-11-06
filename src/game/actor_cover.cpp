@@ -28,9 +28,9 @@ int debugNodeTimestamp;
 
 void __cdecl TRACK_actor_cover()
 {
-    track_static_alloc_internal(debugCoverNodeColors, 0x2000, "debugCoverNodeColors", 5);
-    track_static_alloc_internal(debugCoverNodeMsg, 10752, "debugCoverNodeMsg", 5);
-    track_static_alloc_internal(debugCoverNode, 2048, "debugCoverNode", 5);
+    track_static_alloc_internal(debugCoverNodeColors, sizeof(debugCoverNodeColors), "debugCoverNodeColors", 5);
+    track_static_alloc_internal(debugCoverNodeMsg, sizeof(debugCoverNodeMsg), "debugCoverNodeMsg", 5);
+    track_static_alloc_internal(debugCoverNode, sizeof(debugCoverNode), "debugCoverNode", 5);
 }
 
 void __cdecl DebugDrawNodeSelectionOverlay()
