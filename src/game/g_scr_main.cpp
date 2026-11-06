@@ -3052,7 +3052,6 @@ void __cdecl ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref)
     const char *v5; // r3
     signed int v6; // r3
     WeaponDef *WeaponDef; // r30
-    char *v8; // r11
 
     Entity = GetEntity(entref);
     if (Entity->s.eType != ET_ITEM)
