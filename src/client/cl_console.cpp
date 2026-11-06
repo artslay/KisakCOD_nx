@@ -33,8 +33,7 @@ extern void Switch_LogWrite(const char *msg);
 enum {
     COLOR_FIRST = 48,
     COLOR_LAST = 57,
-    CONTXTCMD_LEN_HUDICON = 7,
-    CONTXTCMD_ARG_HUDICON_MATERIAL = 3,
+    CONTXTCMD_ARG_HUDICON_MATERIAL = CONTXTCMD_HUDICON_HEADER_SIZE,
     CON_MSG_TIME_DRIFT_BUFFER = 1000,
     GAMEMSG_WINDOW_COUNT = 4
 };
@@ -962,17 +961,16 @@ char __cdecl CL_ConsolePrint_AddLine(
                     }
                     goto LABEL_70;
                 }
-                bcassert(con.lineOffset, sizeof(con.textTempLine) - CONTXTCMD_LEN_HUDICON); // 0x1F9
-                // Kisak: I screwed this up, and can't figure it out.
-                // iassert(IsValidMaterialHandle(*reinterpret_cast<Material*>(&text[CONTXTCMD_ARG_HUDICON_MATERIAL]))); // IsValidMaterialHandle( *reinterpret_cast< const MaterialHandle * >( &text[CONTXTCMD_ARG_HUDICON_MATERIAL] )
+                bcassert(
+                    con.lineOffset,
+                    sizeof(con.textTempLine) - (CONTXTCMD_LEN_HUDICON + 1));
                 con.textTempLine[con.lineOffset++] = 94;
-                v9 = &con.textTempLine[con.lineOffset];
-                v10 = text;
-                *(uint32_t *)v9 = *(uint32_t *)text;
-                *((_WORD *)v9 + 2) = *((_WORD *)v10 + 2);
-                v9[6] = v10[6];
-                con.lineOffset += 7;
-                text += 7;
+                memcpy(
+                    &con.textTempLine[con.lineOffset],
+                    text,
+                    CONTXTCMD_LEN_HUDICON);
+                con.lineOffset += CONTXTCMD_LEN_HUDICON;
+                text += CONTXTCMD_LEN_HUDICON;
                 bcassert(con.lineOffset, sizeof(con.textTempLine) + 1); // 0x201
                 atStartOfBrokenLine = 0;
             }
@@ -1556,8 +1554,8 @@ uint32_t __cdecl CL_AddDeathMessageIcon(
 
     iassert(deathMsgLend + sizeof(iconShader) <= deathMsgMaxLen);
 
-    *(uint32_t *)&deathMsg[deathMsgLend] = (uint32_t)iconShader;
-    deathMsgLene = deathMsgLend + 4;
+    memcpy(&deathMsg[deathMsgLend], &iconShader, sizeof(iconShader));
+    deathMsgLene = deathMsgLend + sizeof(iconShader);
 
     iassert(deathMsgLene - deathMsgLen == CONTXTCMD_LEN_HUDICON + 1);
 
@@ -1591,8 +1589,8 @@ uint32_t __cdecl CL_AddDeathMessageIcon(
     deathMsg[deathMsgLen++] = (char)(horzFlipIcon + 1);
     deathMsg[deathMsgLen++] = encodedWidth;
     deathMsg[deathMsgLen++] = encodedHeight;
-    *(uint32_t*)&deathMsg[deathMsgLen] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(iconShader));
-    deathMsgLen += 4;
+    memcpy(&deathMsg[deathMsgLen], &iconShader, sizeof(iconShader));
+    deathMsgLen += sizeof(iconShader);
 
     iassert(deathMsgLen - startLen == CONTXTCMD_LEN_HUDICON + 1);
 
