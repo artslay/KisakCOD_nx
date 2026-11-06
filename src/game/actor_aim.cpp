@@ -42,7 +42,7 @@ int g_accuGraphTime[2][128]; // [bufferIndex][weapIndex] (dword_82C31FB0)
 
 void __cdecl TRACK_actor_aim()
 {
-    track_static_alloc_internal(g_accuracyGraphs, 4096, "g_accuracyGraphs", 0);
+    track_static_alloc_internal(g_accuracyGraphs, sizeof(g_accuracyGraphs), "g_accuracyGraphs", 0);
     track_static_alloc_internal(g_accuGraphBuf, 0x10000, "g_accuGraphBuf", 0);
 }
 
@@ -1298,25 +1298,18 @@ void __cdecl Actor_InitWeaponAccuracyGraphForWeapon(unsigned int weaponIndex)
 
 void __cdecl Actor_ShutdownWeaponAccuracyGraph()
 {
-    unsigned int v0; // r30
-    const char ***p_data; // r29
-    const char **v2; // r31
-    char v3[320]; // [sp+50h] [-140h] BYREF
+    char menuName[320];
 
-    v0 = 0;
-    if (g_numAccuracyGraphs)
+    for (int i = 0; i < g_numAccuracyGraphs; ++i)
     {
-        p_data = (const char ***)&g_accuracyGraphs[0].data;
-        do
-        {
-            v2 = *p_data;
-            snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. AI Accuracy/%s", **p_data);
-            DevGui_RemoveMenu(v3);
-            snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. Player Accuracy/%s", *v2);
-            DevGui_RemoveMenu(v3);
-            ++v0;
-            p_data += 8;
-        } while (v0 < g_numAccuracyGraphs);
+        const auto *weaponDef = static_cast<const WeaponDef *>(g_accuracyGraphs[i].data);
+        if (!weaponDef || !weaponDef->szInternalName)
+            continue;
+
+        snprintf(menuName, ARRAYSIZE(menuName), "AI/AI Vs. AI Accuracy/%s", weaponDef->szInternalName);
+        DevGui_RemoveMenu(menuName);
+        snprintf(menuName, ARRAYSIZE(menuName), "AI/AI Vs. Player Accuracy/%s", weaponDef->szInternalName);
+        DevGui_RemoveMenu(menuName);
     }
     g_numAccuracyGraphs = 0;
 }
