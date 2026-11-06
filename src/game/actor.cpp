@@ -232,19 +232,8 @@ void __cdecl VisCache_Update(vis_cache_t *pCache, bool bVisible)
 
 void __cdecl SentientInfo_Clear(sentient_info_t *pInfo)
 {
-    sentient_info_t *v2; // r11
-    int v3; // ctr
-
     iassert(pInfo);
-
-    v2 = pInfo;
-    v3 = 10;
-    do
-    {
-        *(unsigned int *)&v2->VisCache.bVisible = 0;
-        v2 = (sentient_info_t *)((char *)v2 + 4);
-        --v3;
-    } while (v3);
+    memset(pInfo, 0, sizeof(*pInfo));
 }
 
 void __cdecl SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom)
@@ -4933,14 +4922,7 @@ int __cdecl SP_actor(gentity_s *ent)
         Actor_SetGoalRadius(&v3->scriptGoal, 0.0);
         Actor_SetGoalHeight(&v3->scriptGoal, 0.0);
         p_codeGoal = &v3->codeGoal;
-        v14 = 7;
-        do
-        {
-            p_codeGoal->pos[0] = p_scriptGoal->pos[0];
-            p_scriptGoal = (actor_goal_s *)((char *)p_scriptGoal + 4);
-            p_codeGoal = (actor_goal_s *)((char *)p_codeGoal + 4);
-            --v14;
-        } while (v14);
+        *p_codeGoal = *p_scriptGoal;
         v3->keepClaimedNode = 0;
         v3->keepClaimedNodeInGoal = 0;
         v3->noDodgeMove = 0;
