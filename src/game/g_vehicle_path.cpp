@@ -1263,7 +1263,7 @@ void G_VehSetSwitchNode(vehicle_pathpos_t *vpp, int16_t srcNodeIdx, int16_t dstN
 
 void __cdecl TRACK_g_vehicle_path()
 {
-    track_static_alloc_internal(s_nodes, 272000, "s_nodes", 9);
+    track_static_alloc_internal(s_nodes, sizeof(s_nodes), "s_nodes", 9);
 }
 
 static void VP_ZeroNode(vehicle_node_t *node)
