@@ -1933,16 +1933,19 @@ int __cdecl G_SaveFreeEntities(unsigned __int8 *buf)
 
     if (buf)
     {
-        *reinterpret_cast<unsigned int *>(buf) = encodeEntity(level.firstFreeEnt);
-        *reinterpret_cast<unsigned int *>(buf + 4) = encodeEntity(level.lastFreeEnt);
+        const unsigned int firstEncoded = encodeEntity(level.firstFreeEnt);
+        const unsigned int lastEncoded = encodeEntity(level.lastFreeEnt);
+        memcpy(buf, &firstEncoded, sizeof(firstEncoded));
+        memcpy(buf + 4, &lastEncoded, sizeof(lastEncoded));
     }
 
     while (firstFreeEnt)
     {
         if (buf)
         {
-            *reinterpret_cast<unsigned int *>(v4) = encodeEntity(firstFreeEnt->nextFree);
-            v4 += 4;
+            const unsigned int nextEncoded = encodeEntity(firstFreeEnt->nextFree);
+            memcpy(v4, &nextEncoded, sizeof(nextEncoded));
+            v4 += sizeof(nextEncoded);
         }
 
         firstFreeEnt = firstFreeEnt->nextFree;
@@ -1999,8 +2002,10 @@ void __cdecl G_LoadFreeEntities(unsigned __int8 *buf)
     if (!buf)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 2608, 0, "%s", "buf");
 
-    const unsigned int firstEncoded = *reinterpret_cast<unsigned int *>(buf);
-    const unsigned int lastEncoded = *reinterpret_cast<unsigned int *>(buf + 4);
+    unsigned int firstEncoded = 0;
+    unsigned int lastEncoded = 0;
+    memcpy(&firstEncoded, buf, sizeof(firstEncoded));
+    memcpy(&lastEncoded, buf + 4, sizeof(lastEncoded));
     level.firstFreeEnt = decodeEntity(firstEncoded);
     level.lastFreeEnt = decodeEntity(lastEncoded);
 
@@ -2008,9 +2013,10 @@ void __cdecl G_LoadFreeEntities(unsigned __int8 *buf)
     unsigned __int8 *v4 = buf + 8;
     while (ent)
     {
-        const unsigned int nextEncoded = *reinterpret_cast<unsigned int *>(v4);
+        unsigned int nextEncoded = 0;
+        memcpy(&nextEncoded, v4, sizeof(nextEncoded));
         ent->nextFree = decodeEntity(nextEncoded);
-        v4 += 4;
+        v4 += sizeof(nextEncoded);
         ent = ent->nextFree;
     }
 #else
