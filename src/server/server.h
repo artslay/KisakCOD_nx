@@ -410,6 +410,13 @@ struct serverStatic_t
     int playerDeaths;
     int playerScore;
 };
+#ifdef __SWITCH__
+static_assert(offsetof(serverStatic_t, clients) == 8);
+static_assert(offsetof(serverStatic_t, numSnapshotEntities) == 16);
+static_assert(offsetof(serverStatic_t, authorizeAddress) == 24);
+static_assert(sizeof(serverStatic_t) == 48,
+    "Switch serverStatic_t must include the native clients pointer and tail padding");
+#endif
 
 struct __declspec(align(4)) PendingSaveList
 {
