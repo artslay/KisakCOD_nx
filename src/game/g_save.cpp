@@ -1048,20 +1048,20 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         *(uintptr_t *)v7 = (uintptr_t)Path_LoadNode(*(unsigned int*)v7);
         break;
     case SF_ANIMTREE:
-        if (*(unsigned int*)v7)
+        if (ReadSavePointerSlot(v7))
         {
-            anims = Scr_GetAnims((unsigned int)*(unsigned int*)v7);
+            anims = Scr_GetAnims(static_cast<unsigned int>(ReadSavePointerSlot(v7)));
             iassert(anims);
             *(uintptr_t *)v7 = (uintptr_t)Com_XAnimCreateSmallTree(anims);
         }
         else
         {
         LABEL_58:
-            *(unsigned int*)v7 = 0;
+            WriteSavePointerSlot(v7, 0);
         }
         break;
     case SF_TYPE_TAG_INFO:
-        if (*(unsigned int *)v7)
+        if (ReadSavePointerSlot(v7))
         {
             v25 = (unsigned __int8 *)MT_Alloc(112, MT_TYPE_TAG_INFO);
             *(uintptr_t *)v7 = (uintptr_t)v25;
@@ -1069,7 +1069,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         }
         break;
     case SF_TYPE_SCRIPTED:
-        if (*(unsigned int *)v7)
+        if (ReadSavePointerSlot(v7))
         {
             v26 = (unsigned __int8 *)MT_Alloc(96, MT_TYPE_TAG_INFO);
             *(uintptr_t *)v7 = (uintptr_t)v26;
