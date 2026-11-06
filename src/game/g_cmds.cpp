@@ -235,8 +235,6 @@ void __cdecl Cmd_Give_f(gentity_s *ent)
     OffhandClass offhandClass; // r11
     int inuse; // r11
 
-    clientNum = static_cast<int>(ent - g_entities);
-
     if (level.demoplaying)
     {
         v3 = SV_DemoCheatsOk();
@@ -740,6 +738,8 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
     float v9[4]; // [sp+50h] [-430h] BYREF
     char v10[1032]; // [sp+60h] [-420h] BYREF
 
+    clientNum = static_cast<int>(ent - g_entities);
+
     if (level.demoplaying)
     {
         v3 = SV_DemoCheatsOk();
@@ -767,20 +767,18 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
             }
             v8 = Path_NodeCount();
             v4 = va(aPrint, v8);
-            // Use the real entity-array index; the old reciprocal multiply
-            // encoded the 32-bit sizeof(gentity_s) == 628 layout.
-            clientNum = static_cast<int>(ent - g_entities);
+            ;
         }
         else
         {
             v4 = aPrintGameUsage;
-            v5 = (unsigned __int64)(875407347LL * ((char *)ent - (char *)g_entities)) >> 32;
+            ;
         }
     }
     else
     {
         v4 = "print \"GAME_CHEATSNOTENABLED\"";
-        v5 = (unsigned __int64)(875407347LL * ((char *)ent - (char *)g_entities)) >> 32;
+        ;
     }
     SV_GameSendServerCommand(clientNum, v4);
 }
