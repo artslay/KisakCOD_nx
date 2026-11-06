@@ -129,6 +129,10 @@ struct vehicle_info_t // sizeof=0x274
     float engineSndSpeed;
 };
 
+#ifdef KISAK_SP
+static_assert(sizeof(vehicle_info_t) == 0x274,
+    "SP vehicle_info_t disk/runtime stride changed");
+#endif
 
 struct client_fields_s // sizeof=0x14
 {                                       // ...
