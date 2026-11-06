@@ -269,14 +269,10 @@ void __cdecl SV_Shutdown(const char *finalmsg)
         SaveMemory_CleanupSaveMemory();
         SaveMemory_ShutdownSaveSystem();
         SV_ClearServer();
-        v1 = &svs;
-        v2 = 10;
-        do
-        {
-            v1->initialized = 0;
-            v1 = (serverStatic_t *)((char *)v1 + 4);
-            --v2;
-        } while (v2);
+        // The original ten 32-bit stores cleared the complete 32-bit
+        // serverStatic_t. On Switch the clients pointer is 64-bit, so clear
+        // the complete native structure instead of stopping at 40 bytes.
+        memset(&svs, 0, sizeof(svs));
         Dvar_SetBool(com_sv_running, 0);
         Dvar_SetFloat(com_timescale, 1.0);
         Com_Printf(CON_CHANNEL_SERVER, "---------------------------\n");
