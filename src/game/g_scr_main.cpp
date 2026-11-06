@@ -4110,6 +4110,21 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                     }
                 }
             }
+            const actor_s *scriptActor = ent->actor;
+            const unsigned int actorStateLevel =
+                scriptActor ? scriptActor->stateLevel : 0u;
+            const int actorState = scriptActor &&
+                actorStateLevel < ARRAY_COUNT(scriptActor->eState)
+                ? static_cast<int>(scriptActor->eState[actorStateLevel]) : -1;
+            const int actorSubState = scriptActor &&
+                actorStateLevel < ARRAY_COUNT(scriptActor->eSubState)
+                ? static_cast<int>(scriptActor->eSubState[actorStateLevel]) : -1;
+            const unsigned int actorScriptedState =
+                scriptActor && Actor_InScriptedState(scriptActor) ? 1u : 0u;
+            const unsigned int actorAllowDeath =
+                scriptActor && scriptActor->allowDeath ? 1u : 0u;
+            const unsigned int actorDelayedDeath =
+                scriptActor && scriptActor->delayedDeath ? 1u : 0u;
             const char *targetClass = ent->classname
                 ? SL_ConvertToStringSafe(ent->classname) : "<none>";
             const char *targetName = ent->targetname
@@ -4125,9 +4140,11 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
 
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d function=[%s] sourceLine=[%s] codePos=%p\n",
+                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d actorStateLevel=%u actorState=%d actorSubState=%d scriptedState=%u allowDeath=%u delayedDeath=%u amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d function=[%s] sourceLine=[%s] codePos=%p\n",
                 switchAiScriptDamageTraceCount++,
                 ent->s.number, targetName, targetClass, ent->health, ent->maxHealth,
+                actorStateLevel, actorState, actorSubState, actorScriptedState,
+                actorAllowDeath, actorDelayedDeath,
                 damage, source[0], source[1], source[2],
                 attacker ? attacker->s.number : -1, attackerName, attackerClass,
                 inflictor ? inflictor->s.number : -1, inflictorName, inflictorClass,
