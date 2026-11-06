@@ -800,15 +800,15 @@ void G_RegisterDebugDvars()
 
 void __cdecl TRACK_g_main()
 {
-    track_static_alloc_internal(&level, 15892, "level", 9);
-    track_static_alloc_internal(g_entities, 1366528, "g_entities", 9);
-    track_static_alloc_internal(g_clients, 46104, "g_clients", 9);
-    track_static_alloc_internal(g_sentients, 3828, "g_sentients", 5);
-    track_static_alloc_internal(entityHandlers, 1188, "entityHandlers", 9);
-    track_static_alloc_internal(g_entinfoNames, 28, "g_entinfoNames", 0);
-    track_static_alloc_internal(g_entinfoTypeNames, 16, "g_entinfoTypeNames", 0);
-    track_static_alloc_internal(g_helicopterYawAltitudeControlsNames, 16, "g_helicopterYawAltitudeControlsNames", 0);
-    track_static_alloc_internal(g_actors, 250368, "g_actors", 5);
+    track_static_alloc_internal(&level, sizeof(level), "level", 9);
+    track_static_alloc_internal(g_entities, sizeof(g_entities), "g_entities", 9);
+    track_static_alloc_internal(g_clients, sizeof(g_clients), "g_clients", 9);
+    track_static_alloc_internal(g_sentients, sizeof(g_sentients), "g_sentients", 5);
+    track_static_alloc_internal(entityHandlers, sizeof(entityHandlers), "entityHandlers", 9);
+    track_static_alloc_internal(g_entinfoNames, sizeof(g_entinfoNames), "g_entinfoNames", 0);
+    track_static_alloc_internal(g_entinfoTypeNames, sizeof(g_entinfoTypeNames), "g_entinfoTypeNames", 0);
+    track_static_alloc_internal(g_helicopterYawAltitudeControlsNames, sizeof(g_helicopterYawAltitudeControlsNames), "g_helicopterYawAltitudeControlsNames", 0);
+    track_static_alloc_internal(g_actors, sizeof(g_actors), "g_actors", 5);
 }
 
 int __cdecl G_GetServerSnapTime()
