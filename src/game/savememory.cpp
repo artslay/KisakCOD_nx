@@ -504,7 +504,7 @@ void *__cdecl SaveMemory_ReadLoadFromDevice(
         CloseDevice(fileHandle);
         G_SaveError(ERR_DROP, SAVE_ERROR_CORRUPT_SAVE,
             "Savegame '%s' has bad version %d (expected %d, build %s)",
-            header.filename, header.saveVersion, 288, header.buildNumber);
+            header.filename, header.saveVersion, 289, header.buildNumber);
         return 0;
     }
     if ((unsigned int)header.bodySize > 1572864u)
