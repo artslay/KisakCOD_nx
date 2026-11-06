@@ -74,14 +74,9 @@ static void Switch_LogBridgeHeroAnim(
             Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
     }
 
-    const bool isBridgeHero =
-        targetName &&
-        (!I_stricmp(targetName, "price") || !I_stricmp(targetName, "alavi"));
-    const bool isCargoShipScript =
-        scriptFile && std::strstr(scriptFile, "cargoship") != nullptr;
-    // Keep Price/Alavi regardless of caller, and include actor animation calls
-    // originating in the Cargo Ship script even if targetname is not populated.
-    if (!isBridgeHero && !(actor && isCargoShipScript))
+    // Capture the actor scripted-animation lifecycle during the bridge sequence.
+    // The called helper can live outside cargoship.gsc and hero targetnames may be unset.
+    if (!actor || level.time < 9000 || level.time > 18000)
         return;
 
     const unsigned int stateLevel = actor ? actor->stateLevel : 0u;

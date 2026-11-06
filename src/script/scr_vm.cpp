@@ -1302,6 +1302,76 @@ void __cdecl VM_Notify(uint32_t notifyListOwnerId, uint32_t stringValue, Variabl
                     switchCodePos, &switchScriptFile, &switchScriptLine);
         }
 
+        // Dump only the source neighborhood of the first bridge_react sender.
+        // This identifies the script gate which currently releases the enemies.
+        static bool switchBridgeReactContextLogged = false;
+        if (!switchBridgeReactContextLogged && switchCodePos &&
+            Scr_IsInOpcodeMemory(switchCodePos))
+        {
+            OpcodeLookup *sourceLookup =
+                Scr_GetPrevSourcePosOpcodeLookup(switchCodePos);
+            if (sourceLookup &&
+                sourceLookup->sourcePosIndex < scrParserGlob.sourcePosLookupLen &&
+                sourceLookup->sourcePosCount &&
+                sourceLookup->sourcePosCount <=
+                    scrParserGlob.sourcePosLookupLen - sourceLookup->sourcePosIndex)
+            {
+                const uint32_t sourceBufferIndex = Scr_GetSourceBuffer(switchCodePos);
+                const uint32_t sourcePosition =
+                    scrParserGlob.sourcePosLookup[sourceLookup->sourcePosIndex].sourcePos;
+                if (sourceBufferIndex < scrParserPub.sourceBufferLookupLen)
+                {
+                    const SourceBufferInfo *sourceBuffer =
+                        &scrParserPub.sourceBufferLookup[sourceBufferIndex];
+                    if (sourceBuffer->sourceBuf && sourceBuffer->len >= 0 &&
+                        sourcePosition <= static_cast<uint32_t>(sourceBuffer->len))
+                    {
+                        switchBridgeReactContextLogged = true;
+                        const uint32_t currentLine =
+                            Scr_GetLineNum(sourceBufferIndex, sourcePosition);
+                        const uint32_t firstLine =
+                            currentLine > 12u ? currentLine - 12u : 0u;
+                        const uint32_t lastLine = currentLine + 12u;
+                        uint32_t lineNumber = 0;
+                        const char *lineStart = sourceBuffer->sourceBuf;
+                        const char *sourceEnd =
+                            sourceBuffer->sourceBuf + sourceBuffer->len;
+                        for (const char *p = sourceBuffer->sourceBuf;
+                             p <= sourceEnd && lineNumber <= lastLine; ++p)
+                        {
+                            if (p == sourceEnd || *p == '\0')
+                            {
+                                if (lineNumber >= firstLine && lineNumber <= lastLine)
+                                {
+                                    char contextLine[256] = {};
+                                    size_t lineLength =
+                                        static_cast<size_t>(p - lineStart);
+                                    if (lineLength >= sizeof(contextLine))
+                                        lineLength = sizeof(contextLine) - 1;
+                                    std::memcpy(contextLine, lineStart, lineLength);
+                                    for (char *ch = contextLine; *ch; ++ch)
+                                    {
+                                        if (*ch == '\r' || *ch == '\n' || *ch == '\t')
+                                            *ch = ' ';
+                                    }
+                                    char contextTrace[320];
+                                    std::snprintf(
+                                        contextTrace,
+                                        sizeof(contextTrace),
+                                        "[KisakCOD][AI SCRIPT CONTEXT] bridge_react line=%u text=[%s]\n",
+                                        lineNumber + 1u,
+                                        contextLine);
+                                    Switch_LogWrite(contextTrace);
+                                }
+                                ++lineNumber;
+                                lineStart = p + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         char switchNotifyTrace[768];
         std::snprintf(
             switchNotifyTrace,
