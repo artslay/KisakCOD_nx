@@ -5350,36 +5350,16 @@ const BuiltinMethodDef s_methods[50] =
 
 void(* ScriptVehicle_GetMethod(const char **pName))(scr_entref_t)
 {
-    int v1; // r6
-    uint32_t v2; // r5
-    const BuiltinMethodDef *i; // r7
-    const char *actionString; // r10
-    const char *v5; // r11
-    int v6; // r8
-
-    v1 = 0;
-    v2 = 0;
-    for (i = s_methods; ; ++i)
+    for (int i = 0; i < ARRAY_COUNT(s_methods); ++i)
     {
-        actionString = i->actionString;
-        v5 = *pName;
-        do
+        const char *actionString = s_methods[i].actionString;
+        if (actionString && !strcmp(*pName, actionString))
         {
-            v6 = (uint8_t)*v5 - *(uint8_t *)actionString;
-            if (!*v5)
-                break;
-            ++v5;
-            ++actionString;
-        } while (!v6);
-        if (!v6)
-            break;
-        v2 += 12;
-        ++v1;
-        if (v2 >= 0x258)
-            return 0;
+            *pName = s_methods[i].actionString;
+            return s_methods[i].actionFunc;
+        }
     }
-    *pName = s_methods[v1].actionString;
-    return s_methods[v1].actionFunc;
+    return nullptr;
 }
 
 // IDA gates each 2-byte save/load on `if (*v4)` — only persist sndIndices that
