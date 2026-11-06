@@ -49,8 +49,8 @@ TestEffect s_testEffect[1];
 
 void __cdecl TRACK_cg_view()
 {
-    track_static_alloc_internal(clientViewParamsArray, 16, "clientViewParamsArray", 10);
-    track_static_alloc_internal(s_testEffect, 84, "s_testEffect", 9);
+    track_static_alloc_internal(clientViewParamsArray, sizeof(clientViewParamsArray), "clientViewParamsArray", 10);
+    track_static_alloc_internal(s_testEffect, sizeof(s_testEffect), "s_testEffect", 9);
 }
 
 void __cdecl CG_PlayTestFx(int localClientNum)
