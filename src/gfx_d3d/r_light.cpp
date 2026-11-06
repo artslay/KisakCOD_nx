@@ -290,7 +290,15 @@ void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBs
     maxs[1] = light->origin[1] + light->radius;
     maxs[2] = light->origin[2] + light->radius;
     drawSurfs = scene.visLight[lightIndex].drawSurfs;
+#if defined(_WIN64) || defined(__SWITCH__)
+    // GfxDrawSurf is 8 bytes, while the original 32-bit scratch overlay
+    // held twice as many GfxSurface pointers. Keep the full 0x400 capacity
+    // when pointers are 64-bit instead of writing past the drawSurf buffer.
+    GfxSurface *surfaceScratch[0x400];
+    surfaces[0] = surfaceScratch;
+#else
     surfaces[0] = (GfxSurface **)&drawSurfs[512];
+#endif
     bspLightCallback.surfaceVisData = surfaceVisData;
     bspLightCallback.position[0] = light->origin[0];
     bspLightCallback.position[1] = light->origin[1];
@@ -383,9 +391,17 @@ void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBs
     maxs[2] = light->origin[2] + light->radius;
 
     drawSurfs[0] = scene.visLight[lightIndex].drawSurfs;
-    surfaces[0] = (GfxSurface **)&drawSurfs[0][512];
     drawSurfs[1] = scene.visLightShadow[lightIndex].drawSurfs;
+#if defined(_WIN64) || defined(__SWITCH__)
+    // Each scratch list can contain 0x400 pointers. A 64-bit pointer is
+    // twice the size of the legacy 32-bit pointer stored in the overlay.
+    GfxSurface *surfaceScratch[2][0x400];
+    surfaces[0] = surfaceScratch[0];
+    surfaces[1] = surfaceScratch[1];
+#else
+    surfaces[0] = (GfxSurface **)&drawSurfs[0][512];
     surfaces[1] = (GfxSurface **)&drawSurfs[1][512];
+#endif
     bspLightCallback.surfaceVisData = surfaceVisData;
     R_CalcSpotLightPlanes(light, bspLightCallback.planes);
     R_BoxSurfaces(mins, maxs, allowSurf_1, &bspLightCallback, surfaces, 0x400u, surfCounts, 2u);
