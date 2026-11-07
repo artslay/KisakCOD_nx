@@ -6186,32 +6186,49 @@ HRESULT KisakVkTexture::LockBox(
     // A volume LockBox is a CPU read/write view. Preserve the last CPU copy
     // across locks so partial updates do not download the whole image every
     // frame. Re-read only after an external GPU upload invalidates this cache.
-    const bool canReuseVolumeShadow =
-        volumeShadowValid && volumeShadowLevel == level;
+    // Only the $model_lighting atlas is CPU-patched incrementally every
+    // frame. Other volume textures may be modified by GPU copy/render paths,
+    // so keep their D3D9 LockBox readback semantics unchanged.
+    const bool keepVolumeShadow =
+        std::strcmp(debugName, "$model_lighting") == 0;
+    if (!keepVolumeShadow)
+    {
+        volumeShadowValid = false;
+        volumeShadowLevel = 0xffffffffu;
+    }
+
+    const bool canReuseVolumeShadow = keepVolumeShadow &&
+        volumeShadowValid.load(std::memory_order_acquire) &&
+        volumeShadowLevel.load(std::memory_order_relaxed) == level;
     if (flags & D3DLOCK_DISCARD)
     {
         std::fill(lockShadow.begin(), lockShadow.end(), 0);
-        volumeShadowValid = true;
-        volumeShadowLevel = level;
+        if (keepVolumeShadow)
+        {
+            volumeShadowValid.store(true, std::memory_order_release);
+            volumeShadowLevel.store(level, std::memory_order_relaxed);
+        }
     }
     else if (old == VK_IMAGE_LAYOUT_UNDEFINED)
     {
         std::fill(lockShadow.begin(), lockShadow.end(), 0);
-        volumeShadowValid = true;
-        volumeShadowLevel = level;
+        if (keepVolumeShadow)
+        {
+            volumeShadowValid.store(true, std::memory_order_release);
+            volumeShadowLevel.store(level, std::memory_order_relaxed);
+        }
     }
     else if (!canReuseVolumeShadow)
     {
         if (!backend->DownloadImage3D(
                 image, w, h, d, level, lockShadow.data(), lockShadow.size(),
                 old, true, VulkanBackend::FrameSyncReason::TextureLockBox))
-        {
-            volumeShadowValid = false;
-            volumeShadowLevel = 0xffffffffu;
             return E_FAIL;
+        if (keepVolumeShadow)
+        {
+            volumeShadowValid.store(true, std::memory_order_release);
+            volumeShadowLevel.store(level, std::memory_order_relaxed);
         }
-        volumeShadowValid = true;
-        volumeShadowLevel = level;
     }
 
     const uint32_t pitch=TexturePitch(sourceFormat,w);
