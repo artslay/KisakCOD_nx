@@ -823,7 +823,8 @@ void __cdecl Sentient_UpdatePlayerTrail(gentity_s *ent)
     float v8[12]; // [sp+50h] [-30h] BYREF
 
 #ifdef __SWITCH__
-    if (!Switch_SentientEntityPointerValid(ent) || !ent->sentient || !ent->client)
+    if (!Switch_SentientEntityPointerValid(ent) || !ent->sentient || !ent->client
+        || !Switch_SentientLinksValid(ent->sentient))
     {
         Com_Error(ERR_DROP, "Sentient_UpdatePlayerTrail: invalid player entity or sentient");
         return;
@@ -891,7 +892,7 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
     float *v8; // r11
 
 #ifdef __SWITCH__
-    if (!self || !Switch_SentientEntityPointerValid(self->ent) || !pos || !time)
+    if (!Switch_SentientLinksValid(self) || !pos || !time)
     {
         Com_Error(ERR_DROP, "Sentient_GetTrailPos: invalid sentient, entity, or output pointer");
         return;
