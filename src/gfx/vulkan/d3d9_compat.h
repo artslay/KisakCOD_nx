@@ -294,8 +294,8 @@ struct KisakVkTexture : IDirect3DResource9 {
     // Keep the last CPU copy of a locked volume mip between LockBox calls.
     // Model-lighting patches update small regions every frame; re-reading the
     // full volume from Vulkan on every lock needlessly stalls the renderer.
-    bool volumeShadowValid = false;
-    uint32_t volumeShadowLevel = 0xffffffffu;
+    std::atomic<bool> volumeShadowValid{false};
+    std::atomic<uint32_t> volumeShadowLevel{0xffffffffu};
     bool lockShadowActive=false;
     bool lockIsVolume=false;
     bool lockWasUndefined=false;
