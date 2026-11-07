@@ -3800,7 +3800,7 @@ bool VulkanBackend::UploadImage2D(
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             finalStage,
             0,0,nullptr,0,nullptr,1,&toShader);
-    });
+    }, ImmediateSubmitReason::ImageUpload2D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/image2d_submit_return";
@@ -3976,7 +3976,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             finalStages,
             0, 0, nullptr, 0, nullptr,
             count, toFinal.data());
-    });
+    }, ImmediateSubmitReason::ImageUploadBatch2D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/images2d_submit_return";
@@ -4023,7 +4023,7 @@ bool VulkanBackend::DownloadImage2D(
                                staging, 1, &copy);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         aspect, range, command);
-    });
+    }, ImmediateSubmitReason::ImageDownload2D);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/download2d_submit_return";
 #endif
@@ -4136,7 +4136,7 @@ bool VulkanBackend::UploadImage3D(
             command, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0,0,nullptr,0,nullptr,1,&barrier);
-    });
+    }, ImmediateSubmitReason::ImageUpload3D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/image3d_submit_return";
@@ -4182,7 +4182,7 @@ bool VulkanBackend::DownloadImage3D(
                                staging, 1, &copy);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         VK_IMAGE_ASPECT_COLOR_BIT, range, command);
-    });
+    }, ImmediateSubmitReason::ImageDownload3D);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/download3d_submit_return";
 #endif
