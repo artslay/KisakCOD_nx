@@ -664,6 +664,20 @@ struct GfxLightGrid // sizeof=0x38
     uint32_t colorCount;            // ...
     GfxLightGridColors* colors;         // ...
 };
+#ifdef __SWITCH__
+static_assert(offsetof(GfxLightGrid, mins) == 8);
+static_assert(offsetof(GfxLightGrid, maxs) == 14);
+static_assert(offsetof(GfxLightGrid, rowAxis) == 20);
+static_assert(offsetof(GfxLightGrid, colAxis) == 24);
+static_assert(offsetof(GfxLightGrid, rowDataStart) == 32);
+static_assert(offsetof(GfxLightGrid, rawRowDataSize) == 40);
+static_assert(offsetof(GfxLightGrid, rawRowData) == 48);
+static_assert(offsetof(GfxLightGrid, entryCount) == 56);
+static_assert(offsetof(GfxLightGrid, entries) == 64);
+static_assert(offsetof(GfxLightGrid, colorCount) == 72);
+static_assert(offsetof(GfxLightGrid, colors) == 80);
+static_assert(sizeof(GfxLightGrid) == 88);
+#endif
 
 struct GfxBrushModelWritable // sizeof=0x18
 {                                       // ...
