@@ -327,6 +327,19 @@ int __cdecl G_PruneCorpsesSortCmp(int *a, int *b)
     gentity_s *v9; // r10
     double v10; // fp0
 
+#ifdef __SWITCH__
+    if (!a || !b || *a < 0 || *a >= ARRAY_COUNT(g_scr_data.actorCorpseInfo)
+        || *b < 0 || *b >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    {
+        Com_Error(ERR_DROP, "G_PruneCorpsesSortCmp: corpse table index out of range");
+        return 0;
+    }
+    const int entnumA = g_scr_data.actorCorpseInfo[*a].entnum;
+    const int entnumB = g_scr_data.actorCorpseInfo[*b].entnum;
+    if (!Switch_ValidateCorpseEntityNumber(entnumA, "G_PruneCorpsesSortCmp")
+        || !Switch_ValidateCorpseEntityNumber(entnumB, "G_PruneCorpsesSortCmp"))
+        return 0;
+#endif
     v2 = *b;
     v3 = *a;
     num_entities = level.num_entities;
@@ -381,16 +394,34 @@ void __cdecl G_PruneLoadedCorpses()
     // contains a native pointer and is larger on AArch64.
     for (int corpseIndex = 0; corpseIndex < ARRAY_COUNT(g_scr_data.actorCorpseInfo); ++corpseIndex)
     {
-        if (g_scr_data.actorCorpseInfo[corpseIndex].entnum >= 0)
+        const int entnum = g_scr_data.actorCorpseInfo[corpseIndex].entnum;
+#ifdef __SWITCH__
+        if (entnum != -1)
+        {
+            if (!Switch_ValidateCorpseEntityNumber(entnum, "G_PruneLoadedCorpses"))
+                return;
             corpseIndices[corpseCount++] = corpseIndex;
+        }
+#else
+        if (entnum >= 0)
+            corpseIndices[corpseCount++] = corpseIndex;
+#endif
     }
 
     if (corpseCount <= 6)
         return;
 
     gentity_s *ent = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
+#ifdef __SWITCH__
+    if (!ent || !ent->sentient)
+    {
+        Com_Error(ERR_DROP, "G_PruneLoadedCorpses: player entity or sentient is missing");
+        return;
+    }
+#else
     iassert(ent);
     iassert(ent->sentient);
+#endif
     Sentient_GetEyePosition(ent->sentient, playerEyePos);
 
     qsort(
@@ -403,6 +434,10 @@ void __cdecl G_PruneLoadedCorpses()
     {
         const int corpseIndex = corpseIndices[i];
         const unsigned int entnum = static_cast<unsigned int>(g_scr_data.actorCorpseInfo[corpseIndex].entnum);
+#ifdef __SWITCH__
+        if (!Switch_ValidateCorpseEntityNumber(static_cast<int>(entnum), "G_PruneLoadedCorpses"))
+            return;
+#else
         if (entnum >= static_cast<unsigned int>(level.num_entities))
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
@@ -411,7 +446,7 @@ void __cdecl G_PruneLoadedCorpses()
                 "g_scr_data.actorCorpseInfo[corpseIdx].entnum doesn't index level.num_entities\n\t%i not in [0, %i)",
                 entnum,
                 level.num_entities);
-
+#endif
         G_FreeEntity(&level.gentities[entnum]);
         g_scr_data.actorCorpseInfo[corpseIndex].entnum = -1;
     }
