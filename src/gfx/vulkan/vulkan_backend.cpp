@@ -115,6 +115,9 @@ struct SwitchFrameTimingStats
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateWaitByReason;
     SwitchFrameTimingCounter queueIdle;
     SwitchFrameTimingCounter frameCpu;
+    std::atomic<uint64_t> modelLightingRegions{0};
+    std::atomic<uint64_t> modelLightingBytes{0};
+    std::atomic<uint64_t> modelLightingFullBytes{0};
 };
 
 SwitchFrameTimingStats g_switchFrameTimingStats;
@@ -163,6 +166,12 @@ void Switch_RecordFrameCpuEnd()
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonMaxNs{};
     uint64_t idleCalls = 0, idleNs = 0, idleMaxNs = 0;
     uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
+    const uint64_t modelLightingRegions =
+        g_switchFrameTimingStats.modelLightingRegions.exchange(0, std::memory_order_acq_rel);
+    const uint64_t modelLightingBytes =
+        g_switchFrameTimingStats.modelLightingBytes.exchange(0, std::memory_order_acq_rel);
+    const uint64_t modelLightingFullBytes =
+        g_switchFrameTimingStats.modelLightingFullBytes.exchange(0, std::memory_order_acq_rel);
 
     g_switchFrameTimingStats.frontendFenceWait.Reset(
         &fenceCalls, &fenceNs, &fenceMaxNs);
@@ -206,7 +215,7 @@ void Switch_RecordFrameCpuEnd()
     char message[1536];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
@@ -254,6 +263,9 @@ void Switch_RecordFrameCpuEnd()
         averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D)]),
         static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)]),
         averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)]),
+        static_cast<unsigned long long>(modelLightingRegions),
+        static_cast<unsigned long long>(modelLightingBytes),
+        static_cast<unsigned long long>(modelLightingFullBytes),
         static_cast<unsigned long long>(idleCalls),
         averageMs(idleNs, idleCalls), maximumMs(idleMaxNs),
         static_cast<unsigned long long>(submitCalls),
@@ -2012,6 +2024,23 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 bool VulkanBackend::IsFrameRecordingThread() const
 {
     return g_frameRecordingBackend == this;
+}
+
+void VulkanBackend::RecordModelLightingUpload(
+    uint64_t regions, uint64_t bytes, uint64_t fullBytes)
+{
+#ifdef __SWITCH__
+    g_switchFrameTimingStats.modelLightingRegions.fetch_add(
+        regions, std::memory_order_relaxed);
+    g_switchFrameTimingStats.modelLightingBytes.fetch_add(
+        bytes, std::memory_order_relaxed);
+    g_switchFrameTimingStats.modelLightingFullBytes.fetch_add(
+        fullBytes, std::memory_order_relaxed);
+#else
+    (void)regions;
+    (void)bytes;
+    (void)fullBytes;
+#endif
 }
 
 bool VulkanBackend::BeginFrame()
