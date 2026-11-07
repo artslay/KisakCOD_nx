@@ -504,11 +504,28 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
     unsigned int stateLevel; // r8
     int time; // r11
 
+#ifdef __SWITCH__
+    if (!self || !self->ent || self->ent->actor != self || !self->sentient
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent
+        || !Switch_ActorHasValidSpecies(self, "Actor_InitAnimScript")
+        || !Switch_ActorHasValidState(self, "Actor_InitAnimScript"))
+    {
+        Com_Error(ERR_DROP, "Actor_InitAnimScript: invalid actor links or state");
+        return;
+    }
+    if (!g_animScriptTable[self->species] || !g_animScriptTable[self->species]->init.func
+        || !AIFuncTable[self->species][self->eState[0]].pfnStart)
+    {
+        Com_Error(ERR_DROP, "Actor_InitAnimScript: missing species animation or start callback");
+        return;
+    }
+#else
     iassert(self->ent);
     iassert(self->ent->actor == self);
     iassert(self->sentient);
     iassert(self->ent->sentient == self->sentient);
     iassert(self->sentient->ent == self->ent);
+#endif
 
     ent = self->ent;
 #ifdef __SWITCH__
@@ -1916,10 +1933,24 @@ void __cdecl Actor_CheckCollisions(actor_s *self)
     actor_s *v8; // r31
     float v9[20]; // [sp+50h] [-50h] BYREF
 
+#ifdef __SWITCH__
+    if (!self || !self->sentient || !self->ent
+        || !Switch_ActorHasValidSpecies(self, "Actor_CheckCollisions"))
+    {
+        Com_Error(ERR_DROP, "Actor_CheckCollisions: invalid actor, entity, or sentient");
+        return;
+    }
+    if (!g_animScriptTable[self->species])
+    {
+        Com_Error(ERR_DROP, "Actor_CheckCollisions: animation table is null");
+        return;
+    }
+#else
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 4962, 0, "%s", "self");
     if (!self->sentient)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 4963, 0, "%s", "self->sentient");
+#endif
     if (!self->pCloseEnt.isDefined())
     {
         ent = self->ent;
@@ -1935,6 +1966,21 @@ void __cdecl Actor_CheckCollisions(actor_s *self)
         while (1)
         {
             v8 = &level.actors[v7];
+#ifdef __SWITCH__
+            if (v8->inuse && v8 != self)
+            {
+                if (!v8->sentient || !v8->sentient->ent)
+                {
+                    Com_Error(ERR_DROP, "Actor_CheckCollisions: active actor has no sentient entity");
+                    return;
+                }
+                if (v6 && (v8->Physics.iHitEntnum < 0 || v8->Physics.iHitEntnum >= MAX_GENTITIES))
+                {
+                    Com_Error(ERR_DROP, "Actor_CheckCollisions: hit entity number is out of range");
+                    return;
+                }
+            }
+#endif
             if (level.actors[v7].inuse && v8 != self && (!v6 || level.gentities[v8->Physics.iHitEntnum].sentient))
             {
                 if (Actor_PointNear(v8->sentient->ent->r.currentOrigin, v9))
@@ -2043,6 +2089,13 @@ void __cdecl Actor_GetMoveHistoryAverage(actor_s *self, float *vDir)
 
 void __cdecl Actor_UpdateMoveHistory(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!self || self->moveHistoryIndex < 0 || self->moveHistoryIndex >= ARRAY_COUNT(self->moveHistory))
+    {
+        Com_Error(ERR_DROP, "Actor_UpdateMoveHistory: movement history index out of range");
+        return;
+    }
+#endif
     int moveHistoryIndex; // r7
     int v2; // r11
     int v3; // r10
@@ -2343,6 +2396,14 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
     perp[1] = pPath->lookaheadDir[1];
     perp[2] = pPath->lookaheadDir[2];
     moveHistoryIndex = self->moveHistoryIndex;
+#ifdef __SWITCH__
+    if (moveHistoryIndex < 0 || moveHistoryIndex >= ARRAY_COUNT(self->moveHistory)
+        || !Switch_ActorHasValidSpecies(self, "Path_UpdateMovementDelta"))
+    {
+        Com_Error(ERR_DROP, "Path_UpdateMovementDelta: invalid movement history index or species");
+        return;
+    }
+#endif
     float speed = g_actorAssumedSpeed[self->species];
     float t = ((fMoveDist * 20.0f) - (speed * 0.5f)) / (speed * 0.5f);
 
@@ -2427,6 +2488,13 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 
 void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!self)
+    {
+        Com_Error(ERR_DROP, "Actor_AddStationaryMoveHistory: actor is null");
+        return;
+    }
+#endif
     if (level.time / 50 == 10 * (level.time / 50 / 10)) // KISAKHERTZ
     {
         Actor_UpdateMoveHistory(self);
@@ -3312,6 +3380,10 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     iassert(player->client);
     iassert(player->sentient);
 
+#ifdef __SWITCH__
+    if (!Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
+        return;
+#endif
     if (!self->bDontAvoidPlayer
         && (self->Physics.iTraceMask & CONTENTS_PLAYER) != 0
         && self->eState[self->stateLevel] != AIS_TURRET
@@ -3404,11 +3476,25 @@ actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
     const char *v8; // r3
     float *v10; // r11
 
+#ifdef __SWITCH__
+    if (!self || !self->sentient || !Switch_ActorHasValidSpecies(self, "Actor_CallThink")
+        || !Switch_ActorHasValidState(self, "Actor_CallThink"))
+    {
+        Com_Error(ERR_DROP, "Actor_CallThink: invalid actor, sentient, species, or state");
+        return ACTOR_THINK;
+    }
+    if (!AIFuncTable[self->species][self->eState[self->stateLevel]].pfnThink)
+    {
+        Com_Error(ERR_DROP, "Actor_CallThink: current state has no think callback");
+        return ACTOR_THINK;
+    }
+#else
     iassert(self);
     iassert(self->sentient);
     stateLevel = self->stateLevel;
     bcassert(self->stateLevel, ARRAY_COUNT(self->eState));
     iassert(AIFuncTable[self->species][self->eState[self->stateLevel]].pfnThink);
+#endif
 
     Actor_ValidateReacquireNodes(self);
     if (self->transitionCount)
