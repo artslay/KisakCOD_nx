@@ -44,6 +44,9 @@ public:
     bool IsDeviceLost() const override;
     bool BeginFrame();
     bool EndFrame();
+    // True only on the thread that successfully began the active frame.
+    // Command buffers and the frame uniform ring are not externally synchronized.
+    bool IsFrameRecordingThread() const;
     enum class FrameSyncReason : uint8_t
     {
         Generic,
