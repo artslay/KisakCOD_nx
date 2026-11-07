@@ -927,15 +927,14 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
     }
 #endif
     const int corpseIndex = G_GetFreeActorCorpseIndex(1);
+    if (corpseIndex < 0)
+        return 0;
 #ifdef __SWITCH__
-    if (corpseIndex < 0 || corpseIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    if (corpseIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
     {
         Com_Error(ERR_DROP, "Actor_BecomeCorpse: corpse slot index is out of range");
         return 0;
     }
-#else
-    if (corpseIndex < 0)
-        return 0;
 #endif
 
     actor_s *actor = self->actor;
