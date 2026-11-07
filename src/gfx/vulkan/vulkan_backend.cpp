@@ -67,6 +67,7 @@ extern std::atomic<uint32_t> g_switchLastDrawTextureLayout[4];
 namespace
 {
 std::atomic<VulkanBackend *> g_backend{nullptr};
+thread_local VulkanBackend *g_frameRecordingBackend = nullptr;
 
 #ifdef __SWITCH__
 using SwitchFrameClock = std::chrono::steady_clock;
@@ -2003,6 +2004,11 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
     return true;
 }
 
+bool VulkanBackend::IsFrameRecordingThread() const
+{
+    return g_frameRecordingBackend == this;
+}
+
 bool VulkanBackend::BeginFrame()
 {
     if (m_deviceLost || !m_initialized)
@@ -2127,6 +2133,7 @@ bool VulkanBackend::BeginFrame()
     }
 
     m_frameActive = true;
+    g_frameRecordingBackend = this;
     m_frameSerial.fetch_add(1, std::memory_order_relaxed);
     m_commandBufferRecordingSerial.fetch_add(1, std::memory_order_relaxed);
     m_nextFrameSlot = (slotIndex + 1u) % FramesInFlight;
@@ -2172,6 +2179,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     {
         SetError("vkEndCommandBuffer failed while synchronizing a resource lock", endResult);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2184,6 +2193,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     {
         SetError("vkCreateFence failed while synchronizing a resource lock", createFenceResult);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2213,6 +2224,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
         SetError("vkQueueSubmit failed while synchronizing a resource lock", submitResult);
         vkDestroyFence(m_device, fence, nullptr);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2233,6 +2246,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     {
         SetError("vkWaitForFences failed while synchronizing a resource lock", waitResult);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2249,6 +2264,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     {
         SetError("vkResetCommandPool failed while resuming after a resource lock", resetResult);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2261,6 +2278,8 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     {
         SetError("vkBeginCommandBuffer failed while resuming after a resource lock", beginResult);
         m_frameActive = false;
+        if (g_frameRecordingBackend == this)
+            g_frameRecordingBackend = nullptr;
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
@@ -2322,6 +2341,16 @@ static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
 
 bool VulkanBackend::EndFrame()
 {
+    struct FrameOwnerScope
+    {
+        VulkanBackend *backend;
+        ~FrameOwnerScope()
+        {
+            if (g_frameRecordingBackend == backend)
+                g_frameRecordingBackend = nullptr;
+        }
+    } frameOwnerScope{this};
+
     if (m_deviceLost)
     {
 #ifdef __SWITCH__
@@ -3798,7 +3827,8 @@ bool VulkanBackend::UploadImage2D(
             0, 0, nullptr, 0, nullptr, 1, &toFinal);
     };
 
-    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
+        IsFrameRecordingThread())
     {
         VkDescriptorBufferInfo uploadSource{};
         if (!AllocateUniform(data, bytes, &uploadSource))
@@ -4084,7 +4114,8 @@ bool VulkanBackend::DownloadImage2D(
     };
 
     bool submitted = false;
-    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
+        IsFrameRecordingThread())
     {
         // Record the readback behind all earlier draws in this same queue
         // submission. One frame split then retires those draws and makes the
@@ -4219,7 +4250,8 @@ bool VulkanBackend::UploadImage3D(
             0, 0, nullptr, 0, nullptr, 1, &barrier);
     };
 
-    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
+        IsFrameRecordingThread())
     {
         VkDescriptorBufferInfo uploadSource{};
         if (AllocateUniform(data, bytes, &uploadSource))
@@ -4326,7 +4358,8 @@ bool VulkanBackend::DownloadImage3D(
     };
 
     bool submitted = false;
-    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
+        IsFrameRecordingThread())
     {
         EndRendering();
         recordDownload(m_commandBuffer);
