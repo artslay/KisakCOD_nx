@@ -1891,6 +1891,19 @@ struct scr_vehicle_s // sizeof=0x338
 };
 #endif
 
+#if defined(__SWITCH__) && defined(KISAK_SP)
+static_assert(sizeof(vehicle_pathpos_t) == 0xC0,
+    "Switch SP vehicle_pathpos_t save layout changed");
+static_assert(sizeof(vehicle_physic_t) == 0xF4,
+    "Switch SP vehicle_physic_t save layout changed");
+static_assert(sizeof(VehicleTurret) == 0x14);
+static_assert(sizeof(VehicleJitter) == 0x3C);
+static_assert(sizeof(VehicleHover) == 0x1C);
+static_assert(sizeof(VehicleTags) == 0x48);
+static_assert(sizeof(scr_vehicle_s) == 0x338,
+    "Switch SP scr_vehicle_s save layout changed");
+#endif
+
 enum proneCheckType_t : __int32
 {                                       // ...
     PCT_CLIENT = 0x0,
