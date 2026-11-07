@@ -3675,28 +3675,17 @@ bool VulkanBackend::UploadImage2D(
     uint32_t width, uint32_t height, uint32_t mipLevel,
     const void *data, size_t bytes,
     VkImageLayout oldLayout, uint32_t baseArrayLayer, VkOffset3D imageOffset,
-    VkImageLayout finalLayout)
+    VkImageLayout finalLayout, bool recordInActiveFrame)
 {
     if (!image || !data || !bytes)
         return false;
 
-    VkBuffer staging = VK_NULL_HANDLE;
-    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    void *mapped = nullptr;
-    if (!CreateBuffer(
-            bytes,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &staging, &stagingMemory, &mapped))
-        return false;
-
-    std::memcpy(mapped, data, bytes);
-
-    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    const auto recordUpload = [&](
+        VkCommandBuffer command, VkBuffer uploadBuffer, VkDeviceSize uploadOffset)
     {
-        // Re-uploaded images (including cinematic draw planes) may have
-        // been sampled by a previous frame. Synchronize those reads before
-        // transitioning the image to TRANSFER_DST and overwriting its contents.
+        // Re-uploaded images may have been sampled by an earlier draw. A
+        // barrier in the same graphics command stream orders those reads
+        // before the transfer write without a CPU-side queue/fence round trip.
         VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         VkAccessFlags sourceAccess =
             VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -3731,8 +3720,6 @@ bool VulkanBackend::UploadImage2D(
                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             break;
         default:
-            // Use the conservative ALL_COMMANDS/MEMORY dependency above for
-            // any other previously-used layout.
             break;
         }
 
@@ -3752,55 +3739,104 @@ bool VulkanBackend::UploadImage2D(
         toTransfer.subresourceRange.layerCount = 1;
 
         vkCmdPipelineBarrier(
-            command,
-            sourceStage,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            command, sourceStage, VK_PIPELINE_STAGE_TRANSFER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &toTransfer);
 
         VkBufferImageCopy copy{};
+        copy.bufferOffset = uploadOffset;
         copy.imageSubresource.aspectMask = aspect;
         copy.imageSubresource.mipLevel = mipLevel;
         copy.imageSubresource.baseArrayLayer = baseArrayLayer;
         copy.imageSubresource.layerCount = 1;
         copy.imageOffset = imageOffset;
         copy.imageExtent = {width, height, 1};
-
         vkCmdCopyBufferToImage(
-            command, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+            command, uploadBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copy);
 
-        VkImageMemoryBarrier toShader{};
-        toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        toShader.newLayout = finalLayout;
-        toShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        VkImageMemoryBarrier toFinal{};
+        toFinal.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toFinal.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toFinal.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toFinal.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toFinal.newLayout = finalLayout;
+        toFinal.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         VkPipelineStageFlags finalStage =
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         if (finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             finalStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                          VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            toShader.dstAccessMask =
+            toFinal.dstAccessMask =
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         }
         else
         {
-            toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            toFinal.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         }
-        toShader.image = image;
-        toShader.subresourceRange.aspectMask = aspect;
-        toShader.subresourceRange.baseMipLevel = mipLevel;
-        toShader.subresourceRange.levelCount = 1;
-        toShader.subresourceRange.baseArrayLayer = baseArrayLayer;
-        toShader.subresourceRange.layerCount = 1;
+        toFinal.image = image;
+        toFinal.subresourceRange.aspectMask = aspect;
+        toFinal.subresourceRange.baseMipLevel = mipLevel;
+        toFinal.subresourceRange.levelCount = 1;
+        toFinal.subresourceRange.baseArrayLayer = baseArrayLayer;
+        toFinal.subresourceRange.layerCount = 1;
         vkCmdPipelineBarrier(
-            command,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            finalStage,
-            0,0,nullptr,0,nullptr,1,&toShader);
-    }, ImmediateSubmitReason::ImageUpload2D);
+            command, VK_PIPELINE_STAGE_TRANSFER_BIT, finalStage,
+            0, 0, nullptr, 0, nullptr, 1, &toFinal);
+    };
+
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    {
+        VkDescriptorBufferInfo uploadSource{};
+        if (!AllocateUniform(data, bytes, &uploadSource))
+        {
+            // The ring belongs to this frame slot. Retire its current contents
+            // before recycling the slice, then try the upload allocation once
+            // more. This is the exceptional path, not the normal texture-write path.
+            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted) ||
+                !AllocateUniform(data, bytes, &uploadSource))
+            {
+                // A transfer staging allocation remains available for unusually
+                // large uploads that do not fit the per-frame ring.
+            }
+            else
+            {
+                EndRendering();
+                recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/upload/image2d_recorded_in_frame";
+#endif
+                (void)format;
+                return true;
+            }
+        }
+        else
+        {
+            EndRendering();
+            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/upload/image2d_recorded_in_frame";
+#endif
+            (void)format;
+            return true;
+        }
+    }
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    void *mapped = nullptr;
+    if (!CreateBuffer(
+            bytes,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &staging, &stagingMemory, &mapped))
+        return false;
+
+    std::memcpy(mapped, data, bytes);
+    const bool submitted = ImmediateSubmit(
+        [&](VkCommandBuffer command) { recordUpload(command, staging, 0); },
+        ImmediateSubmitReason::ImageUpload2D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/image2d_submit_return";
