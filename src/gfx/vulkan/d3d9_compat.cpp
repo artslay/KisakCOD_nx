@@ -6079,7 +6079,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         VulkanBackend *backend = GetVulkanBackend();
         const TextureFormatInfo info = GetTextureFormat(sourceFormat);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_sync";
+        g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_upload";
 #endif
         if (!backend || info.format == VK_FORMAT_UNDEFINED)
             return E_FAIL;
@@ -6215,7 +6215,7 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
         VulkanBackend *backend=GetVulkanBackend();
         const TextureFormatInfo info=GetTextureFormat(sourceFormat);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/resource_lock/texture_unlock_box_sync";
+        g_switchFrameStage = "frame/resource_lock/texture_unlock_box_upload";
 #endif
         if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
             return E_FAIL;
