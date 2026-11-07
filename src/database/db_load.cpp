@@ -13213,7 +13213,32 @@ void __cdecl Load_DynEntityPoseArray(bool atStreamStart, int32_t count)
 
 void __cdecl Load_DynEntityClientArray(bool atStreamStart, int32_t count)
 {
+#ifdef __SWITCH__
+    // The fastfile stores the original 32-bit DynEntityClient record:
+    // physObjId (4), flags (2), lightingHandle (2), health (4).
+    // Switch widens physObjId to a native pointer-sized slot, so a raw
+    // 12-byte bulk copy would walk the destination array with the wrong stride.
+    iassert(atStreamStart);
+    if (!atStreamStart)
+        Com_Error(ERR_DROP, "Load_DynEntityClientArray: expected serialized array start");
+
+    if (count <= 0)
+        return;
+
+    for (int32_t index = 0; index < count; ++index)
+    {
+        uint8_t serialized[12]{};
+        DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+
+        DynEntityClient *client = &varDynEntityClient[index];
+        client->physObjId = 0; // Runtime physics objects are created after map load.
+        client->flags = Switch_ReadSerializedValue<uint16_t>(serialized, 4);
+        client->lightingHandle = Switch_ReadSerializedValue<uint16_t>(serialized, 6);
+        client->health = Switch_ReadSerializedValue<int32_t>(serialized, 8);
+    }
+#else
     Load_Stream(atStreamStart, (uint8_t *)varDynEntityClient, 12 * count);
+#endif
 }
 
 void __cdecl Mark_DynEntityDef()
