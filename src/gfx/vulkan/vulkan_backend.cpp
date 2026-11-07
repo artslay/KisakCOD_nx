@@ -1799,7 +1799,13 @@ bool VulkanBackend::RecreateSwapchain()
         // device; cinematic uploads share the device and graphics queue.
         std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        const auto idleStart = SwitchFrameClock::now();
+#endif
         const VkResult idleResult = vkDeviceWaitIdle(m_device);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueIdle.Add(SwitchElapsedNs(idleStart));
+#endif
         if (idleResult != VK_SUCCESS)
         {
             SetError("vkDeviceWaitIdle failed while recreating swapchain", idleResult);
