@@ -6795,7 +6795,8 @@ HRESULT IDirect3DDevice9::StretchRect(
     {
         recordBlit(m_backend->CommandBuffer());
     }
-    else if (!m_backend->ImmediateSubmit(recordBlit))
+    else if (!m_backend->ImmediateSubmit(
+        recordBlit, VulkanBackend::ImmediateSubmitReason::D3D9StretchRect))
     {
         return E_FAIL;
     }
@@ -12588,7 +12589,9 @@ HRESULT IDirect3DDevice9::UpdateTexture(
         };
         if (recordInCurrentFrame)
             recordCopy(m_backend->CommandBuffer());
-        else if (!m_backend->ImmediateSubmit(recordCopy))
+        else if (!m_backend->ImmediateSubmit(
+                     recordCopy,
+                     VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture2D))
             return E_FAIL;
 
         for (uint32_t layer = 0; layer < layers; ++layer)
@@ -12699,7 +12702,9 @@ HRESULT IDirect3DDevice9::UpdateTexture(
     {
         recordCopy(m_backend->CommandBuffer());
     }
-    else if (!m_backend->ImmediateSubmit(recordCopy))
+    else if (!m_backend->ImmediateSubmit(
+                 recordCopy,
+                 VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D))
     {
         return E_FAIL;
     }
