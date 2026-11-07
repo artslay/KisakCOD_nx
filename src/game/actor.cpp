@@ -1641,6 +1641,19 @@ bool __cdecl Actor_IsCloseToSegment(
 
 int __cdecl Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, int hadPath)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Path_Exists(&self->Path) || !self->Path.wPathLen
+        || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts)
+        || self->Path.lookaheadNextNode < 0
+        || self->Path.lookaheadNextNode >= self->Path.wPathLen
+        || !origin || !pathPoint)
+    {
+        Com_Error(ERR_DROP, "Actor_IsAlongPath: invalid actor, path or lookahead index");
+        return 0;
+    }
+#endif
+
     path_t *path = &self->Path;
     iassert(path);
     iassert(path->wPathLen > 0);
