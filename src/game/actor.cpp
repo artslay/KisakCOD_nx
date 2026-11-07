@@ -3373,16 +3373,21 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     float v9[4]; // [sp+50h] [-50h] BYREF
     float v10[16]; // [sp+60h] [-40h] BYREF
 
+#ifdef __SWITCH__
+    if (!self || !self->ent || !self->sentient || !player || !player->client || !player->sentient
+        || !Switch_ActorHasValidSpecies(self, "Actor_UpdatePlayerPush")
+        || !Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
+    {
+        Com_Error(ERR_DROP, "Actor_UpdatePlayerPush: invalid actor/player links or state");
+        return;
+    }
+#else
     iassert(self);
     iassert(self->ent);
     iassert(self->sentient);
     iassert(player);
     iassert(player->client);
     iassert(player->sentient);
-
-#ifdef __SWITCH__
-    if (!Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
-        return;
 #endif
     if (!self->bDontAvoidPlayer
         && (self->Physics.iTraceMask & CONTENTS_PLAYER) != 0
@@ -3469,7 +3474,9 @@ void __cdecl Actor_UpdateCloseEnt(actor_s *self)
 
 actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
 {
+#ifndef __SWITCH__
     unsigned int stateLevel; // r7
+#endif
     actor_think_result_t eThinkResult; // r27
     double fCurrLength; // fp1
     double v7; // fp2
