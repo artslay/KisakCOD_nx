@@ -238,6 +238,13 @@ uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
     }
 #endif
     info = &g_entHandleInfoArray[infoIndex];
+#ifdef __SWITCH__
+    if (info->next >= ARRAY_COUNT(g_entHandleInfoArray))
+    {
+        Com_Error(ERR_DROP, "AddEntHandleInfo: free-list next index is out of range");
+        return 0;
+    }
+#endif
     g_entHandleInfoHead = info->next;
     if (g_maxUsedEntHandle < ++g_usedEntHandle)
         v3 = g_usedEntHandle;
