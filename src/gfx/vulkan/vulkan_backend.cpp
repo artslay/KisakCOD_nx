@@ -2650,7 +2650,13 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
     if (m_device && m_graphicsQueue)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        const auto idleStart = SwitchFrameClock::now();
+#endif
         const VkResult idleResult = vkQueueWaitIdle(m_graphicsQueue);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueIdle.Add(SwitchElapsedNs(idleStart));
+#endif
         if (idleResult != VK_SUCCESS && idleResult != VK_ERROR_DEVICE_LOST)
             SetError("vkQueueWaitIdle failed while releasing a query", idleResult);
     }
