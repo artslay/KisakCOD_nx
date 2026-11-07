@@ -510,6 +510,13 @@ void R_VulkanUploadTexture(
 
     if (uploaded)
     {
+        // External renderer uploads replace GPU-side volume contents. Force
+        // the next D3D LockBox to refresh its persistent CPU mirror once.
+        if (image->mapType == MAPTYPE_3D)
+        {
+            texture->volumeShadowValid = false;
+            texture->volumeShadowLevel = 0xffffffffu;
+        }
         texture->SetSubresourceLayout(
             mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         texture->dirtyAll = true;
