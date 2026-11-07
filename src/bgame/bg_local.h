@@ -781,6 +781,11 @@ struct hudelem_s
 #endif
 #endif // KISAK_SP / KISAK_MP
 
+#if defined(KISAK_SP) && defined(__SWITCH__)
+static_assert(sizeof(hudelem_s) == 0xAC,
+    "Switch SP HUD save record must retain its 172-byte layout");
+#endif
+
 struct MantleState // sizeof=0x10
 {                                       // XREF: playerState_s/r
     float yaw;
