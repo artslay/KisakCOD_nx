@@ -928,7 +928,6 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     int v19; // r30
     int v20; // r30
     bool v21; // cr58
-    EntHandle v22; // r30
     XAnim_s *anims; // r30
     unsigned __int8 *v25; // r3
     unsigned __int8 *v26; // r3
@@ -1026,13 +1025,16 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         *(uintptr_t *)v7 = (uintptr_t)&level.vehicles[v20 - 1];
         break;
     case SF_TURRETINFO:
-        v22 = *v7;
-        if (ReadSavePointerSlot(v7) > 0x40u)
-            Com_Error(ERR_DROP, "ReadField: turret out of range (%i)", *v7);
-        if (!ReadSavePointerSlot(v7))
+    {
+        const uintptr_t turretIndex = ReadSavePointerSlot(v7);
+        if (turretIndex > 0x40u)
+            Com_Error(ERR_DROP, "ReadField: turret out of range (%llu)",
+                static_cast<unsigned long long>(turretIndex));
+        if (!turretIndex)
             goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&level.turrets[*(unsigned int *)&v22 - 1];
+        *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(&level.turrets[turretIndex - 1]);
         break;
+    }
     case SF_THREAD:
         v7->number = Scr_ConvertThreadFromLoad(v7->number);
         break;
