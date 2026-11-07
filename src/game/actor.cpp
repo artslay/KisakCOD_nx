@@ -91,9 +91,30 @@ static bool Switch_ActorPointerToIndex(const actor_s *actor, uint32_t *index)
     return true;
 }
 
+static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *index)
+{
+    if (!sentient || !level.sentients)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.sentients);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(sentient);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(sentient_s) * MAX_SENTIENTS;
+    if (offset >= arrayBytes || offset % sizeof(sentient_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(sentient_s));
+    return true;
+}
+
 static bool Switch_ActorHasValidSpecies(const actor_s *actor, const char *function)
 {
-    if (!actor || actor->species < 0 || actor->species >= MAX_AI_SPECIES)
+    if (!Switch_ActorPointerToIndex(actor, nullptr)
+        || actor->species < 0 || actor->species >= MAX_AI_SPECIES)
     {
         Com_Error(ERR_DROP, "%s: actor species is outside AIFuncTable", function);
         return false;
@@ -103,7 +124,8 @@ static bool Switch_ActorHasValidSpecies(const actor_s *actor, const char *functi
 
 static bool Switch_ActorHasValidState(const actor_s *actor, const char *function)
 {
-    if (!actor || actor->stateLevel >= ARRAY_COUNT(actor->eState))
+    if (!Switch_ActorPointerToIndex(actor, nullptr)
+        || actor->stateLevel >= ARRAY_COUNT(actor->eState))
     {
         Com_Error(ERR_DROP, "%s: actor state stack index is out of range", function);
         return false;
@@ -505,7 +527,7 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
     int time; // r11
 
 #ifdef __SWITCH__
-    if (!self || !self->ent || self->ent->actor != self || !self->sentient
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->ent || self->ent->actor != self || !self->sentient
         || self->ent->sentient != self->sentient || self->sentient->ent != self->ent
         || !Switch_ActorHasValidSpecies(self, "Actor_InitAnimScript")
         || !Switch_ActorHasValidState(self, "Actor_InitAnimScript"))
@@ -1687,8 +1709,20 @@ int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
     sentient = TargetEntity->sentient;
     if (sentient)
     {
+#ifdef __SWITCH__
+        uint32_t sentientIndex;
+        if (!Switch_SentientPointerToIndex(sentient, &sentientIndex)
+            || sentientIndex >= ARRAY_COUNT(self->sentientInfo))
+        {
+            Com_Error(ERR_DROP, "Actor_InFixedNodeExposedCombat: target sentient is outside the sentient pool");
+            return 0;
+        }
+        if (level.time - self->sentientInfo[sentientIndex].lastKnownPosTime > 10000)
+            return 0;
+#else
         if (level.time - self->sentientInfo[sentient - level.sentients].lastKnownPosTime > 10000)
             return 0;
+#endif
     }
     if ((AnimScriptList *)self->pAnimScriptFunc != &g_scr_data.anim)
         return 0;
@@ -1937,7 +1971,7 @@ void __cdecl Actor_CheckCollisions(actor_s *self)
     float v9[20]; // [sp+50h] [-50h] BYREF
 
 #ifdef __SWITCH__
-    if (!self || !self->sentient || !self->ent
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->sentient || !self->ent
         || !Switch_ActorHasValidSpecies(self, "Actor_CheckCollisions"))
     {
         Com_Error(ERR_DROP, "Actor_CheckCollisions: invalid actor, entity, or sentient");
@@ -2093,7 +2127,8 @@ void __cdecl Actor_GetMoveHistoryAverage(actor_s *self, float *vDir)
 void __cdecl Actor_UpdateMoveHistory(actor_s *self)
 {
 #ifdef __SWITCH__
-    if (!self || self->moveHistoryIndex < 0 || self->moveHistoryIndex >= ARRAY_COUNT(self->moveHistory))
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || self->moveHistoryIndex < 0 || self->moveHistoryIndex >= ARRAY_COUNT(self->moveHistory))
     {
         Com_Error(ERR_DROP, "Actor_UpdateMoveHistory: movement history index out of range");
         return;
@@ -2400,7 +2435,8 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
     perp[2] = pPath->lookaheadDir[2];
     moveHistoryIndex = self->moveHistoryIndex;
 #ifdef __SWITCH__
-    if (moveHistoryIndex < 0 || moveHistoryIndex >= ARRAY_COUNT(self->moveHistory)
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || moveHistoryIndex < 0 || moveHistoryIndex >= ARRAY_COUNT(self->moveHistory)
         || !Switch_ActorHasValidSpecies(self, "Path_UpdateMovementDelta"))
     {
         Com_Error(ERR_DROP, "Path_UpdateMovementDelta: invalid movement history index or species");
@@ -2492,9 +2528,9 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
 {
 #ifdef __SWITCH__
-    if (!self)
+    if (!Switch_ActorPointerToIndex(self, nullptr))
     {
-        Com_Error(ERR_DROP, "Actor_AddStationaryMoveHistory: actor is null");
+        Com_Error(ERR_DROP, "Actor_AddStationaryMoveHistory: actor pointer is invalid");
         return;
     }
 #endif
@@ -3264,7 +3300,19 @@ void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t e
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 862, 0, "%s", "self->sentient != other");
     if (other->eTeam != TEAM_DEAD)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 863, 0, "%s", "other->eTeam == TEAM_DEAD");
+#ifdef __SWITCH__
+    uint32_t otherIndex;
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || !Switch_SentientPointerToIndex(other, &otherIndex)
+        || otherIndex >= ARRAY_COUNT(self->sentientInfo))
+    {
+        Com_Error(ERR_DROP, "Actor_DissociateSentient: actor or sentient pointer is outside its pool");
+        return;
+    }
+    SentientInfo_Clear(&self->sentientInfo[otherIndex]);
+#else
     SentientInfo_Clear(&self->sentientInfo[other - level.sentients]);
+#endif
     Actor_DissociateSuppressor(self, other);
     if (other == Actor_GetTargetSentient(self))
         Sentient_SetEnemy(self->sentient, 0, 1);
@@ -3703,7 +3751,19 @@ void __cdecl Actor_EntInfo(gentity_s *self, float *source)
     {
         if (enemy)
         {
+#ifdef __SWITCH__
+            uint32_t enemyIndex;
+            if (!Switch_ActorPointerToIndex(actor, nullptr)
+                || !Switch_SentientPointerToIndex(enemy, &enemyIndex)
+                || enemyIndex >= ARRAY_COUNT(actor->sentientInfo))
+            {
+                Com_Error(ERR_DROP, "actor debug draw: enemy sentient is outside the sentient pool");
+                return;
+            }
+            const sentient_info_t *info = &actor->sentientInfo[enemyIndex];
+#else
             const sentient_info_t *info = &actor->sentientInfo[enemy - level.sentients];
+#endif
             if (info->VisCache.bVisible)
             {
                 v12 = colorGreen;
@@ -5106,7 +5166,19 @@ void __cdecl Actor_UpdateGoalPos(actor_s *self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5606, 0, "%s", "enemy");
 
     {
+#ifdef __SWITCH__
+        uint32_t enemyIndex;
+        if (!Switch_ActorPointerToIndex(self, nullptr)
+            || !Switch_SentientPointerToIndex(enemy, &enemyIndex)
+            || enemyIndex >= ARRAY_COUNT(self->sentientInfo))
+        {
+            Com_Error(ERR_DROP, "Actor_UpdateCodeGoal: enemy sentient is outside the sentient pool");
+            return;
+        }
+        sentient_info_t *pInfo = &self->sentientInfo[enemyIndex];
+#else
         sentient_info_t *pInfo = &self->sentientInfo[enemy - level.sentients];
+#endif
         p_codeGoal->pos[0] = pInfo->vLastKnownPos[0];
         self->codeGoal.pos[1] = pInfo->vLastKnownPos[1];
         self->codeGoal.pos[2] = pInfo->vLastKnownPos[2];
