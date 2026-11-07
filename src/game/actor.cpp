@@ -599,6 +599,13 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
     int v3; // r31
     actor_s *actors; // r11
 
+#ifdef __SWITCH__
+    if (!level.actors || iTeamFlags < 0 || iTeamFlags > 31)
+    {
+        Com_Error(ERR_DROP, "Actor_FirstActor: invalid actor pool or team flags");
+        return nullptr;
+    }
+#else
     if (iTeamFlags > 31)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp",
@@ -606,6 +613,7 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
             0,
             "%s",
             "iTeamFlags <= (1 << TEAM_NUM_TEAMS) - 1");
+#endif
     v2 = 0;
     v3 = 0;
     actors = level.actors;
@@ -618,8 +626,20 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
                 MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 891, 0, "%s", "level.actors[i].sentient");
                 actors = level.actors;
             }
+#ifdef __SWITCH__
+            if (!Switch_SentientPointerToIndex(actors[v3].sentient, nullptr)
+                || !Switch_SentientTeamValid(actors[v3].sentient->eTeam, "Actor_FirstActor"))
+            {
+                Com_Error(ERR_DROP, "Actor_FirstActor: active actor has invalid sentient or team");
+                return nullptr;
+            }
+            if (((1u << static_cast<unsigned int>(actors[v3].sentient->eTeam))
+                 & static_cast<unsigned int>(iTeamFlags)) != 0)
+                break;
+#else
             if (((1 << actors[v3].sentient->eTeam) & iTeamFlags) != 0)
                 break;
+#endif
         }
         ++v3;
         ++v2;
@@ -635,6 +655,13 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     int v5; // r30
     int v6; // r31
 
+#ifdef __SWITCH__
+    if (iTeamFlags < 0 || iTeamFlags > 31)
+    {
+        Com_Error(ERR_DROP, "Actor_NextActor: team flags are out of range");
+        return nullptr;
+    }
+#else
     if (iTeamFlags > 31)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp",
@@ -642,6 +669,7 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
             0,
             "%s",
             "iTeamFlags <= (1 << TEAM_NUM_TEAMS) - 1");
+#endif
     if (!pPrevActor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 909, 0, "%s", "pPrevActor");
     actors = level.actors;
@@ -688,8 +716,20 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
                 MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 920, 0, "%s", "level.actors[i].sentient");
                 actors = level.actors;
             }
+#ifdef __SWITCH__
+            if (!Switch_SentientPointerToIndex(actors[v6].sentient, nullptr)
+                || !Switch_SentientTeamValid(actors[v6].sentient->eTeam, "Actor_NextActor"))
+            {
+                Com_Error(ERR_DROP, "Actor_NextActor: active actor has invalid sentient or team");
+                return nullptr;
+            }
+            if (((1u << static_cast<unsigned int>(actors[v6].sentient->eTeam))
+                 & static_cast<unsigned int>(iTeamFlags)) != 0)
+                break;
+#else
             if (((1 << actors[v6].sentient->eTeam) & iTeamFlags) != 0)
                 break;
+#endif
         }
         ++v6;
         ++v5;
@@ -3606,14 +3646,12 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     float v10[16]; // [sp+60h] [-40h] BYREF
 
 #ifdef __SWITCH__
-    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->ent || !self->sentient
-        || !player || !player->client || !player->sentient
-        || !Switch_ActorHasValidSpecies(self, "Actor_UpdatePlayerPush")
+    if (!Switch_ActorHasValidSpecies(self, "Actor_UpdatePlayerPush")
         || !Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
-    {
-        Com_Error(ERR_DROP, "Actor_UpdatePlayerPush: invalid actor/player links or state");
         return;
-    }
+    if (!Switch_SentientTeamValid(self->sentient->eTeam, "Actor_UpdatePlayerPush")
+        || !Switch_SentientTeamValid(player->sentient->eTeam, "Actor_UpdatePlayerPush"))
+        return;
 #else
     iassert(self);
     iassert(self->ent);
