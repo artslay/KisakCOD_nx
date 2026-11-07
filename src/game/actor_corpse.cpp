@@ -310,6 +310,7 @@ void __cdecl G_UpdateActorCorpses()
             "%s\n\t(actorCorpseCount) = %i",
             "(actorCorpseCount >= 1 && actorCorpseCount <= 16)",
             ai_corpseCount->current.integer);
+#endif
     if (level.actorCorpseCount != integer)
         G_RemoveActorCorpses(integer);
 }
