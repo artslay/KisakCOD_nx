@@ -110,6 +110,8 @@ struct SwitchFrameTimingStats
     SwitchFrameTimingCounter queueSubmit;
     SwitchFrameTimingCounter queuePresent;
     SwitchFrameTimingCounter immediateWait;
+    std::array<SwitchFrameTimingCounter,
+        static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateWaitByReason;
     SwitchFrameTimingCounter queueIdle;
     SwitchFrameTimingCounter frameCpu;
 };
@@ -152,6 +154,12 @@ void Switch_RecordFrameCpuEnd()
     uint64_t submitCalls = 0, submitNs = 0, submitMaxNs = 0;
     uint64_t presentCalls = 0, presentNs = 0, presentMaxNs = 0;
     uint64_t immediateCalls = 0, immediateNs = 0, immediateMaxNs = 0;
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonCalls{};
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonNs{};
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonMaxNs{};
     uint64_t idleCalls = 0, idleNs = 0, idleMaxNs = 0;
     uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
 
@@ -174,6 +182,11 @@ void Switch_RecordFrameCpuEnd()
         &presentCalls, &presentNs, &presentMaxNs);
     g_switchFrameTimingStats.immediateWait.Reset(
         &immediateCalls, &immediateNs, &immediateMaxNs);
+    for (size_t i = 0; i < g_switchFrameTimingStats.immediateWaitByReason.size(); ++i)
+    {
+        g_switchFrameTimingStats.immediateWaitByReason[i].Reset(
+            &immediateReasonCalls[i], &immediateReasonNs[i], &immediateReasonMaxNs[i]);
+    }
     g_switchFrameTimingStats.queueIdle.Reset(
         &idleCalls, &idleNs, &idleMaxNs);
     g_switchFrameTimingStats.frameCpu.Reset(
@@ -192,7 +205,7 @@ void Switch_RecordFrameCpuEnd()
     char message[1536];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
@@ -222,6 +235,24 @@ void Switch_RecordFrameCpuEnd()
         averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::Generic)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::Generic)]),
         static_cast<unsigned long long>(immediateCalls),
         averageMs(immediateNs, immediateCalls), maximumMs(immediateMaxNs),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload2D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload2D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload2D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUploadBatch2D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUploadBatch2D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUploadBatch2D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload2D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload2D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload2D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload3D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload3D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageUpload3D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload3D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload3D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::ImageDownload3D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9StretchRect)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9StretchRect)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9StretchRect)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture2D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture2D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture2D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::D3D9UpdateTexture3D)]),
+        static_cast<unsigned long long>(immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)]),
+        averageMs(immediateReasonNs[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)], immediateReasonCalls[static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Generic)]),
         static_cast<unsigned long long>(idleCalls),
         averageMs(idleNs, idleCalls), maximumMs(idleMaxNs),
         static_cast<unsigned long long>(submitCalls),
@@ -3502,7 +3533,9 @@ void VulkanBackend::TransitionImage(
         0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &fn)
+bool VulkanBackend::ImmediateSubmit(
+    const std::function<void(VkCommandBuffer)> &fn,
+    ImmediateSubmitReason reason)
 {
     if (!m_device || !m_graphicsQueue || !m_immediateCommandPool || !fn || m_deviceLost)
         return false;
@@ -3583,8 +3616,13 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
                     const VkResult waitResult =
                         vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
 #ifdef __SWITCH__
-                    g_switchFrameTimingStats.immediateWait.Add(
-                        SwitchElapsedNs(immediateWaitStart));
+                    const uint64_t immediateElapsedNs =
+                        SwitchElapsedNs(immediateWaitStart);
+                    g_switchFrameTimingStats.immediateWait.Add(immediateElapsedNs);
+                    const size_t reasonIndex = static_cast<size_t>(reason);
+                    if (reasonIndex < g_switchFrameTimingStats.immediateWaitByReason.size())
+                        g_switchFrameTimingStats.immediateWaitByReason[reasonIndex].Add(
+                            immediateElapsedNs);
                     g_switchFrameStage = "frame/upload/immediate_wait_fence_return";
 #endif
                     if (waitResult == VK_SUCCESS)
