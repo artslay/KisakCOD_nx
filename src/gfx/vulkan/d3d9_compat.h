@@ -296,6 +296,9 @@ struct KisakVkTexture : IDirect3DResource9 {
     // full volume from Vulkan on every lock needlessly stalls the renderer.
     std::atomic<bool> volumeShadowValid{false};
     std::atomic<uint32_t> volumeShadowLevel{0xffffffffu};
+    // Exact volume regions marked by the engine while a CPU LockBox is open.
+    // The Switch model-lighting atlas uses these to upload changed patches only.
+    std::vector<_D3DBOX> lockDirtyBoxes;
     bool lockShadowActive=false;
     bool lockIsVolume=false;
     bool lockWasUndefined=false;
