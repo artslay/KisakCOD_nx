@@ -89,7 +89,9 @@ static bool Switch_SentientLinksValid(const sentient_s *self)
     if (self->ent->sentient != self || (!self->ent->actor && !self->ent->client))
         return false;
 
-    if (self->ent->actor && !Switch_SentientActorPointerValid(self->ent->actor))
+    if (self->ent->actor
+        && (!Switch_SentientActorPointerValid(self->ent->actor)
+            || self->ent->actor->sentient != self || self->ent->actor->ent != self->ent))
         return false;
 
     return true;
