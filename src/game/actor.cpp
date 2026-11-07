@@ -2715,8 +2715,7 @@ void __cdecl Actor_Free(actor_s *actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 404, 0, "%s", "actor");
     actors = level.actors;
 #ifdef __SWITCH__
-    uint32_t actorIndex;
-    if (!Switch_ActorPointerToIndex(actor, &actorIndex))
+    if (!Switch_ActorPointerToIndex(actor, nullptr))
     {
         Com_Error(ERR_DROP, "Actor_Free: actor pointer is outside level.actors");
         return;
