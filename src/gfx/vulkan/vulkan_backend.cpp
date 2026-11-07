@@ -4027,7 +4027,8 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
 bool VulkanBackend::DownloadImage2D(
     VkImage image, VkImageAspectFlags aspect,
     uint32_t width, uint32_t height, uint32_t mipLevel,
-    void *data, size_t bytes, VkImageLayout oldLayout, uint32_t baseArrayLayer)
+    void *data, size_t bytes, VkImageLayout oldLayout, uint32_t baseArrayLayer,
+    bool recordInActiveFrame, FrameSyncReason waitReason)
 {
     if (!image || !data || !bytes || !width || !height ||
         oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
@@ -4039,13 +4040,14 @@ bool VulkanBackend::DownloadImage2D(
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             &staging, &stagingMemory, &mapped))
         return false;
+
     VkImageSubresourceRange range{};
     range.aspectMask = aspect;
     range.baseMipLevel = mipLevel;
     range.levelCount = 1;
     range.baseArrayLayer = baseArrayLayer;
     range.layerCount = 1;
-    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    const auto recordDownload = [&](VkCommandBuffer command)
     {
         TransitionImage(image, oldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                         aspect, range, command);
@@ -4059,7 +4061,23 @@ bool VulkanBackend::DownloadImage2D(
                                staging, 1, &copy);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         aspect, range, command);
-    }, ImmediateSubmitReason::ImageDownload2D);
+    };
+
+    bool submitted = false;
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    {
+        // Record the readback behind all earlier draws in this same queue
+        // submission. One frame split then retires those draws and makes the
+        // host-visible staging bytes safe to read.
+        EndRendering();
+        recordDownload(m_commandBuffer);
+        submitted = SynchronizeActiveFrame(waitReason);
+    }
+    else
+    {
+        submitted = ImmediateSubmit(
+            recordDownload, ImmediateSubmitReason::ImageDownload2D);
+    }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/download2d_submit_return";
 #endif
@@ -4083,23 +4101,14 @@ bool VulkanBackend::DownloadImage2D(
 bool VulkanBackend::UploadImage3D(
     VkImage image, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    const void *data, size_t bytes, VkImageLayout oldLayout, VkOffset3D imageOffset)
+    const void *data, size_t bytes, VkImageLayout oldLayout, VkOffset3D imageOffset,
+    bool recordInActiveFrame)
 {
     if (!image || !data || !bytes)
         return false;
 
-    VkBuffer staging = VK_NULL_HANDLE;
-    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    void *mapped = nullptr;
-    if (!CreateBuffer(
-            bytes,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &staging, &stagingMemory, &mapped))
-        return false;
-    std::memcpy(mapped, data, bytes);
-
-    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    const auto recordUpload = [&](
+        VkCommandBuffer command, VkBuffer uploadBuffer, VkDeviceSize uploadOffset)
     {
         VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         VkAccessFlags sourceAccess =
@@ -4154,15 +4163,18 @@ bool VulkanBackend::UploadImage3D(
         barrier.subresourceRange.layerCount = 1;
         vkCmdPipelineBarrier(
             command, sourceStage, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,0,nullptr,0,nullptr,1,&barrier);
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
 
         VkBufferImageCopy copy{};
+        copy.bufferOffset = uploadOffset;
         copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copy.imageSubresource.mipLevel = mipLevel;
         copy.imageSubresource.layerCount = 1;
         copy.imageOffset = imageOffset;
         copy.imageExtent = {width, height, depth};
-        vkCmdCopyBufferToImage(command, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        vkCmdCopyBufferToImage(
+            command, uploadBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copy);
 
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -4171,8 +4183,54 @@ bool VulkanBackend::UploadImage3D(
         vkCmdPipelineBarrier(
             command, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,0,nullptr,0,nullptr,1,&barrier);
-    }, ImmediateSubmitReason::ImageUpload3D);
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+    };
+
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    {
+        VkDescriptorBufferInfo uploadSource{};
+        if (AllocateUniform(data, bytes, &uploadSource))
+        {
+            EndRendering();
+            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/upload/image3d_recorded_in_frame";
+#endif
+            (void)format;
+            return true;
+        }
+
+        // If the ring is full, retire the current frame before recycling its
+        // staging bytes. If the upload itself is larger than the ring, use the
+        // standalone staging path after that one required split.
+        if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
+            return false;
+        if (AllocateUniform(data, bytes, &uploadSource))
+        {
+            EndRendering();
+            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/upload/image3d_recorded_in_frame";
+#endif
+            (void)format;
+            return true;
+        }
+    }
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    void *mapped = nullptr;
+    if (!CreateBuffer(
+            bytes,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &staging, &stagingMemory, &mapped))
+        return false;
+    std::memcpy(mapped, data, bytes);
+
+    const bool submitted = ImmediateSubmit(
+        [&](VkCommandBuffer command) { recordUpload(command, staging, 0); },
+        ImmediateSubmitReason::ImageUpload3D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/image3d_submit_return";
@@ -4187,7 +4245,8 @@ bool VulkanBackend::UploadImage3D(
 
 bool VulkanBackend::DownloadImage3D(
     VkImage image, uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    void *data, size_t bytes, VkImageLayout oldLayout)
+    void *data, size_t bytes, VkImageLayout oldLayout,
+    bool recordInActiveFrame, FrameSyncReason waitReason)
 {
     if (!image || !data || !bytes || !width || !height || !depth ||
         oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
@@ -4199,13 +4258,14 @@ bool VulkanBackend::DownloadImage3D(
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             &staging, &stagingMemory, &mapped))
         return false;
+
     VkImageSubresourceRange range{};
     range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     range.baseMipLevel = mipLevel;
     range.levelCount = 1;
     range.baseArrayLayer = 0;
     range.layerCount = 1;
-    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    const auto recordDownload = [&](VkCommandBuffer command)
     {
         TransitionImage(image, oldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                         VK_IMAGE_ASPECT_COLOR_BIT, range, command);
@@ -4218,7 +4278,20 @@ bool VulkanBackend::DownloadImage3D(
                                staging, 1, &copy);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         VK_IMAGE_ASPECT_COLOR_BIT, range, command);
-    }, ImmediateSubmitReason::ImageDownload3D);
+    };
+
+    bool submitted = false;
+    if (recordInActiveFrame && m_frameActive && m_commandBuffer)
+    {
+        EndRendering();
+        recordDownload(m_commandBuffer);
+        submitted = SynchronizeActiveFrame(waitReason);
+    }
+    else
+    {
+        submitted = ImmediateSubmit(
+            recordDownload, ImmediateSubmitReason::ImageDownload3D);
+    }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/download3d_submit_return";
 #endif
