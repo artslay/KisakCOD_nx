@@ -6034,6 +6034,13 @@ HRESULT KisakVkTexture::LockRect(
     if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
+    if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+        !(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        if (!backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureLockRect))
+            return E_FAIL;
+    }
     lockShadow.resize(TextureLevelSize(sourceFormat, w, h));
     if (lockShadow.empty())
         return E_FAIL;
@@ -6082,6 +6089,10 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_upload";
 #endif
         if (!backend || info.format == VK_FORMAT_UNDEFINED)
+            return E_FAIL;
+        if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+            !backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureUnlockRect))
             return E_FAIL;
         const uint32_t w = std::max(1u, width >> level);
         const uint32_t h = std::max(1u, height >> level);
@@ -6172,6 +6183,13 @@ HRESULT KisakVkTexture::LockBox(
     if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
+    if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+        !(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        if (!backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureLockBox))
+            return E_FAIL;
+    }
     lockDirtyBoxes.clear();
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
     const size_t volumeBytes = slice * d;
@@ -6265,6 +6283,10 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 #endif
         if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
             return E_FAIL;
+        if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+            !backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureUnlockBox))
+            return E_FAIL;
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
         const bool modelLightingPatchUpload =
@@ -6274,7 +6296,18 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             !lockDirtyBoxes.empty() &&
             sourceFormat == D3DFMT_A8R8G8B8;
 
-        if (modelLightingPatchUpload)
+        const bool modelLightingNoChanges =
+            std::strcmp(debugName, "$model_lighting") == 0 &&
+            level == 0 && !lockWasUndefined &&
+            !(lockFlags & D3DLOCK_DISCARD) &&
+            lockDirtyBoxes.empty();
+
+        if (modelLightingNoChanges)
+        {
+            // No model-lighting patch touched this volume in this frame.
+            // Keep the existing GPU image and persistent CPU mirror as-is.
+        }
+        else if (modelLightingPatchUpload)
         {
             // Coalesce adjacent atlas tiles so a row/column of changed model
             // lighting samples becomes one buffer-to-image copy, not one copy
