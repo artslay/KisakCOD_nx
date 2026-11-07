@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 
 #include <qcommon/qcommon.h>
 
@@ -74,7 +75,13 @@ struct DynEntityClient // sizeof=0xC on 32-bit, 0x10 on Switch
     uint16_t lightingHandle;
     int32_t health;
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(DynEntityClient) == 0x10);
+static_assert(offsetof(DynEntityClient, physObjId) == 0);
+static_assert(offsetof(DynEntityClient, flags) == 8);
+static_assert(offsetof(DynEntityClient, lightingHandle) == 10);
+static_assert(offsetof(DynEntityClient, health) == 12);
+#else
 static_assert(sizeof(DynEntityClient) == 0xC);
 #endif
 
