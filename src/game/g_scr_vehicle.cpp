@@ -5593,6 +5593,13 @@ void Scr_Vehicle_Init(gentity_s *pSelf)
     //float v22; // [sp+64h] [-6Ch]
     //float v23; // [sp+68h] [-68h]
 
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(pSelf) || !pSelf->scr_vehicle)
+    {
+        Com_Error(ERR_DROP, "Scr_Vehicle_Init: invalid entity or vehicle record");
+        return;
+    }
+#endif
     veh = pSelf->scr_vehicle;
     info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     type = info->type;
