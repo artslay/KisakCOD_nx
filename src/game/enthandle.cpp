@@ -196,8 +196,10 @@ void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoI
             MyAssertHandler(".\\game\\enthandle.cpp", 196, 0, "%s", "g_usedEntHandle");
 #endif
         info->handle = 0;
+#ifndef __SWITCH__
         if (!g_usedEntHandle)
             MyAssertHandler(".\\game\\enthandle.cpp", 196, 0, "%s", "g_usedEntHandle");
+#endif
         --g_usedEntHandle;
         prev = &g_entHandleInfoArray[info->prev];
         g_entHandleInfoArray[info->next].prev = info->prev;
