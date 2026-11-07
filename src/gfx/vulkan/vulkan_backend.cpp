@@ -105,6 +105,8 @@ struct SwitchFrameTimingStats
     SwitchFrameTimingCounter frameSlotFenceWait;
     SwitchFrameTimingCounter acquireImage;
     SwitchFrameTimingCounter activeFrameSync;
+    std::array<SwitchFrameTimingCounter,
+        static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> activeFrameSyncByReason;
     SwitchFrameTimingCounter queueSubmit;
     SwitchFrameTimingCounter queuePresent;
     SwitchFrameTimingCounter immediateWait;
@@ -141,6 +143,12 @@ void Switch_RecordFrameCpuEnd()
     uint64_t slotCalls = 0, slotNs = 0, slotMaxNs = 0;
     uint64_t acquireCalls = 0, acquireNs = 0, acquireMaxNs = 0;
     uint64_t syncCalls = 0, syncNs = 0, syncMaxNs = 0;
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> syncReasonCalls{};
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> syncReasonNs{};
+    std::array<uint64_t,
+        static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> syncReasonMaxNs{};
     uint64_t submitCalls = 0, submitNs = 0, submitMaxNs = 0;
     uint64_t presentCalls = 0, presentNs = 0, presentMaxNs = 0;
     uint64_t immediateCalls = 0, immediateNs = 0, immediateMaxNs = 0;
@@ -155,6 +163,11 @@ void Switch_RecordFrameCpuEnd()
         &acquireCalls, &acquireNs, &acquireMaxNs);
     g_switchFrameTimingStats.activeFrameSync.Reset(
         &syncCalls, &syncNs, &syncMaxNs);
+    for (size_t i = 0; i < g_switchFrameTimingStats.activeFrameSyncByReason.size(); ++i)
+    {
+        g_switchFrameTimingStats.activeFrameSyncByReason[i].Reset(
+            &syncReasonCalls[i], &syncReasonNs[i], &syncReasonMaxNs[i]);
+    }
     g_switchFrameTimingStats.queueSubmit.Reset(
         &submitCalls, &submitNs, &submitMaxNs);
     g_switchFrameTimingStats.queuePresent.Reset(
@@ -176,10 +189,10 @@ void Switch_RecordFrameCpuEnd()
         return static_cast<double>(maxNs) / 1000000.0;
     };
 
-    char message[1024];
+    char message[1536];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f upload_wait=%llu:%.2f/%.2f idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
@@ -189,6 +202,24 @@ void Switch_RecordFrameCpuEnd()
         averageMs(acquireNs, acquireCalls), maximumMs(acquireMaxNs),
         static_cast<unsigned long long>(syncCalls),
         averageMs(syncNs, syncCalls), maximumMs(syncMaxNs),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::StaticBufferLock)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::StaticBufferLock)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::StaticBufferLock)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockRect)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockRect)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockRect)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockRect)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockRect)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockRect)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockBox)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockBox)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureLockBox)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockBox)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockBox)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::TextureUnlockBox)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::MappedBufferWrite)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::MappedBufferWrite)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::MappedBufferWrite)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::UniformRingExhausted)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::UniformRingExhausted)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::UniformRingExhausted)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::DiagnosticReadback)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::DiagnosticReadback)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::DiagnosticReadback)]),
+        static_cast<unsigned long long>(syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::Generic)]),
+        averageMs(syncReasonNs[static_cast<size_t>(VulkanBackend::FrameSyncReason::Generic)], syncReasonCalls[static_cast<size_t>(VulkanBackend::FrameSyncReason::Generic)]),
         static_cast<unsigned long long>(immediateCalls),
         averageMs(immediateNs, immediateCalls), maximumMs(immediateMaxNs),
         static_cast<unsigned long long>(idleCalls),
@@ -2085,7 +2116,7 @@ bool VulkanBackend::BeginFrame()
 }
 
 
-bool VulkanBackend::SynchronizeActiveFrame()
+bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
 {
     if (!m_initialized || m_deviceLost)
         return false;
@@ -2160,7 +2191,11 @@ bool VulkanBackend::SynchronizeActiveFrame()
 
     const VkResult waitResult = vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
 #ifdef __SWITCH__
-    g_switchFrameTimingStats.activeFrameSync.Add(SwitchElapsedNs(syncStart));
+    const uint64_t syncElapsedNs = SwitchElapsedNs(syncStart);
+    g_switchFrameTimingStats.activeFrameSync.Add(syncElapsedNs);
+    const size_t reasonIndex = static_cast<size_t>(reason);
+    if (reasonIndex < g_switchFrameTimingStats.activeFrameSyncByReason.size())
+        g_switchFrameTimingStats.activeFrameSyncByReason[reasonIndex].Add(syncElapsedNs);
 #endif
     vkDestroyFence(m_device, fence, nullptr);
     if (waitResult != VK_SUCCESS)
