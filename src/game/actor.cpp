@@ -111,6 +111,16 @@ static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *
     return true;
 }
 
+static bool Switch_ActorTeamValid(team_t team, const char *function)
+{
+    if (team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
+    {
+        Com_Error(ERR_DROP, "%s: sentient team is out of range", function);
+        return false;
+    }
+    return true;
+}
+
 static bool Switch_EntityPointerValid(const gentity_s *ent)
 {
     if (!ent)
@@ -600,7 +610,7 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
     actor_s *actors; // r11
 
 #ifdef __SWITCH__
-    if (!level.actors || iTeamFlags < 0 || iTeamFlags > 31)
+    if (!level.actors || iTeamFlags > 31)
     {
         Com_Error(ERR_DROP, "Actor_FirstActor: invalid actor pool or team flags");
         return nullptr;
@@ -628,7 +638,7 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
             }
 #ifdef __SWITCH__
             if (!Switch_SentientPointerToIndex(actors[v3].sentient, nullptr)
-                || !Switch_SentientTeamValid(actors[v3].sentient->eTeam, "Actor_FirstActor"))
+                || !Switch_ActorTeamValid(actors[v3].sentient->eTeam, "Actor_FirstActor"))
             {
                 Com_Error(ERR_DROP, "Actor_FirstActor: active actor has invalid sentient or team");
                 return nullptr;
@@ -656,7 +666,7 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     int v6; // r31
 
 #ifdef __SWITCH__
-    if (iTeamFlags < 0 || iTeamFlags > 31)
+    if (iTeamFlags > 31)
     {
         Com_Error(ERR_DROP, "Actor_NextActor: team flags are out of range");
         return nullptr;
@@ -718,7 +728,7 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
             }
 #ifdef __SWITCH__
             if (!Switch_SentientPointerToIndex(actors[v6].sentient, nullptr)
-                || !Switch_SentientTeamValid(actors[v6].sentient->eTeam, "Actor_NextActor"))
+                || !Switch_ActorTeamValid(actors[v6].sentient->eTeam, "Actor_NextActor"))
             {
                 Com_Error(ERR_DROP, "Actor_NextActor: active actor has invalid sentient or team");
                 return nullptr;
@@ -3649,8 +3659,8 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     if (!Switch_ActorHasValidSpecies(self, "Actor_UpdatePlayerPush")
         || !Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
         return;
-    if (!Switch_SentientTeamValid(self->sentient->eTeam, "Actor_UpdatePlayerPush")
-        || !Switch_SentientTeamValid(player->sentient->eTeam, "Actor_UpdatePlayerPush"))
+    if (!Switch_ActorTeamValid(self->sentient->eTeam, "Actor_UpdatePlayerPush")
+        || !Switch_ActorTeamValid(player->sentient->eTeam, "Actor_UpdatePlayerPush"))
         return;
 #else
     iassert(self);
