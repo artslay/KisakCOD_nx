@@ -3744,8 +3744,8 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
 
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
-    // No performance/profiling diagnostics belong in the runtime log.
-    // Match the marker case-insensitively so new PERF categories are filtered too.
+    // Keep the generic PERF/PROFILING categories out of the runtime log.
+    // Bounded Vulkan/scene timing summaries use separate explicit allowlists.
     return Switch_LogContainsInsensitive(msg, "perf");
 }
 
@@ -3864,7 +3864,8 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
-    // HUD/compass/subtitle and all performance diagnostics are disabled on Switch.
+    // HUD/compass/subtitle and generic performance traces stay disabled.
+    // Only the bounded frame/scene timing summaries below are explicitly allowed.
     if (!msg || !*msg || Switch_LogIsHudDiagnostic(msg) ||
         Switch_LogIsPerformanceDiagnostic(msg))
         return;
