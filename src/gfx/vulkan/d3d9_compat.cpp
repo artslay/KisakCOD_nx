@@ -6031,10 +6031,7 @@ HRESULT KisakVkTexture::LockRect(
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/resource_lock/texture_lock_rect_sync";
 #endif
-    if (!backend ||
-        (!(flags & D3DLOCK_DISCARD) &&
-         !backend->SynchronizeActiveFrame(
-             VulkanBackend::FrameSyncReason::TextureLockRect)))
+    if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     lockShadow.resize(TextureLevelSize(sourceFormat, w, h));
@@ -6042,8 +6039,10 @@ HRESULT KisakVkTexture::LockRect(
         return E_FAIL;
     if (!(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
     {
-        if (!backend->DownloadImage2D(image, info.aspect, w, h, level,
-                                      lockShadow.data(), lockShadow.size(), old))
+        if (!backend->DownloadImage2D(
+                image, info.aspect, w, h, level,
+                lockShadow.data(), lockShadow.size(), old, 0, true,
+                VulkanBackend::FrameSyncReason::TextureLockRect))
             return E_FAIL;
     }
     else
@@ -6082,9 +6081,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_sync";
 #endif
-        if (!backend || info.format == VK_FORMAT_UNDEFINED ||
-            !backend->SynchronizeActiveFrame(
-                VulkanBackend::FrameSyncReason::TextureUnlockRect))
+        if (!backend || info.format == VK_FORMAT_UNDEFINED)
             return E_FAIL;
         const uint32_t w = std::max(1u, width >> level);
         const uint32_t h = std::max(1u, height >> level);
@@ -6095,7 +6092,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
                 : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (!backend->UploadImage2D(image, format, info.aspect, w, h, level,
                     lockShadow.data(), lockShadow.size(), lockOriginalLayout,
-                    0, VkOffset3D{}, finalLayout))
+                    0, VkOffset3D{}, finalLayout, true))
                 return E_FAIL;
         }
         else
@@ -6118,7 +6115,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
             if (!backend->UploadImage2D(image, format, info.aspect, rw, rh, level,
                     packed.data(), packed.size(), lockOriginalLayout, 0,
                     VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),0},
-                    finalLayout))
+                    finalLayout, true))
                 return E_FAIL;
         }
         const VkImageLayout finalLayout = info.depth
@@ -6172,10 +6169,7 @@ HRESULT KisakVkTexture::LockBox(
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/resource_lock/texture_lock_box_sync";
 #endif
-    if (!backend ||
-        (!(flags & D3DLOCK_DISCARD) &&
-         !backend->SynchronizeActiveFrame(
-             VulkanBackend::FrameSyncReason::TextureLockBox)))
+    if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
@@ -6184,7 +6178,9 @@ HRESULT KisakVkTexture::LockBox(
         return E_FAIL;
     if (!(flags&D3DLOCK_DISCARD) && old!=VK_IMAGE_LAYOUT_UNDEFINED)
     {
-        if (!backend->DownloadImage3D(image,w,h,d,level,lockShadow.data(),lockShadow.size(),old))
+        if (!backend->DownloadImage3D(
+                image, w, h, d, level, lockShadow.data(), lockShadow.size(),
+                old, true, VulkanBackend::FrameSyncReason::TextureLockBox))
             return E_FAIL;
     }
     else
@@ -6221,16 +6217,15 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/resource_lock/texture_unlock_box_sync";
 #endif
-        if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth ||
-            !backend->SynchronizeActiveFrame(
-                VulkanBackend::FrameSyncReason::TextureUnlockBox))
+        if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
             return E_FAIL;
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
         if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
         {
             if (!backend->UploadImage3D(image,format,w,h,d,level,
-                    lockShadow.data(),lockShadow.size(),lockOriginalLayout))
+                    lockShadow.data(), lockShadow.size(), lockOriginalLayout,
+                    VkOffset3D{}, true))
                 return E_FAIL;
         }
         else
@@ -6256,9 +6251,9 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
                     std::memcpy(packed.data()+dst,lockShadow.data()+src,pitch);
                 }
             if (!backend->UploadImage3D(image,format,rw,rh,rd,level,
-                    packed.data(),packed.size(),lockOriginalLayout,
+                    packed.data(), packed.size(), lockOriginalLayout,
                     VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),
-                               static_cast<int32_t>(lockFront)}))
+                               static_cast<int32_t>(lockFront)}, true))
                 return E_FAIL;
         }
         SetSubresourceLayout(level,0,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
