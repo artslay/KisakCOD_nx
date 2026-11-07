@@ -107,6 +107,8 @@ struct SwitchFrameTimingStats
     SwitchFrameTimingCounter activeFrameSync;
     SwitchFrameTimingCounter queueSubmit;
     SwitchFrameTimingCounter queuePresent;
+    SwitchFrameTimingCounter immediateWait;
+    SwitchFrameTimingCounter queueIdle;
     SwitchFrameTimingCounter frameCpu;
 };
 
@@ -141,6 +143,8 @@ void Switch_RecordFrameCpuEnd()
     uint64_t syncCalls = 0, syncNs = 0, syncMaxNs = 0;
     uint64_t submitCalls = 0, submitNs = 0, submitMaxNs = 0;
     uint64_t presentCalls = 0, presentNs = 0, presentMaxNs = 0;
+    uint64_t immediateCalls = 0, immediateNs = 0, immediateMaxNs = 0;
+    uint64_t idleCalls = 0, idleNs = 0, idleMaxNs = 0;
     uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
 
     g_switchFrameTimingStats.frontendFenceWait.Reset(
@@ -155,6 +159,10 @@ void Switch_RecordFrameCpuEnd()
         &submitCalls, &submitNs, &submitMaxNs);
     g_switchFrameTimingStats.queuePresent.Reset(
         &presentCalls, &presentNs, &presentMaxNs);
+    g_switchFrameTimingStats.immediateWait.Reset(
+        &immediateCalls, &immediateNs, &immediateMaxNs);
+    g_switchFrameTimingStats.queueIdle.Reset(
+        &idleCalls, &idleNs, &idleMaxNs);
     g_switchFrameTimingStats.frameCpu.Reset(
         &cpuCalls, &cpuNs, &cpuMaxNs);
 
@@ -171,7 +179,7 @@ void Switch_RecordFrameCpuEnd()
     char message[1024];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f upload_wait=%llu:%.2f/%.2f idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
@@ -181,6 +189,10 @@ void Switch_RecordFrameCpuEnd()
         averageMs(acquireNs, acquireCalls), maximumMs(acquireMaxNs),
         static_cast<unsigned long long>(syncCalls),
         averageMs(syncNs, syncCalls), maximumMs(syncMaxNs),
+        static_cast<unsigned long long>(immediateCalls),
+        averageMs(immediateNs, immediateCalls), maximumMs(immediateMaxNs),
+        static_cast<unsigned long long>(idleCalls),
+        averageMs(idleNs, idleCalls), maximumMs(idleMaxNs),
         static_cast<unsigned long long>(submitCalls),
         averageMs(submitNs, submitCalls), maximumMs(submitMaxNs),
         static_cast<unsigned long long>(presentCalls),
@@ -2063,18 +2075,6 @@ bool VulkanBackend::BeginFrame()
             DepthAspect(m_depthFormat));
     m_defaultDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-#ifdef __SWITCH__
-    char frameTrace[192];
-    std::snprintf(
-        frameTrace, sizeof(frameTrace),
-        "[KisakCOD][VK FRAME SLOT] begin slot=%u serial=%llu completed=%llu swapImage=%u\n",
-        slotIndex,
-        static_cast<unsigned long long>(FrameSerial()),
-        static_cast<unsigned long long>(
-            m_completedFrameSerial.load(std::memory_order_relaxed)),
-        m_swapchainIndex);
-    Switch_LogWrite(frameTrace);
-#endif
     return true;
 }
 
@@ -2787,7 +2787,13 @@ void VulkanBackend::WaitForGpu()
     if (m_device && m_graphicsQueue && !m_deviceLost)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        const auto idleStart = SwitchFrameClock::now();
+#endif
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueIdle.Add(SwitchElapsedNs(idleStart));
+#endif
         if (result != VK_SUCCESS)
             SetError("vkQueueWaitIdle failed while waiting for GPU", result);
     }
@@ -2798,7 +2804,13 @@ void VulkanBackend::Flush()
     if (m_device && m_graphicsQueue && !m_deviceLost)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        const auto idleStart = SwitchFrameClock::now();
+#endif
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueIdle.Add(SwitchElapsedNs(idleStart));
+#endif
         if (result != VK_SUCCESS)
             SetError("vkQueueWaitIdle failed while flushing GPU", result);
     }
@@ -3518,9 +3530,14 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
 #ifdef __SWITCH__
                     g_switchFrameStage = "frame/upload/immediate_wait_fence";
 #endif
+#ifdef __SWITCH__
+                    const auto immediateWaitStart = SwitchFrameClock::now();
+#endif
                     const VkResult waitResult =
                         vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
 #ifdef __SWITCH__
+                    g_switchFrameTimingStats.immediateWait.Add(
+                        SwitchElapsedNs(immediateWaitStart));
                     g_switchFrameStage = "frame/upload/immediate_wait_fence_return";
 #endif
                     if (waitResult == VK_SUCCESS)
