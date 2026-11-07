@@ -44,9 +44,22 @@ public:
     bool IsDeviceLost() const override;
     bool BeginFrame();
     bool EndFrame();
+    enum class FrameSyncReason : uint8_t
+    {
+        Generic,
+        StaticBufferLock,
+        TextureLockRect,
+        TextureUnlockRect,
+        TextureLockBox,
+        TextureUnlockBox,
+        MappedBufferWrite,
+        UniformRingExhausted,
+        DiagnosticReadback,
+        Count
+    };
     // End and submit commands recorded so far, wait for completion, then resume
     // recording in the same acquired swapchain frame. Used by synchronous resource locks.
-    bool SynchronizeActiveFrame();
+    bool SynchronizeActiveFrame(FrameSyncReason reason = FrameSyncReason::Generic);
     void Present() override;
     void BeginScene() override;
     void EndScene() override;
