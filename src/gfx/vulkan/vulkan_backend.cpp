@@ -4029,6 +4029,98 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
         }
     }
 
+    const auto recordBatch = [&](
+        VkCommandBuffer command, VkBuffer sourceBuffer, VkDeviceSize sourceOffset)
+    {
+        VkBufferMemoryBarrier stagingSourceBarrier{};
+        stagingSourceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        stagingSourceBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        stagingSourceBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        stagingSourceBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        stagingSourceBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        stagingSourceBarrier.buffer = sourceBuffer;
+        stagingSourceBarrier.offset = sourceOffset;
+        stagingSourceBarrier.size = stagingSize;
+        vkCmdPipelineBarrier(
+            command,
+            VK_PIPELINE_STAGE_HOST_BIT | sourceStages,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &stagingSourceBarrier, 0, nullptr,
+            count, toTransfer.data());
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const VulkanImageUpload2D &upload = uploads[i];
+            VkBufferImageCopy copy{};
+            copy.bufferOffset = sourceOffset + offsets[i];
+            copy.imageSubresource.aspectMask = upload.aspect;
+            copy.imageSubresource.mipLevel = upload.mipLevel;
+            copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageOffset = upload.imageOffset;
+            copy.imageExtent = {upload.width, upload.height, 1};
+            vkCmdCopyBufferToImage(
+                command,
+                sourceBuffer,
+                upload.image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &copy);
+        }
+
+        vkCmdPipelineBarrier(
+            command,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            finalStages,
+            0, 0, nullptr, 0, nullptr,
+            count, toFinal.data());
+    };
+
+    // Bink publishes decoded planes to this render-thread function. When the
+    // caller owns the current frame, stage the whole plane set in its uniform
+    // transfer ring and record the three/four image copies in the current
+    // command buffer. This removes the per-video-frame ImmediateSubmit fence.
+    if (m_frameActive && m_commandBuffer && IsFrameRecordingThread() &&
+        stagingSize <= static_cast<VkDeviceSize>(
+            std::numeric_limits<size_t>::max()))
+    {
+        std::vector<uint8_t> packedData(static_cast<size_t>(stagingSize));
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            std::memcpy(
+                packedData.data() + static_cast<size_t>(offsets[i]),
+                uploads[i].data,
+                uploads[i].bytes);
+        }
+
+        VkDescriptorBufferInfo uploadSource{};
+        if (!AllocateUniform(packedData.data(), packedData.size(), &uploadSource))
+        {
+            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
+                return false;
+            if (AllocateUniform(packedData.data(), packedData.size(), &uploadSource))
+            {
+                EndRendering();
+                recordBatch(
+                    m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/upload/images2d_recorded_in_frame";
+#endif
+                return true;
+            }
+        }
+        else
+        {
+            EndRendering();
+            recordBatch(
+                m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/upload/images2d_recorded_in_frame";
+#endif
+            return true;
+        }
+    }
+
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     void *mapped = nullptr;
@@ -4049,42 +4141,9 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             uploads[i].bytes);
     }
 
-    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
-    {
-        vkCmdPipelineBarrier(
-            command,
-            sourceStages,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr,
-            count, toTransfer.data());
-
-        for (uint32_t i = 0; i < count; ++i)
-        {
-            const VulkanImageUpload2D &upload = uploads[i];
-            VkBufferImageCopy copy{};
-            copy.bufferOffset = offsets[i];
-            copy.imageSubresource.aspectMask = upload.aspect;
-            copy.imageSubresource.mipLevel = upload.mipLevel;
-            copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
-            copy.imageSubresource.layerCount = 1;
-            copy.imageOffset = upload.imageOffset;
-            copy.imageExtent = {upload.width, upload.height, 1};
-            vkCmdCopyBufferToImage(
-                command,
-                staging,
-                upload.image,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copy);
-        }
-
-        vkCmdPipelineBarrier(
-            command,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            finalStages,
-            0, 0, nullptr, 0, nullptr,
-            count, toFinal.data());
-    }, ImmediateSubmitReason::ImageUploadBatch2D);
+    const bool submitted = ImmediateSubmit(
+        [&](VkCommandBuffer command) { recordBatch(command, staging, 0); },
+        ImmediateSubmitReason::ImageUploadBatch2D);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/images2d_submit_return";
