@@ -113,7 +113,7 @@ static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *
 
 static bool Switch_ActorTeamValid(team_t team, const char *function)
 {
-    if (team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
+    if (team < 0 || team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
     {
         Com_Error(ERR_DROP, "%s: sentient team is out of range", function);
         return false;
@@ -1693,7 +1693,7 @@ int __cdecl Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, in
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || !Path_Exists(&self->Path) || !self->Path.wPathLen
+        || !self->Path.wPathLen
         || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts)
         || self->Path.lookaheadNextNode < 0
         || self->Path.lookaheadNextNode >= self->Path.wPathLen
@@ -2592,7 +2592,7 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || !Path_Exists(&self->Path) || self->Path.wPathLen <= 0
+        || self->Path.wPathLen <= 0
         || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
     {
         Com_Error(ERR_DROP, "Path_UpdateMovementDelta: invalid actor, entity, or path length");
