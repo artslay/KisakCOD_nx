@@ -9,6 +9,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <chrono>
 #include <cstdlib>
 #include <functional>
 #include <iterator>
@@ -66,6 +67,131 @@ extern std::atomic<uint32_t> g_switchLastDrawTextureLayout[4];
 namespace
 {
 std::atomic<VulkanBackend *> g_backend{nullptr};
+
+#ifdef __SWITCH__
+using SwitchFrameClock = std::chrono::steady_clock;
+
+struct SwitchFrameTimingCounter
+{
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> totalNs{0};
+    std::atomic<uint64_t> maxNs{0};
+
+    void Add(uint64_t elapsedNs)
+    {
+        calls.fetch_add(1, std::memory_order_relaxed);
+        totalNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+        uint64_t previousMax = maxNs.load(std::memory_order_relaxed);
+        while (previousMax < elapsedNs &&
+               !maxNs.compare_exchange_weak(
+                   previousMax, elapsedNs,
+                   std::memory_order_relaxed,
+                   std::memory_order_relaxed))
+        {
+        }
+    }
+
+    void Reset(uint64_t *outCalls, uint64_t *outTotalNs, uint64_t *outMaxNs)
+    {
+        *outCalls = calls.exchange(0, std::memory_order_acq_rel);
+        *outTotalNs = totalNs.exchange(0, std::memory_order_acq_rel);
+        *outMaxNs = maxNs.exchange(0, std::memory_order_acq_rel);
+    }
+};
+
+struct SwitchFrameTimingStats
+{
+    SwitchFrameTimingCounter frontendFenceWait;
+    SwitchFrameTimingCounter frameSlotFenceWait;
+    SwitchFrameTimingCounter acquireImage;
+    SwitchFrameTimingCounter activeFrameSync;
+    SwitchFrameTimingCounter queueSubmit;
+    SwitchFrameTimingCounter queuePresent;
+    SwitchFrameTimingCounter frameCpu;
+};
+
+SwitchFrameTimingStats g_switchFrameTimingStats;
+thread_local SwitchFrameClock::time_point g_switchFrameCpuStart;
+thread_local bool g_switchFrameCpuStartValid = false;
+
+uint64_t SwitchElapsedNs(SwitchFrameClock::time_point start)
+{
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            SwitchFrameClock::now() - start).count());
+}
+
+void Switch_RecordFrameCpuEnd()
+{
+    if (g_switchFrameCpuStartValid)
+    {
+        g_switchFrameTimingStats.frameCpu.Add(
+            SwitchElapsedNs(g_switchFrameCpuStart));
+        g_switchFrameCpuStartValid = false;
+    }
+
+    static uint32_t completedFrames = 0;
+    if (++completedFrames < 60)
+        return;
+    completedFrames = 0;
+
+    uint64_t fenceCalls = 0, fenceNs = 0, fenceMaxNs = 0;
+    uint64_t slotCalls = 0, slotNs = 0, slotMaxNs = 0;
+    uint64_t acquireCalls = 0, acquireNs = 0, acquireMaxNs = 0;
+    uint64_t syncCalls = 0, syncNs = 0, syncMaxNs = 0;
+    uint64_t submitCalls = 0, submitNs = 0, submitMaxNs = 0;
+    uint64_t presentCalls = 0, presentNs = 0, presentMaxNs = 0;
+    uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
+
+    g_switchFrameTimingStats.frontendFenceWait.Reset(
+        &fenceCalls, &fenceNs, &fenceMaxNs);
+    g_switchFrameTimingStats.frameSlotFenceWait.Reset(
+        &slotCalls, &slotNs, &slotMaxNs);
+    g_switchFrameTimingStats.acquireImage.Reset(
+        &acquireCalls, &acquireNs, &acquireMaxNs);
+    g_switchFrameTimingStats.activeFrameSync.Reset(
+        &syncCalls, &syncNs, &syncMaxNs);
+    g_switchFrameTimingStats.queueSubmit.Reset(
+        &submitCalls, &submitNs, &submitMaxNs);
+    g_switchFrameTimingStats.queuePresent.Reset(
+        &presentCalls, &presentNs, &presentMaxNs);
+    g_switchFrameTimingStats.frameCpu.Reset(
+        &cpuCalls, &cpuNs, &cpuMaxNs);
+
+    auto averageMs = [](uint64_t totalNs, uint64_t calls) -> double
+    {
+        return calls ? static_cast<double>(totalNs) /
+            static_cast<double>(calls) / 1000000.0 : 0.0;
+    };
+    auto maximumMs = [](uint64_t maxNs) -> double
+    {
+        return static_cast<double>(maxNs) / 1000000.0;
+    };
+
+    char message[1024];
+    const char *presentName =
+        m_backend.load(std::memory_order_acquire) != nullptr
+            ? "active" : "none";
+    (void)presentName;
+    std::snprintf(
+        message, sizeof(message),
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
+        static_cast<unsigned long long>(slotCalls),
+        averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
+        static_cast<unsigned long long>(fenceCalls),
+        averageMs(fenceNs, fenceCalls), maximumMs(fenceMaxNs),
+        static_cast<unsigned long long>(acquireCalls),
+        averageMs(acquireNs, acquireCalls), maximumMs(acquireMaxNs),
+        static_cast<unsigned long long>(syncCalls),
+        averageMs(syncNs, syncCalls), maximumMs(syncMaxNs),
+        static_cast<unsigned long long>(submitCalls),
+        averageMs(submitNs, submitCalls), maximumMs(submitMaxNs),
+        static_cast<unsigned long long>(presentCalls),
+        averageMs(presentNs, presentCalls), maximumMs(presentMaxNs));
+    Switch_LogWrite(message);
+}
+#endif
 
 bool HasExtension(const std::vector<VkExtensionProperties> &extensions, const char *name)
 {
@@ -1775,6 +1901,9 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 
     // The lock also protects the backend/device lifetime while Shutdown
     // replaces and destroys per-frame synchronization objects.
+#ifdef __SWITCH__
+    const auto waitStart = SwitchFrameClock::now();
+#endif
     std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
     if (!m_device || !m_initialized || m_deviceLost)
         return true;
@@ -1787,6 +1916,9 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 
     const VkResult waitResult =
         vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+#ifdef __SWITCH__
+    g_switchFrameTimingStats.frontendFenceWait.Add(SwitchElapsedNs(waitStart));
+#endif
     if (waitResult != VK_SUCCESS)
     {
         SetError("vkWaitForFences failed while reusing a frontend resource pool", waitResult);
@@ -1802,6 +1934,10 @@ bool VulkanBackend::BeginFrame()
     if (m_frameActive)
         return true;
 
+#ifdef __SWITCH__
+    g_switchFrameCpuStart = SwitchFrameClock::now();
+    g_switchFrameCpuStartValid = true;
+#endif
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
@@ -1822,10 +1958,17 @@ bool VulkanBackend::BeginFrame()
     const uint32_t slotIndex = m_nextFrameSlot;
     FrameSync &frame = m_frameSync[slotIndex];
     VkResult waitResult;
+#ifdef __SWITCH__
+    const auto slotWaitStart = SwitchFrameClock::now();
+#endif
     {
         std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
         waitResult = vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
     }
+#ifdef __SWITCH__
+    g_switchFrameTimingStats.frameSlotFenceWait.Add(
+        SwitchElapsedNs(slotWaitStart));
+#endif
     if (waitResult != VK_SUCCESS)
     {
         SetError("vkWaitForFences failed for frame slot", waitResult);
@@ -1863,6 +2006,9 @@ bool VulkanBackend::BeginFrame()
         return false;
     }
 
+#ifdef __SWITCH__
+    const auto acquireStart = SwitchFrameClock::now();
+#endif
     VkResult result = vkAcquireNextImageKHR(
         m_device,
         m_swapchain,
@@ -1870,6 +2016,9 @@ bool VulkanBackend::BeginFrame()
         frame.imageAvailable,
         VK_NULL_HANDLE,
         &m_swapchainIndex);
+#ifdef __SWITCH__
+    g_switchFrameTimingStats.acquireImage.Add(SwitchElapsedNs(acquireStart));
+#endif
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
@@ -1942,6 +2091,9 @@ bool VulkanBackend::SynchronizeActiveFrame()
         return true;
     if (!m_commandBuffer || !m_commandPool || !m_graphicsQueue)
         return false;
+#ifdef __SWITCH__
+    const auto syncStart = SwitchFrameClock::now();
+#endif
 
     EndRendering();
 
@@ -2005,6 +2157,9 @@ bool VulkanBackend::SynchronizeActiveFrame()
     m_imageAvailablePending = false;
 
     const VkResult waitResult = vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+#ifdef __SWITCH__
+    g_switchFrameTimingStats.activeFrameSync.Add(SwitchElapsedNs(syncStart));
+#endif
     vkDestroyFence(m_device, fence, nullptr);
     if (waitResult != VK_SUCCESS)
     {
@@ -2249,9 +2404,12 @@ bool VulkanBackend::EndFrame()
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/present/queue_submit";
+            const auto submitStart = SwitchFrameClock::now();
 #endif
             submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, frame.fence);
 #ifdef __SWITCH__
+            g_switchFrameTimingStats.queueSubmit.Add(
+                SwitchElapsedNs(submitStart));
             g_switchFrameStage = "frame/present/queue_submit_return";
 #endif
         }
@@ -2317,8 +2475,13 @@ bool VulkanBackend::EndFrame()
         g_switchFrameStage = "frame/present/queue_present";
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        const auto presentStart = SwitchFrameClock::now();
+#endif
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
 #ifdef __SWITCH__
+        g_switchFrameTimingStats.queuePresent.Add(
+            SwitchElapsedNs(presentStart));
         g_switchFrameStage = "frame/present/queue_present_return";
 #endif
     }
@@ -2333,6 +2496,7 @@ bool VulkanBackend::EndFrame()
     {
         m_frameActive = false;
 #ifdef __SWITCH__
+        Switch_RecordFrameCpuEnd();
         Switch_SaltyNxFramePresented(
             m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,
             m_presentSourceImage && m_presentSourceHeight ? m_presentSourceHeight : m_height);
@@ -2348,6 +2512,7 @@ bool VulkanBackend::EndFrame()
 
     m_frameActive = false;
 #ifdef __SWITCH__
+    Switch_RecordFrameCpuEnd();
     Switch_SaltyNxFramePresented(
         m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,
         m_presentSourceImage && m_presentSourceHeight ? m_presentSourceHeight : m_height);
