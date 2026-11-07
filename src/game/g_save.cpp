@@ -637,6 +637,39 @@ static void WriteSavePointerSlot(void *slot, uintptr_t value)
     memcpy(slot, &value, sizeof(value));
 }
 
+#ifdef __SWITCH__
+template <typename T>
+static bool Switch_SavePointerToIndex(
+    const T *pointer,
+    const T *base,
+    size_t count,
+    uintptr_t &oneBasedIndex)
+{
+    oneBasedIndex = 0;
+    if (!pointer)
+        return true;
+    if (!base || count == 0 || count > UINTPTR_MAX / sizeof(T))
+        return false;
+
+    const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(base);
+    const uintptr_t pointerAddress = reinterpret_cast<uintptr_t>(pointer);
+    const uintptr_t arrayBytes =
+        static_cast<uintptr_t>(count) * sizeof(T);
+
+    if (baseAddress > UINTPTR_MAX - arrayBytes ||
+        pointerAddress < baseAddress ||
+        pointerAddress - baseAddress >= arrayBytes)
+        return false;
+
+    const uintptr_t byteOffset = pointerAddress - baseAddress;
+    if (byteOffset % sizeof(T) != 0)
+        return false;
+
+    oneBasedIndex = byteOffset / sizeof(T) + 1u;
+    return true;
+}
+#endif
+
 void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, unsigned __int8 *original)
 {
     EntHandle *v3; // r28
@@ -669,6 +702,19 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_ENTITY:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *entity = reinterpret_cast<const gentity_s *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(
+                    entity, g_entities, MAX_GENTITIES, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: entity pointer outside g_entities (%p)",
+                    static_cast<const void *>(entity));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v4 = static_cast<unsigned int>(
                 *reinterpret_cast<gentity_s * const *>(v3) - g_entities + 1);
             if (v4 > MAX_GENTITIES)
@@ -676,8 +722,8 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 Com_Error(ERR_DROP, "WriteField1: entity out of range (%i)", v4);
                 return;
             }
-
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v4);
+#endif
         }
         else
         {
@@ -706,6 +752,18 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_CLIENT:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *client = reinterpret_cast<const gclient_s *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(client, level.clients, 1u, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: client pointer outside level.clients (%p)",
+                    static_cast<const void *>(client));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v7 = static_cast<unsigned int>(
                 *reinterpret_cast<gclient_s * const *>(v3) - level.clients + 1);
             if (v7 >= 2)
@@ -714,6 +772,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 return;
             }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v7);
+#endif
         }
         else
         {
@@ -723,6 +782,18 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_ACTOR:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *actor = reinterpret_cast<const actor_s *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(actor, level.actors, MAX_ACTORS, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: actor pointer outside level.actors (%p)",
+                    static_cast<const void *>(actor));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v8 = static_cast<unsigned int>(
                 *reinterpret_cast<actor_s * const *>(v3) - level.actors + 1);
             if (v8 > 0x20)
@@ -731,6 +802,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 return;
             }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v8);
+#endif
         }
         else
         {
@@ -740,6 +812,18 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_SENTIENT:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *sentient = reinterpret_cast<const sentient_s *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(sentient, level.sentients, 33u, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: sentient pointer outside level.sentients (%p)",
+                    static_cast<const void *>(sentient));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v9 = static_cast<unsigned int>(
                 *reinterpret_cast<sentient_s * const *>(v3) - level.sentients + 1);
             if (v9 >= 0x22)
@@ -748,6 +832,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 return;
             }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v9);
+#endif
         }
         else
         {
@@ -758,6 +843,17 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         senthand = (SentientHandle *)&base[field->ofs];
         if (senthand->isDefined())
         {
+#ifdef __SWITCH__
+            const auto *sentient = senthand->sentient();
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(sentient, level.sentients, 33u, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: sentient handle outside level.sentients (%p)",
+                    static_cast<const void *>(sentient));
+                return;
+            }
+            *(int *)v3 = static_cast<int>(oneBasedIndex);
+#else
             //v10 = SentientHandle::sentient((SentientHandle *)v3) - level.sentients + 1;
             v10 = senthand->sentient() - level.sentients + 1;
             if (v10 >= 0x22)
@@ -767,6 +863,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             }
 
             *(int *)v3 = v10;
+#endif
         }
         else
         {
@@ -776,6 +873,18 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_VEHICLE:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *vehicle = reinterpret_cast<const scr_vehicle_s *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(vehicle, level.vehicles, 64u, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: vehicle pointer outside level.vehicles (%p)",
+                    static_cast<const void *>(vehicle));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v11 = static_cast<unsigned int>(
                 *reinterpret_cast<scr_vehicle_s * const *>(v3) - level.vehicles + 1);
             if (v11 > 0x40)
@@ -784,6 +893,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 return;
             }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v11);
+#endif
         }
         else
         {
@@ -793,6 +903,18 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     case SF_TURRETINFO:
         if (ReadSavePointerSlot(v3))
         {
+#ifdef __SWITCH__
+            const auto *turret = reinterpret_cast<const TurretInfo *>(
+                ReadSavePointerSlot(v3));
+            uintptr_t oneBasedIndex = 0;
+            if (!Switch_SavePointerToIndex(turret, level.turrets, 32u, oneBasedIndex))
+            {
+                Com_Error(ERR_DROP, "WriteField1: turret pointer outside level.turrets (%p)",
+                    static_cast<const void *>(turret));
+                return;
+            }
+            WriteSavePointerSlot(v3, oneBasedIndex);
+#else
             v12 = static_cast<unsigned int>(
                 *reinterpret_cast<TurretInfo * const *>(v3) - level.turrets + 1);
             if (v12 > 0x20)
@@ -801,6 +923,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 return;
             }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v12);
+#endif
         }
         else
         {
