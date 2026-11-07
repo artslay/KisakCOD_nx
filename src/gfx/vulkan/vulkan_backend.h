@@ -57,6 +57,19 @@ public:
         DiagnosticReadback,
         Count
     };
+    enum class ImmediateSubmitReason : uint8_t
+    {
+        Generic,
+        ImageUpload2D,
+        ImageUploadBatch2D,
+        ImageDownload2D,
+        ImageUpload3D,
+        ImageDownload3D,
+        D3D9StretchRect,
+        D3D9UpdateTexture2D,
+        D3D9UpdateTexture3D,
+        Count
+    };
     // End and submit commands recorded so far, wait for completion, then resume
     // recording in the same acquired swapchain frame. Used by synchronous resource locks.
     bool SynchronizeActiveFrame(FrameSyncReason reason = FrameSyncReason::Generic);
@@ -246,7 +259,9 @@ public:
         VkImageSubresourceRange range = {},
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE);
 
-    bool ImmediateSubmit(const std::function<void(VkCommandBuffer)> &fn);
+    bool ImmediateSubmit(
+        const std::function<void(VkCommandBuffer)> &fn,
+        ImmediateSubmitReason reason = ImmediateSubmitReason::Generic);
 
     VkSampler GetSampler(
         VkFilter minFilter,
