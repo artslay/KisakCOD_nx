@@ -19,9 +19,49 @@
 
 SentientGlobals glob;
 
+#ifdef __SWITCH__
+static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *index)
+{
+    if (!sentient || !level.sentients)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.sentients);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(sentient);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(sentient_s) * MAX_SENTIENTS;
+    if (offset >= arrayBytes || offset % sizeof(sentient_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(sentient_s));
+    return true;
+}
+
+static bool Switch_SentientTeamValid(team_t team, const char *function)
+{
+    if (team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
+    {
+        Com_Error(ERR_DROP, "%s: sentient team value is out of range", function);
+        return false;
+    }
+    return true;
+}
+#endif
+
 sentient_s *__cdecl Sentient_Alloc()
 {
+#ifdef __SWITCH__
+    if (!level.sentients)
+    {
+        Com_Error(ERR_DROP, "Sentient_Alloc: level.sentients is null");
+        return nullptr;
+    }
+#else
     iassert(level.sentients != NULL);
+#endif
 
     for ( int i = 0; i < MAX_SENTIENTS; ++i )
     {
@@ -392,11 +432,24 @@ sentient_s *__cdecl Sentient_FirstSentient(int iTeamFlags)
     // The old byte offset (+106) and 29-word stride describe the 32-bit
     // sentient_s layout. On Switch, pointer fields change the native layout;
     // inspect each actual array entry and its fields instead.
+#ifdef __SWITCH__
+    if (!level.sentients)
+    {
+        Com_Error(ERR_DROP, "Sentient_FirstSentient: level.sentients is null");
+        return nullptr;
+    }
+#endif
     for (int index = 0; index < MAX_SENTIENTS; ++index)
     {
         sentient_s *sentient = &level.sentients[index];
+#ifdef __SWITCH__
+        if (sentient->inuse && Switch_SentientTeamValid(sentient->eTeam, "Sentient_FirstSentient")
+            && ((1u << static_cast<unsigned int>(sentient->eTeam)) & static_cast<unsigned int>(iTeamFlags)) != 0)
+            return sentient;
+#else
         if (sentient->inuse && ((1 << sentient->eTeam) & iTeamFlags) != 0)
             return sentient;
+#endif
     }
     return 0;
 }
@@ -414,6 +467,16 @@ sentient_s *__cdecl Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFl
             0,
             "%s",
             "iTeamFlags <= (1 << TEAM_NUM_TEAMS) - 1");
+#ifdef __SWITCH__
+    uint32_t previousIndex;
+    if (!Switch_SentientPointerToIndex(pPrevSentient, &previousIndex))
+    {
+        Com_Error(ERR_DROP, "Sentient_NextSentient: previous pointer is outside level.sentients");
+        return nullptr;
+    }
+    sentients = level.sentients;
+    v5 = static_cast<int>(previousIndex) + 1;
+#else
     if (!pPrevSentient)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 595, 0, "%s", "pPrevSentient");
     sentients = level.sentients;
@@ -438,11 +501,24 @@ sentient_s *__cdecl Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFl
         sentients = level.sentients;
     }
     v5 = pPrevSentient - sentients + 1;
-    if (v5 >= 33)
+#endif
+    if (v5 >= MAX_SENTIENTS)
         return 0;
-    while (!sentients[v5].inuse || ((1 << sentients[v5].eTeam) & iTeamFlags) == 0)
+    while (true)
     {
-        if (++v5 >= 33)
+#ifdef __SWITCH__
+        if (sentients[v5].inuse)
+        {
+            if (!Switch_SentientTeamValid(sentients[v5].eTeam, "Sentient_NextSentient"))
+                return nullptr;
+            if (((1u << static_cast<unsigned int>(sentients[v5].eTeam)) & static_cast<unsigned int>(iTeamFlags)) != 0)
+                break;
+        }
+#else
+        if (sentients[v5].inuse && ((1 << sentients[v5].eTeam) & iTeamFlags) != 0)
+            break;
+#endif
+        if (++v5 >= MAX_SENTIENTS)
             return 0;
     }
     return &sentients[v5];
@@ -453,6 +529,13 @@ const char *pszTeamName[5] =
 
 const char *__cdecl Sentient_NameForTeam(unsigned int eTeam)
 {
+#ifdef __SWITCH__
+    if (eTeam >= ARRAY_COUNT(pszTeamName))
+    {
+        Com_Error(ERR_DROP, "Sentient_NameForTeam: team index out of range");
+        return pszTeamName[0];
+    }
+#else
     if (eTeam > 4)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp",
@@ -460,11 +543,19 @@ const char *__cdecl Sentient_NameForTeam(unsigned int eTeam)
             0,
             "%s",
             "eTeam >= 0 && eTeam < TEAM_NUM_TEAMS");
+#endif
     return pszTeamName[eTeam];
 }
 
 void __cdecl Sentient_SetTeam(sentient_s *self, team_t eTeam)
 {
+#ifdef __SWITCH__
+    if (!self || eTeam <= TEAM_FREE || eTeam >= TEAM_NUM_TEAMS)
+    {
+        Com_Error(ERR_DROP, "Sentient_SetTeam: invalid sentient or team");
+        return;
+    }
+#else
     if (eTeam <= TEAM_FREE || eTeam >= TEAM_NUM_TEAMS)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp",
@@ -472,6 +563,7 @@ void __cdecl Sentient_SetTeam(sentient_s *self, team_t eTeam)
             0,
             "%s",
             "eTeam > TEAM_BAD && eTeam < TEAM_NUM_TEAMS");
+#endif
     if (self->eTeam != eTeam)
         self->eTeam = eTeam;
 }
@@ -602,6 +694,13 @@ void __cdecl Sentient_UpdatePlayerTrail(gentity_s *ent)
     float *v7; // r11
     float v8[12]; // [sp+50h] [-30h] BYREF
 
+#ifdef __SWITCH__
+    if (glob.lastSample < 0 || glob.lastSample >= ARRAY_COUNT(glob.playerTrail))
+    {
+        Com_Error(ERR_DROP, "Sentient_UpdatePlayerTrail: saved sample index is out of range");
+        return;
+    }
+#endif
     lastTime = glob.lastTime;
     time = level.time;
     if (level.time - glob.lastTime < 0)
@@ -643,6 +742,13 @@ void __cdecl Sentient_ReadGlob(SaveGame *save)
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 826, 0, "%s", "save");
     SaveMemory_LoadRead(&glob, 40, save);
+#ifdef __SWITCH__
+    if (glob.lastSample < 0 || glob.lastSample >= ARRAY_COUNT(glob.playerTrail))
+    {
+        Com_Error(ERR_DROP, "Sentient_ReadGlob: saved player trail index is out of range");
+        return;
+    }
+#endif
 }
 
 void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
@@ -651,8 +757,21 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
     int v7; // r8
     float *v8; // r11
 
+#ifdef __SWITCH__
+    if (!self || !self->ent || !pos || !time)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetTrailPos: invalid sentient, entity, or output pointer");
+        return;
+    }
+    if (self->ent->client && (glob.lastSample < 0 || glob.lastSample >= ARRAY_COUNT(glob.playerTrail)))
+    {
+        Com_Error(ERR_DROP, "Sentient_GetTrailPos: saved player trail index is out of range");
+        return;
+    }
+#else
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 838, 0, "%s", "self");
+#endif
     if (!self->ent->actor && !self->ent->client)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp",
@@ -662,9 +781,13 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
             "self->ent->actor || self->ent->client");
     if (self->ent->client)
     {
+#ifdef __SWITCH__
+        v6 = (glob.lastSample == 0) ? 1 : 0;
+#else
         v6 = glob.lastSample - 1;
         if (glob.lastSample - 1 < 0)
             v6 = 1;
+#endif
         v7 = v6;
         v8 = glob.playerTrail[v6];
         *pos = *v8;
@@ -681,6 +804,13 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
 
 void __cdecl G_InitSentients()
 {
+#ifdef __SWITCH__
+    if (!level.sentients)
+    {
+        Com_Error(ERR_DROP, "G_InitSentients: level.sentients is null");
+        return;
+    }
+#endif
     memset(&glob, 0, sizeof(glob));
     for (int i = 0; i < MAX_SENTIENTS; ++i)
         level.sentients[i].inuse = 0;
@@ -764,12 +894,21 @@ void __cdecl Sentient_Dissociate(sentient_s *self)
 
 void __cdecl Sentient_Free(sentient_s *sentient)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientPointerToIndex(sentient, nullptr) || !sentient->ent
+        || sentient->ent->actor != nullptr)
+    {
+        Com_Error(ERR_DROP, "Sentient_Free: sentient pointer or owner entity is invalid");
+        return;
+    }
+#else
     iassert(sentient);
     iassert(level.sentients);
     iassert(sentient >= level.sentients && sentient < level.sentients + MAX_SENTIENTS);
     iassert(&level.sentients[sentient - level.sentients] == sentient);
     iassert(sentient->ent);
     iassert(sentient->ent->actor == NULL);
+#endif
 
     for (int i = 0; i < MAX_ACTORS; ++i)
     {
