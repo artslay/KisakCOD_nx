@@ -6173,18 +6173,46 @@ HRESULT KisakVkTexture::LockBox(
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
-    lockShadow.resize(slice*d);
+    const size_t volumeBytes = slice * d;
+    if (lockShadow.size() != volumeBytes)
+    {
+        lockShadow.resize(volumeBytes);
+        volumeShadowValid = false;
+        volumeShadowLevel = 0xffffffffu;
+    }
     if (lockShadow.empty())
         return E_FAIL;
-    if (!(flags&D3DLOCK_DISCARD) && old!=VK_IMAGE_LAYOUT_UNDEFINED)
+
+    // A volume LockBox is a CPU read/write view. Preserve the last CPU copy
+    // across locks so partial updates do not download the whole image every
+    // frame. Re-read only after an external GPU upload invalidates this cache.
+    const bool canReuseVolumeShadow =
+        volumeShadowValid && volumeShadowLevel == level;
+    if (flags & D3DLOCK_DISCARD)
+    {
+        std::fill(lockShadow.begin(), lockShadow.end(), 0);
+        volumeShadowValid = true;
+        volumeShadowLevel = level;
+    }
+    else if (old == VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        std::fill(lockShadow.begin(), lockShadow.end(), 0);
+        volumeShadowValid = true;
+        volumeShadowLevel = level;
+    }
+    else if (!canReuseVolumeShadow)
     {
         if (!backend->DownloadImage3D(
                 image, w, h, d, level, lockShadow.data(), lockShadow.size(),
                 old, true, VulkanBackend::FrameSyncReason::TextureLockBox))
+        {
+            volumeShadowValid = false;
+            volumeShadowLevel = 0xffffffffu;
             return E_FAIL;
+        }
+        volumeShadowValid = true;
+        volumeShadowLevel = level;
     }
-    else
-        std::fill(lockShadow.begin(),lockShadow.end(),0);
 
     const uint32_t pitch=TexturePitch(sourceFormat,w);
     const size_t x=info.compressed ? static_cast<size_t>(b.Left/4u)*info.blockBytes
