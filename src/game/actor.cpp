@@ -3771,12 +3771,12 @@ actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
         || !Switch_ActorHasValidState(self, "Actor_CallThink"))
     {
         Com_Error(ERR_DROP, "Actor_CallThink: invalid actor, sentient, species, or state");
-        return ACTOR_THINK;
+        return ACTOR_THINK_DONE;
     }
     if (!AIFuncTable[self->species][self->eState[self->stateLevel]].pfnThink)
     {
         Com_Error(ERR_DROP, "Actor_CallThink: current state has no think callback");
-        return ACTOR_THINK;
+        return ACTOR_THINK_DONE;
     }
 #else
     iassert(self);
