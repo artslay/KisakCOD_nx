@@ -1477,7 +1477,12 @@ void __cdecl ReadPathNodes(SaveGame *save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1584, 0, "%s", "save");
     for (i = Path_FirstNode(-1); i; i = Path_NextNode(i, -1))
     {
-        G_ReadStruct(pathnodeFields, (unsigned __int8 *)&i->dynamic, 32, save);
+        G_ReadStruct(pathnodeFields, (unsigned __int8 *)&i->dynamic, sizeof(pathnode_dynamic_t), save);
+
+        // Transient search state is not part of the save stream. Drop any
+        // stale native path pointers before AI navigation resumes.
+        memset(&i->transient, 0, sizeof(i->transient));
+
         wLinkCount = i->dynamic.wLinkCount;
         if (wLinkCount != i->constant.totalLinkCount)
         {
