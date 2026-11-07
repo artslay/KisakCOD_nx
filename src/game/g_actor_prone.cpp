@@ -10,13 +10,26 @@
 
 actor_prone_info_s *__cdecl G_GetActorProneInfo(actor_s *actor)
 {
-    if ((unsigned int)(actor - level.actors) >= 0x20)
-        MyAssertHandler(
-            "c:\\trees\\cod3\\cod3src\\src\\game\\g_actor_prone.cpp",
-            14,
-            0,
-            "%s",
-            "(iIndex >= 0) && (iIndex < MAX_ACTORS)");
+    const uintptr_t actorsAddress = reinterpret_cast<uintptr_t>(level.actors);
+    const uintptr_t actorAddress = reinterpret_cast<uintptr_t>(actor);
+    const uintptr_t actorsBytes =
+        static_cast<uintptr_t>(MAX_ACTORS) * sizeof(actor_s);
+
+    if (!actor || !actorsAddress ||
+        actorAddress < actorsAddress ||
+        actorAddress - actorsAddress >= actorsBytes ||
+        (actorAddress - actorsAddress) % sizeof(actor_s) != 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_GetActorProneInfo: actor pointer outside active actor array (actor=%p actors=%p count=%u stride=%zu)",
+            static_cast<void *>(actor),
+            static_cast<void *>(level.actors),
+            static_cast<unsigned>(MAX_ACTORS),
+            sizeof(actor_s));
+        return nullptr;
+    }
+
     return &actor->ProneInfo;
 }
 
@@ -28,7 +41,14 @@ actor_prone_info_s *__cdecl G_GetActorProneInfoFromEntNum(int iEntNum)
     int number; // r11
     int v6; // r31
 
-    iassert(iEntNum < MAX_GENTITIES);
+    if (iEntNum < 0 || iEntNum >= MAX_GENTITIES)
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_GetActorProneInfoFromEntNum: entity number out of range (%d)",
+            iEntNum);
+        return nullptr;
+    }
     v2 = &g_entities[iEntNum];
     actor = v2->actor;
     if (actor)
@@ -37,14 +57,25 @@ actor_prone_info_s *__cdecl G_GetActorProneInfoFromEntNum(int iEntNum)
         return 0;
     ActorCorpseIndex = G_GetActorCorpseIndex(v2);
     number = v2->s.number;
+    if (ActorCorpseIndex < 0 ||
+        ActorCorpseIndex >= static_cast<int>(ARRAY_COUNT(g_scr_data.actorCorpseInfo)))
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_GetActorProneInfoFromEntNum: corpse index out of range (%d)",
+            ActorCorpseIndex);
+        return nullptr;
+    }
     v6 = ActorCorpseIndex;
-    if (g_scr_data.actorCorpseInfo[ActorCorpseIndex].entnum != number)
-        MyAssertHandler(
-            "c:\\trees\\cod3\\cod3src\\src\\game\\g_actor_prone.cpp",
-            33,
-            0,
-            "%s",
-            "g_scr_data.actorCorpseInfo[iCorpseIndex].entnum == ent->s.number");
+    if (g_scr_data.actorCorpseInfo[v6].entnum != number)
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_GetActorProneInfoFromEntNum: entity %d is not in corpse slot %d",
+            number,
+            v6);
+        return nullptr;
+    }
     return &g_scr_data.actorCorpseInfo[v6].proneInfo;
 }
 
@@ -58,8 +89,17 @@ actor_prone_info_s *__cdecl G_BypassForCG_GetClientActorProneInfo(int iEntNum)
     const char *v6; // r3
     const char *v7; // r3
 
+    if (iEntNum < 0 || iEntNum >= MAX_GENTITIES)
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_BypassForCG_GetClientActorProneInfo: entity number out of range (%d)",
+            iEntNum);
+        return nullptr;
+    }
+
     v1 = level.specialIndex[iEntNum];
-    if (v1 >= 0x30)
+    if (v1 >= ARRAY_COUNT(level.cgData_actorProneInfo))
     {
         v2 = &level.gentities[iEntNum];
         v3 = v2->r.currentOrigin[2];
@@ -76,13 +116,12 @@ actor_prone_info_s *__cdecl G_BypassForCG_GetClientActorProneInfo(int iEntNum)
             v5,
             v4,
             v3);
-        MyAssertHandler(
-            "c:\\trees\\cod3\\cod3src\\src\\game\\g_actor_prone.cpp",
-            49,
-            0,
-            "%s\n\t%s",
-            "actorIndex < NUM_PRONE_INFO",
+        Com_Error(
+            ERR_DROP,
+            "G_BypassForCG_GetClientActorProneInfo: invalid actor index %u (%s)",
+            v1,
             v7);
+        return nullptr;
     }
     return &level.cgData_actorProneInfo[v1];
 }
@@ -92,7 +131,10 @@ void __cdecl G_InitActorProneInfo(actor_s *actor)
     actor_prone_info_s *p_ProneInfo; // r11
 
     if (!actor)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_actor_prone.cpp", 56, 0, "%s", "actor");
+    {
+        Com_Error(ERR_DROP, "G_InitActorProneInfo: actor is null");
+        return;
+    }
     memset(&actor->ProneInfo, 0, sizeof(actor->ProneInfo));
 }
 
