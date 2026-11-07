@@ -11864,13 +11864,34 @@ void __cdecl Load_PathData(bool atStreamStart)
 #ifdef __SWITCH__
         const uint32_t nodeCount = varPathData->nodeCount;
         constexpr uint32_t SerializedPathNodeSize = 128u;
+        if (nodeCount > PATH_MAX_NODES)
+        {
+            Com_Error(
+                ERR_DROP,
+                "PathData node count %u exceeds PATH_MAX_NODES (%u)",
+                nodeCount,
+                static_cast<unsigned>(PATH_MAX_NODES));
+            return;
+        }
+
         const uint64_t serializedSize64 =
             static_cast<uint64_t>(nodeCount) * SerializedPathNodeSize;
-        if (serializedSize64 > UINT32_MAX)
-            Com_Error(ERR_FATAL, "PathData node array is too large");
+        const uint64_t nativeSize64 =
+            static_cast<uint64_t>(nodeCount) * sizeof(pathnode_t);
+        if (serializedSize64 > UINT32_MAX || nativeSize64 > UINT32_MAX)
+        {
+            Com_Error(
+                ERR_DROP,
+                "PathData node array size overflow: count=%u serialized=%llu native=%llu",
+                nodeCount,
+                static_cast<unsigned long long>(serializedSize64),
+                static_cast<unsigned long long>(nativeSize64));
+            return;
+        }
 
         const uint32_t serializedSize =
             static_cast<uint32_t>(serializedSize64);
+        const uint32_t nativeSize = static_cast<uint32_t>(nativeSize64);
         const uintptr_t serializedNodesStreamBase =
             reinterpret_cast<uintptr_t>(DB_GetStreamPos());
         std::vector<uint8_t> serializedNodes(serializedSize);
@@ -11882,8 +11903,7 @@ void __cdecl Load_PathData(bool atStreamStart)
         pathnode_t *nativeNodes =
             reinterpret_cast<pathnode_t *>(
                 DB_AllocSwitchAssetMemory(
-                    static_cast<uint32_t>(
-                        sizeof(pathnode_t) * static_cast<size_t>(nodeCount)),
+                    nativeSize,
                     "SwitchPathNodes",
                     22));
         if (!nativeNodes)
