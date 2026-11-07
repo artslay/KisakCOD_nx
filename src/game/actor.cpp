@@ -537,6 +537,16 @@ void __cdecl Actor_FinishSpawning(actor_s *self)
 
 void __cdecl Actor_InitAnimScript(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent)
+    {
+        Com_Error(ERR_DROP, "Actor_InitAnimScript: invalid actor/entity/sentient links");
+        return;
+    }
+#endif
+
     gentity_s *ent; // r27
     unsigned int stateLevel; // r8
     int time; // r11
@@ -1732,6 +1742,15 @@ gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
 
 int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr))
+    {
+        Com_Error(ERR_DROP, "Actor_InFixedNodeExposedCombat: invalid actor links");
+        return 0;
+    }
+#endif
+
     gentity_s *TargetEntity; // r3
     sentient_s *sentient; // r9
     bool v7; // r3
@@ -1997,6 +2016,15 @@ bool __cdecl Actor_NearClaimNode(actor_s *self, double dist)
 
 void __cdecl Actor_CheckCollisions(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr))
+    {
+        Com_Error(ERR_DROP, "Actor_CheckCollisions: invalid actor/entity/sentient links");
+        return;
+    }
+#endif
+
     gentity_s *ent; // r11
     scr_animscript_t *pAnimScriptFunc; // r8
     AISpecies species; // r9
@@ -2431,6 +2459,15 @@ bool __cdecl Path_UseMomentum(actor_s *self)
 
 void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || self->Path.wPathLen <= 0 || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
+    {
+        Com_Error(ERR_DROP, "Path_UpdateMovementDelta: invalid actor, entity, or path length");
+        return;
+    }
+#endif
+
     path_t *pPath; // r30
     int iHitEntnum; // r4
     double lookAheadLen;
@@ -3453,6 +3490,16 @@ void __cdecl Actor_CheckNodeClaim(actor_s *self)
 
 void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr) || !Switch_EntityPointerValid(player)
+        || !Switch_SentientPointerToIndex(player->sentient, nullptr) || !player->client)
+    {
+        Com_Error(ERR_DROP, "Actor_UpdatePlayerPush: invalid actor/player links");
+        return;
+    }
+#endif
+
     gclient_s *client; // r11
     gentity_s *ent; // r5
     double v6; // fp13
