@@ -467,45 +467,25 @@ void R_VulkanUploadTexture(
 
 
 
-    // Preserve ordering when an initialized image is uploaded again mid-frame:
-    // previously recorded draws must consume the old texels before the upload.
-    // First uploads to undefined levels do not need this synchronization.
-    if (oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && backend->IsFrameActive())
-    {
-#ifdef __SWITCH__
-        g_switchFrameStage = "frame/upload/texture_reupload_sync";
-#endif
-        if (!backend->SynchronizeActiveFrame())
-        {
-            char trace[448];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REUPLOAD SYNC FAIL] name=%.*s mapType=%u face=%u mip=%u size=%ux%ux%u format=%u vkFormat=%u oldLayout=%u layer=%u bytes=%zu\n",
-                96, image->name ? image->name : "<null>",
-                static_cast<unsigned>(image->mapType),
-                static_cast<unsigned>(face), mipLevel, width, height, depth,
-                static_cast<unsigned>(format), static_cast<unsigned>(info.format),
-                static_cast<unsigned>(oldLayout), layer, bytes);
-            Switch_LogWrite(trace);
-            Switch_LogWrite("[KisakCOD][VK] reupload sync failed\n");
-            return;
-        }
-    }
-
+    // Re-upload directly in the active graphics command buffer. The image
+    // barriers order earlier sampling draws before the transfer write and later
+    // draws after it; a CPU fence wait plus ImmediateSubmit here serialized the
+    // renderer once before the upload and again after it.
     bool uploaded = false;
     if (image->mapType == MAPTYPE_3D)
     {
         uploaded = backend->UploadImage3D(
             texture->image, texture->format,
             width, height, depth, mipLevel,
-            source, bytes, oldLayout);
+            source, bytes, oldLayout, VkOffset3D{}, true);
     }
     else
     {
         uploaded = backend->UploadImage2D(
             texture->image, texture->format, info.aspect,
             width, height, mipLevel,
-            source, bytes, oldLayout, layer);
+            source, bytes, oldLayout, layer, VkOffset3D{},
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
     }
 
     if (uploaded)
