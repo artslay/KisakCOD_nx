@@ -111,6 +111,21 @@ static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *
     return true;
 }
 
+static bool Switch_EntityPointerValid(const gentity_s *ent)
+{
+    if (!ent)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&g_entities[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ent);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
+    return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
+}
+
 static bool Switch_ActorHasValidSpecies(const actor_s *actor, const char *function)
 {
     if (!Switch_ActorPointerToIndex(actor, nullptr)
@@ -732,6 +747,13 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
     int v6; // r8
     ai_state_t v7; // r8
 
+#ifdef __SWITCH__
+    if (!Switch_EntityPointerValid(self) || (other && !Switch_EntityPointerValid(other)))
+    {
+        Com_Error(ERR_DROP, "Actor_Touch: entity pointer is outside g_entities");
+        return;
+    }
+#endif
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse
@@ -828,6 +850,13 @@ void __cdecl Actor_Pain(
     WeaponDef *WeaponDef; // r30
     sentient_s *sentient; // r4
 
+#ifdef __SWITCH__
+    if (!Switch_EntityPointerValid(self))
+    {
+        Com_Error(ERR_DROP, "Actor_Pain: entity pointer is outside g_entities");
+        return;
+    }
+#endif
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
@@ -949,6 +978,13 @@ void __cdecl Actor_Die(
     unsigned __int16 HitLocationString; // r3
     WeaponDef *WeaponDef; // r29
 
+#ifdef __SWITCH__
+    if (!Switch_EntityPointerValid(self))
+    {
+        Com_Error(ERR_DROP, "Actor_Die: entity pointer is outside g_entities");
+        return;
+    }
+#endif
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
