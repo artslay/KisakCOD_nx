@@ -117,7 +117,7 @@ bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT 
     // D3D9 queried a device-format pair. Vulkan validates the corresponding
     // image format and all usages required by this renderer's target textures.
     (void)renderTargetFormat;
-    return SwitchDepthFormatSupportsRenderTarget(depthStencilFormat);
+    return SwitchDepthFormatSupportsRenderTarget(depthStencilFormat, false);
 }
 #else
 bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
@@ -175,7 +175,7 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
             char message[384];
             std::snprintf(
                 message, sizeof(message),
-                "[KisakCOD][VK FORMAT] selected depth target d3d=%s(%u) vk=%s(%u) aspect=DEPTH|STENCIL usage=ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST linear_filter=%u preferred_linear=%u features=0x%08x\\n",
+                "[KisakCOD][VK FORMAT] selected depth target d3d=%s(%u) vk=%s(%u) aspect=DEPTH|STENCIL usage=ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST linear_filter=%u preferred_linear=%u features=0x%08x\n",
                 SwitchDepthD3DFormatName(candidate),
                 static_cast<unsigned>(candidate),
                 SwitchDepthVkFormatName(selectedVkFormat),
