@@ -1053,8 +1053,11 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     {
         const uintptr_t turretIndex = ReadSavePointerSlot(v7);
         if (turretIndex > 0x20u)
+        {
             Com_Error(ERR_DROP, "ReadField: turret out of range (%llu)",
                 static_cast<unsigned long long>(turretIndex));
+            return;
+        }
         if (!turretIndex)
             goto LABEL_58;
         *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(&level.turrets[turretIndex - 1]);
@@ -1069,7 +1072,9 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
 
         if (animScriptIndex != UINTPTR_MAX && animScriptIndex > 298)
         {
-            Com_Error(ERR_DROP, "ReadField: animscript out of range (%i)", *v7);
+            Com_Error(ERR_DROP, "ReadField: animscript out of range (%llu)",
+                static_cast<unsigned long long>(animScriptIndex));
+            return;
         }
         if (!animScriptIndex)
             goto LABEL_58;
@@ -1086,16 +1091,22 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     {
         const uintptr_t nodeIndex = ReadSavePointerSlot(v7);
         if (nodeIndex > UINT32_MAX)
+        {
             Com_Error(ERR_DROP, "ReadField: pathnode index out of range (%llu)",
                 static_cast<unsigned long long>(nodeIndex));
+            return;
+        }
         *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(Path_LoadNode(static_cast<uint32_t>(nodeIndex)));
         break;
     }
     case SF_ANIMTREE:
         animTreeIndex = ReadSavePointerSlot(v7);
         if (animTreeIndex > UINT32_MAX)
+        {
             Com_Error(ERR_DROP, "ReadField: animtree index out of range (%llu)",
                 static_cast<unsigned long long>(animTreeIndex));
+            return;
+        }
         if (animTreeIndex)
         {
             anims = Scr_GetAnims(static_cast<uint32_t>(animTreeIndex));
