@@ -49,6 +49,21 @@ static bool Switch_SentientTeamValid(team_t team, const char *function)
     }
     return true;
 }
+
+static bool Switch_SentientEntityPointerValid(const gentity_s *ent)
+{
+    if (!ent)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&g_entities[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ent);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
+    return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
+}
 #endif
 
 sentient_s *__cdecl Sentient_Alloc()
@@ -695,6 +710,11 @@ void __cdecl Sentient_UpdatePlayerTrail(gentity_s *ent)
     float v8[12]; // [sp+50h] [-30h] BYREF
 
 #ifdef __SWITCH__
+    if (!Switch_SentientEntityPointerValid(ent) || !ent->sentient || !ent->client)
+    {
+        Com_Error(ERR_DROP, "Sentient_UpdatePlayerTrail: invalid player entity or sentient");
+        return;
+    }
     if (glob.lastSample < 0 || glob.lastSample >= ARRAY_COUNT(glob.playerTrail))
     {
         Com_Error(ERR_DROP, "Sentient_UpdatePlayerTrail: saved sample index is out of range");
@@ -758,9 +778,14 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
     float *v8; // r11
 
 #ifdef __SWITCH__
-    if (!self || !self->ent || !pos || !time)
+    if (!self || !Switch_SentientEntityPointerValid(self->ent) || !pos || !time)
     {
         Com_Error(ERR_DROP, "Sentient_GetTrailPos: invalid sentient, entity, or output pointer");
+        return;
+    }
+    if (!self->ent->actor && !self->ent->client)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetTrailPos: entity has no actor or client");
         return;
     }
     if (self->ent->client && (glob.lastSample < 0 || glob.lastSample >= ARRAY_COUNT(glob.playerTrail)))
@@ -895,8 +920,9 @@ void __cdecl Sentient_Dissociate(sentient_s *self)
 void __cdecl Sentient_Free(sentient_s *sentient)
 {
 #ifdef __SWITCH__
-    if (!Switch_SentientPointerToIndex(sentient, nullptr) || !sentient->ent
-        || sentient->ent->actor != nullptr)
+    if (!Switch_SentientPointerToIndex(sentient, nullptr)
+        || !Switch_SentientEntityPointerValid(sentient->ent)
+        || sentient->ent->actor != nullptr || !level.actors)
     {
         Com_Error(ERR_DROP, "Sentient_Free: sentient pointer or owner entity is invalid");
         return;
