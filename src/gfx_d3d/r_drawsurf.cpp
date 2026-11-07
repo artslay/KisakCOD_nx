@@ -542,28 +542,7 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 
     const MaterialTechnique *cloudTechnique =
         Material_GetTechnique(material, gfxDrawMethod.emissiveTechType);
-#ifdef __SWITCH__
-    static volatile uint32_t switchCloudDrawSurfTraceCount = 0;
-    const uint32_t switchCloudDrawSurfTrace =
-        __sync_fetch_and_add(&switchCloudDrawSurfTraceCount, 1u);
-    const bool traceCloudDrawSurf = switchCloudDrawSurfTrace < 8u;
-    if (traceCloudDrawSurf)
-    {
-        char trace[384];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX CLOUD SURF] n=%u cloud=%u cloudCount=%u material=%u name=%.96s emissiveTech=%u technique=%p sortKey=%u\n",
-            switchCloudDrawSurfTrace,
-            cloudIndex,
-            static_cast<unsigned>(frontEndDataOut->cloudCount),
-            static_cast<unsigned>(material->info.drawSurf.fields.materialSortedIndex),
-            material->info.name ? material->info.name : "<null>",
-            static_cast<unsigned>(gfxDrawMethod.emissiveTechType),
-            static_cast<const void *>(cloudTechnique),
-            static_cast<unsigned>(material->info.sortKey));
-        Switch_LogWrite(trace);
-    }
-#endif
+
     if (cloudTechnique)
     {
         MaterialSortKey = R_GetMaterialSortKey(material);
