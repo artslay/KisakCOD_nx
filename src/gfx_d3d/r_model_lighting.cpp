@@ -853,6 +853,21 @@ if (patchCount)
                 dirtyBox.Bottom = y0 + 4;
                 lightImage->texture.volmap->AddDirtyBox(&dirtyBox);
             }
+#ifdef __SWITCH__
+            else
+            {
+                // The normal Switch model-lighting texture is updated in place.
+                // Record the exact 4x4x4 atlas tile touched by this patch so the
+                // Vulkan backend does not upload the entire volume every frame.
+                dirtyBox.Left = 4 * (modelLightingIndex & 0x3F);
+                dirtyBox.Right = dirtyBox.Left + 4;
+                dirtyBox.Top = y0;
+                dirtyBox.Bottom = y0 + 4;
+                dirtyBox.Front = 0;
+                dirtyBox.Back = 4;
+                lightImage->texture.volmap->AddDirtyBox(&dirtyBox);
+            }
+#endif
             pixels = (unsigned char*)modelLightGlob.lockedBox.pBits
                 + 16 * (modelLightingIndex & 0x3F)
                 + modelLightGlob.lockedBox.RowPitch * y0;
