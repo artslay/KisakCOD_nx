@@ -711,17 +711,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
     G_PlayerStateToEntityStateExtrapolate(&v12->ps, &ent->s, v12->ps.commandTime, 1);
 #ifdef __SWITCH__
     if (switchTracePlayerAngles)
-    {
-        Com_Printf(
-            CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d flags=0x%x viewYaw=%.2f deltaYaw=%.2f entityStateYaw=%.2f currentYaw=%.2f localYaw=%.2f origin=(%.1f,%.1f,%.1f)\n",
-            g_switchPlayerAngleTraceFrames, v12->ps.pm_type, v12->ps.pm_flags,
-            v12->ps.viewangles[1], v12->ps.delta_angles[1],
-            ent->s.lerp.apos.trBase[1], ent->r.currentAngles[1],
-            clients[0].viewangles[1],
-            v12->ps.origin[0], v12->ps.origin[1], v12->ps.origin[2]);
         --g_switchPlayerAngleTraceFrames;
-    }
 #endif
     ent->r.currentOrigin[0] = ent->s.lerp.pos.trBase[0];
     ent->r.currentOrigin[1] = ent->s.lerp.pos.trBase[1];
