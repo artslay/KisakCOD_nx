@@ -2529,7 +2529,8 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || self->Path.wPathLen <= 0 || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
+        || !Path_Exists(&self->Path) || self->Path.wPathLen <= 0
+        || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
     {
         Com_Error(ERR_DROP, "Path_UpdateMovementDelta: invalid actor, entity, or path length");
         return;
@@ -5705,7 +5706,8 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || self->ent->actor != self || !self->Path.wPathLen
+        || self->ent->actor != self || self->eAnimMode != AI_ANIM_MOVE_CODE
+        || !Path_Exists(&self->Path) || !self->Path.wPathLen
         || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
     {
         Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: invalid actor, entity, or path");
@@ -6647,8 +6649,7 @@ void __cdecl Actor_UpdateOriginAndAngles(actor_s *self)
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
         || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
-        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent
-        || self->Physics.iHitEntnum < 0 || self->Physics.iHitEntnum >= MAX_GENTITIES)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent)
     {
         Com_Error(ERR_DROP, "Actor_UpdateOriginAndAngles: invalid actor links or hit entity number");
         return;
