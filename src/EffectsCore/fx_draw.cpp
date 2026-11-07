@@ -801,26 +801,6 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
         const bool cloudScaleVisible = draw->visState.scale != 0.0;
         const bool cloudCulled =
             cloudScaleVisible ? FX_CullElementForDraw_Cloud(draw) : false;
-#ifdef __SWITCH__
-        static volatile uint32_t switchCloudElemTraceCount = 0;
-        const uint32_t switchCloudElemTrace =
-            __sync_fetch_and_add(&switchCloudElemTraceCount, 1u);
-        if (switchCloudElemTrace < 8u)
-        {
-            char trace[384];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][FX CLOUD ELEM] n=%u visible=%u culled=%u scale=%.4g size=(%.4g,%.4g) pos=(%.4g,%.4g,%.4g) frustum=%u\n",
-                switchCloudElemTrace,
-                cloudScaleVisible ? 1u : 0u,
-                cloudCulled ? 1u : 0u,
-                draw->visState.scale,
-                draw->visState.size[0], draw->visState.size[1],
-                draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
-                draw->camera ? static_cast<unsigned>(draw->camera->frustumPlaneCount) : 0u);
-            Switch_LogWrite(trace);
-        }
-#endif
         if (cloudScaleVisible && !cloudCulled)
         {
             InterlockedIncrement(&draw->system->gfxCloudCount);
@@ -828,24 +808,6 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
             if (!visuals.anonymous)
                 MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 792, 0, "%s", "visuals.material");
             cloud = R_AddParticleCloudToScene(visuals.material);
-#ifdef __SWITCH__
-            static volatile uint32_t switchCloudAcceptTraceCount = 0;
-            const uint32_t switchCloudAcceptTrace =
-                __sync_fetch_and_add(&switchCloudAcceptTraceCount, 1u);
-            if (switchCloudAcceptTrace < 8u)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][FX CLOUD ADD] n=%u material=%.96s result=%s cloud=%p\n",
-                    switchCloudAcceptTrace,
-                    visuals.material && visuals.material->info.name
-                        ? visuals.material->info.name : "<null>",
-                    cloud ? "accepted" : "rejected",
-                    static_cast<void *>(cloud));
-                Switch_LogWrite(trace);
-            }
-#endif
             if (cloud)
             {
                 {
@@ -1082,30 +1044,6 @@ void __cdecl FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t
                 MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 334, 0, "%s", "system");
             elem = &FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, elemHandle)->item;
             elemDef = &elemDefs[elem->defIndex];
-#ifdef __SWITCH__
-            if (elemDef->elemType == FX_ELEM_TYPE_CLOUD)
-            {
-                static volatile uint32_t switchCloudActiveTraceCount = 0;
-                const uint32_t traceIndex =
-                    __sync_fetch_and_add(&switchCloudActiveTraceCount, 1u);
-                if (traceIndex < 12u)
-                {
-                    char trace[384];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][FX CLOUD ACTIVE] n=%u effect=%.72s handle=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\n",
-                        traceIndex,
-                        effect->def && effect->def->name ? effect->def->name : "<null>",
-                        static_cast<unsigned>(elemHandle),
-                        static_cast<unsigned>(elem->defIndex),
-                        static_cast<unsigned>(elemDef->visualCount),
-                        elem->msecBegin,
-                        drawTime,
-                        elem->origin[0], elem->origin[1], elem->origin[2]);
-                    Switch_LogWrite(trace);
-                }
-            }
-#endif
             if (elemDef->elemType <= 3u)
                 MyAssertHandler(
                     ".\\EffectsCore\\fx_draw.cpp",
@@ -1285,27 +1223,6 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     if (!system->camera.isValid)
         MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 1511, 0, "%s", "system->camera.isValid");
     system->gfxCloudCount = 0;
-#ifdef __SWITCH__
-    static volatile uint32_t switchCloudFrameTraceCount = 0;
-    const uint32_t switchCloudFrameTrace =
-        __sync_fetch_and_add(&switchCloudFrameTraceCount, 1u);
-    const bool traceCloudFrame = switchCloudFrameTrace < 4u;
-    if (traceCloudFrame)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX CLOUD FRAME] n=%u drawTime=%d activeFirst=%u activeNew=%u cameraValid=%u frustum=%u fxClouds=%u\n",
-            switchCloudFrameTrace,
-            drawTime,
-            static_cast<unsigned>(system->firstActiveEffect),
-            static_cast<unsigned>(system->firstNewEffect),
-            system->camera.isValid ? 1u : 0u,
-            static_cast<unsigned>(system->camera.frustumPlaneCount),
-            fx_drawClouds->current.enabled ? 1u : 0u);
-        Switch_LogWrite(trace);
-    }
-#endif
     sprite = &system->sprite;
     system->sprite.indices = 0;
     system->sprite.indexCount = 0;
@@ -1317,74 +1234,6 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     {
         effectHandle = system->allEffectHandles[activeIndex & 0x3FF];
         effect = FX_EffectFromHandle(system, effectHandle);
-#ifdef __SWITCH__
-        if (effect && effect->def)
-        {
-            static const FxEffectDef *switchLoggedFxDefs[256] = {};
-            static volatile uint32_t switchLoggedFxDefCount = 0;
-            bool fxDefAlreadyLogged = false;
-            for (uint32_t defIndex = 0; defIndex < switchLoggedFxDefCount; ++defIndex)
-            {
-                if (switchLoggedFxDefs[defIndex] == effect->def)
-                {
-                    fxDefAlreadyLogged = true;
-                    break;
-                }
-            }
-            if (!fxDefAlreadyLogged && switchLoggedFxDefCount < 256u)
-            {
-                const uint32_t inventoryIndex =
-                    __sync_fetch_and_add(&switchLoggedFxDefCount, 1u);
-                if (inventoryIndex < 256u)
-                {
-                    switchLoggedFxDefs[inventoryIndex] = effect->def;
-                    uint32_t defTypeCounts[8] = {};
-                    const uint32_t defElemCount =
-                        static_cast<uint32_t>(effect->def->elemDefCountOneShot) +
-                        static_cast<uint32_t>(effect->def->elemDefCountLooping);
-                    for (uint32_t i = 0; i < defElemCount; ++i)
-                    {
-                        const uint8_t type = effect->def->elemDefs[i].elemType;
-                        if (type < 8u)
-                            ++defTypeCounts[type];
-                    }
-
-                    uint32_t activeTypeCounts[8] = {};
-                    uint32_t activeClassCounts[3] = {};
-                    for (uint32_t elemClass = 0; elemClass < 3u; ++elemClass)
-                    {
-                        uint16_t handle = effect->firstElemHandle[elemClass];
-                        while (handle != 0xFFFF && activeClassCounts[elemClass] < 2048u)
-                        {
-                            FxElem *activeElem =
-                                &FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, handle)->item;
-                            const uint8_t type = effect->def->elemDefs[activeElem->defIndex].elemType;
-                            if (type < 8u)
-                                ++activeTypeCounts[type];
-                            ++activeClassCounts[elemClass];
-                            handle = activeElem->nextElemHandleInEffect;
-                        }
-                    }
-
-                    char trace[512];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][FX EFFECT INVENTORY] n=%u name=%.112s defs=%u(one=%u loop=%u) defTypes=(%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u)\n",
-                        inventoryIndex,
-                        effect->def->name ? effect->def->name : "<null>",
-                        defElemCount,
-                        static_cast<unsigned>(effect->def->elemDefCountOneShot),
-                        static_cast<unsigned>(effect->def->elemDefCountLooping),
-                        defTypeCounts[0], defTypeCounts[1], defTypeCounts[2], defTypeCounts[3],
-                        defTypeCounts[4], defTypeCounts[5], defTypeCounts[6], defTypeCounts[7],
-                        activeClassCounts[0], activeClassCounts[1], activeClassCounts[2],
-                        activeTypeCounts[0], activeTypeCounts[1], activeTypeCounts[2], activeTypeCounts[3],
-                        activeTypeCounts[4], activeTypeCounts[5], activeTypeCounts[6], activeTypeCounts[7]);
-                    Switch_LogWrite(trace);
-                }
-            }
-        }
-#endif
         FX_DrawSpriteEffect(system, effect, drawTime);
         FX_DrawNonSpriteEffect(system, effect, 2u, drawTime);
         if (effect->firstTrailHandle != 0xFFFF)
@@ -1400,20 +1249,6 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
         FX_RunGarbageCollection(system);
-#ifdef __SWITCH__
-    if (traceCloudFrame)
-    {
-        char trace[224];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX CLOUD FRAME END] n=%u clouds=%u spriteIndices=%u trails=%d\n",
-            switchCloudFrameTrace,
-            static_cast<unsigned>(system->gfxCloudCount),
-            static_cast<unsigned>(system->sprite.indexCount),
-            numTrailEffects);
-        Switch_LogWrite(trace);
-    }
-#endif
     if (system->sprite.indexCount)
     {
         if (!system->sprite.name)
@@ -1828,29 +1663,6 @@ void __cdecl FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t dra
                 MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 334, 0, "%s", "system");
             elem = (FxElem *)FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, elemHandle);
             elemDef = &elemDefs[elem->defIndex];
-#ifdef __SWITCH__
-            {
-                static volatile uint32_t switchFxSpriteTraceCount = 0;
-                const uint32_t traceIndex =
-                    __sync_fetch_and_add(&switchFxSpriteTraceCount, 1u);
-                if (traceIndex < 24u)
-                {
-                    char trace[352];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][FX SPRITE ACTIVE] n=%u effect=%.80s type=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\n",
-                        traceIndex,
-                        effect->def && effect->def->name ? effect->def->name : "<null>",
-                        static_cast<unsigned>(elemDef->elemType),
-                        static_cast<unsigned>(elem->defIndex),
-                        static_cast<unsigned>(elemDef->visualCount),
-                        elem->msecBegin,
-                        drawTime,
-                        elem->origin[0], elem->origin[1], elem->origin[2]);
-                    Switch_LogWrite(trace);
-                }
-            }
-#endif
             if (elemDef->elemType > 3u)
                 MyAssertHandler(
                     ".\\EffectsCore\\fx_draw.cpp",
