@@ -65,6 +65,21 @@ static bool Switch_SentientEntityPointerValid(const gentity_s *ent)
     return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
 }
 
+static bool Switch_SentientActorPointerValid(const actor_s *actor)
+{
+    if (!actor || !level.actors)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.actors);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(actor);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(actor_s) * MAX_ACTORS;
+    return offset < arrayBytes && offset % sizeof(actor_s) == 0;
+}
+
 static bool Switch_SentientLinksValid(const sentient_s *self)
 {
     if (!Switch_SentientPointerToIndex(self, nullptr)
@@ -74,7 +89,7 @@ static bool Switch_SentientLinksValid(const sentient_s *self)
     if (self->ent->sentient != self || (!self->ent->actor && !self->ent->client))
         return false;
 
-    if (self->ent->actor && !Switch_ActorPointerToIndex(self->ent->actor, nullptr))
+    if (self->ent->actor && !Switch_SentientActorPointerValid(self->ent->actor))
         return false;
 
     return true;
@@ -110,6 +125,15 @@ sentient_s *__cdecl Sentient_Alloc()
 
 void __cdecl Sentient_DissociateSentient(sentient_s *self, sentient_s *other, team_t eOtherTeam)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !Switch_SentientLinksValid(other)
+        || self == other || other->eTeam != TEAM_DEAD)
+    {
+        Com_Error(ERR_DROP, "Sentient_DissociateSentient: invalid sentient relationship");
+        return;
+    }
+#endif
+
     iassert(self);
     iassert(self != other);
     iassert(other);
@@ -433,6 +457,16 @@ void __cdecl Sentient_InvalidateNearestNode(sentient_s *self)
 
 void __cdecl Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || (enemy && !Switch_SentientEntityPointerValid(enemy))
+        || (enemy && enemy->sentient && !Switch_SentientLinksValid(enemy->sentient))
+        || (self->targetEnt.isDefined() && !Switch_SentientEntityPointerValid(self->targetEnt.ent())))
+    {
+        Com_Error(ERR_DROP, "Sentient_SetEnemy: invalid sentient or entity pointer");
+        return;
+    }
+#endif
+
     sentient_s *sentient; // r30
     int iEnemyNotifyTime; // r11
     actor_s *actor; // r30
@@ -953,6 +987,15 @@ int __cdecl Sentient_NearestNodeDirty(sentient_s *self, bool originChanged)
 
 void __cdecl Sentient_Dissociate(sentient_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self)
+        || (self->targetEnt.isDefined() && !Switch_SentientEntityPointerValid(self->targetEnt.ent())))
+    {
+        Com_Error(ERR_DROP, "Sentient_Dissociate: invalid sentient or target entity pointer");
+        return;
+    }
+#endif
+
     sentient_s *sentient; // r29
     actor_s *actor; // r31
     team_t eTeam; // r29
