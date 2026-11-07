@@ -777,12 +777,12 @@ static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
     out->lightGrid.hasLightRegions = Switch_ReadSerializedValue<uint8_t>(serialized, 272);
     out->lightGrid.sunPrimaryLightIndex = Switch_ReadSerializedValue<uint32_t>(serialized, 276);
     std::memcpy(out->lightGrid.mins, serialized + 280, sizeof(out->lightGrid.mins));
-    std::memcpy(out->lightGrid.maxs, serialized + 292, sizeof(out->lightGrid.maxs));
-    out->lightGrid.rowAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 308);
-    out->lightGrid.colAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 312);
-    Switch_SeedSerializedPointer(out->lightGrid.rowDataStart, serialized, 316);
-    out->lightGrid.rawRowDataSize = Switch_ReadSerializedValue<int>(serialized, 320);
-    Switch_SeedSerializedPointer(out->lightGrid.rawRowData, serialized, 324);
+    std::memcpy(out->lightGrid.maxs, serialized + 286, sizeof(out->lightGrid.maxs));
+    out->lightGrid.rowAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 292);
+    out->lightGrid.colAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 296);
+    Switch_SeedSerializedPointer(out->lightGrid.rowDataStart, serialized, 300);
+    out->lightGrid.rawRowDataSize = Switch_ReadSerializedValue<int>(serialized, 304);
+    Switch_SeedSerializedPointer(out->lightGrid.rawRowData, serialized, 308);
     out->lightGrid.entryCount = Switch_ReadSerializedValue<int>(serialized, 312);
     Switch_SeedSerializedPointer(out->lightGrid.entries, serialized, 316);
     out->lightGrid.colorCount = Switch_ReadSerializedValue<int>(serialized, 320);
