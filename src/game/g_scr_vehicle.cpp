@@ -909,8 +909,22 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
     ExtendBounds(b, sum, diff);
 #ifdef KISAK_SP
     v1 = CM_AreaEntities(b, sum, entityList, MAX_GENTITIES, 0x2006081);
+#ifdef __SWITCH__
+    if (v1 < 0 || v1 > MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "VEH_PushEntity: area entity count is out of range");
+        return;
+    }
+#endif
     for (i = 0; i < v1; ++i)
     {
+#ifdef __SWITCH__
+        if (entityList[i] < 0 || entityList[i] >= MAX_GENTITIES)
+        {
+            Com_Error(ERR_DROP, "VEH_PushEntity: area entity number is out of range");
+            return;
+        }
+#endif
         target = &g_entities[entityList[i]];
         v12 = entityHandlers[target->handler].touch;
         if (target->s.number == ent->s.number)
