@@ -3365,6 +3365,22 @@ void __cdecl Actor_FinishSpawningAll()
 
 void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t eOtherTeam)
 {
+#ifdef __SWITCH__
+    uint32_t otherIndex;
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->sentient->ent != self->ent
+        || !Switch_SentientPointerToIndex(other, &otherIndex)
+        || !Switch_EntityPointerValid(other->ent)
+        || otherIndex >= ARRAY_COUNT(self->sentientInfo)
+        || self->sentient == other || other->eTeam != TEAM_DEAD)
+    {
+        Com_Error(ERR_DROP, "Actor_DissociateSentient: invalid actor or sentient relationship");
+        return;
+    }
+    SentientInfo_Clear(&self->sentientInfo[otherIndex]);
+#else
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 860, 0, "%s", "self");
     if (!self->sentient)
@@ -3373,17 +3389,6 @@ void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t e
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 862, 0, "%s", "self->sentient != other");
     if (other->eTeam != TEAM_DEAD)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 863, 0, "%s", "other->eTeam == TEAM_DEAD");
-#ifdef __SWITCH__
-    uint32_t otherIndex;
-    if (!Switch_ActorPointerToIndex(self, nullptr)
-        || !Switch_SentientPointerToIndex(other, &otherIndex)
-        || otherIndex >= ARRAY_COUNT(self->sentientInfo))
-    {
-        Com_Error(ERR_DROP, "Actor_DissociateSentient: actor or sentient pointer is outside its pool");
-        return;
-    }
-    SentientInfo_Clear(&self->sentientInfo[otherIndex]);
-#else
     SentientInfo_Clear(&self->sentientInfo[other - level.sentients]);
 #endif
     Actor_DissociateSuppressor(self, other);
