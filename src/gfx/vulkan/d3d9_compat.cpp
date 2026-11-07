@@ -6267,7 +6267,105 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             return E_FAIL;
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
-        if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
+        const bool modelLightingPatchUpload =
+            std::strcmp(debugName, "$model_lighting") == 0 &&
+            level == 0 && !lockWasUndefined &&
+            !(lockFlags & D3DLOCK_DISCARD) &&
+            !lockDirtyBoxes.empty() &&
+            sourceFormat == D3DFMT_A8R8G8B8;
+
+        if (modelLightingPatchUpload)
+        {
+            // Coalesce adjacent atlas tiles so a row/column of changed model
+            // lighting samples becomes one buffer-to-image copy, not one copy
+            // command per individual 4x4x4 patch.
+            std::vector<_D3DBOX> mergedBoxes;
+            mergedBoxes.reserve(lockDirtyBoxes.size());
+            for (const _D3DBOX &inputBox : lockDirtyBoxes)
+            {
+                _D3DBOX box = inputBox;
+                bool merged = true;
+                while (merged)
+                {
+                    merged = false;
+                    for (size_t i = 0; i < mergedBoxes.size(); ++i)
+                    {
+                        const _D3DBOX &other = mergedBoxes[i];
+                        const bool sameDepth =
+                            box.Front == other.Front && box.Back == other.Back;
+                        const bool horizontal =
+                            sameDepth && box.Top == other.Top &&
+                            box.Bottom == other.Bottom &&
+                            box.Left <= other.Right && other.Left <= box.Right;
+                        const bool vertical =
+                            sameDepth && box.Left == other.Left &&
+                            box.Right == other.Right &&
+                            box.Top <= other.Bottom && other.Top <= box.Bottom;
+                        if (!horizontal && !vertical)
+                            continue;
+
+                        box.Left = std::min(box.Left, other.Left);
+                        box.Top = std::min(box.Top, other.Top);
+                        box.Right = std::max(box.Right, other.Right);
+                        box.Bottom = std::max(box.Bottom, other.Bottom);
+                        mergedBoxes.erase(mergedBoxes.begin() + i);
+                        merged = true;
+                        break;
+                    }
+                }
+                mergedBoxes.push_back(box);
+            }
+
+            const uint32_t fullPitch = TexturePitch(sourceFormat, w);
+            const uint32_t fullRows = h;
+            const size_t fullSlice = static_cast<size_t>(fullPitch) * fullRows;
+            VkImageLayout uploadOldLayout = lockOriginalLayout;
+            for (const _D3DBOX &box : mergedBoxes)
+            {
+                if (box.Left >= box.Right || box.Top >= box.Bottom ||
+                    box.Front >= box.Back || box.Right > w ||
+                    box.Bottom > h || box.Back > d)
+                    continue;
+
+                const uint32_t rw = box.Right - box.Left;
+                const uint32_t rh = box.Bottom - box.Top;
+                const uint32_t rd = box.Back - box.Front;
+                const uint32_t pitch = TexturePitch(sourceFormat, rw);
+                const size_t regionSlice = static_cast<size_t>(pitch) * rh;
+                std::vector<uint8_t> packed(regionSlice * rd);
+                const size_t x = static_cast<size_t>(box.Left) * info.bytesPerPixel;
+                for (uint32_t z = 0; z < rd; ++z)
+                {
+                    for (uint32_t row = 0; row < rh; ++row)
+                    {
+                        const size_t src =
+                            static_cast<size_t>(box.Front + z) * fullSlice +
+                            static_cast<size_t>(box.Top + row) * fullPitch + x;
+                        const size_t dst =
+                            static_cast<size_t>(z) * regionSlice +
+                            static_cast<size_t>(row) * pitch;
+                        std::memcpy(
+                            packed.data() + dst, lockShadow.data() + src, pitch);
+                    }
+                }
+
+                if (!backend->UploadImage3D(
+                        image, format, rw, rh, rd, level,
+                        packed.data(), packed.size(), uploadOldLayout,
+                        VkOffset3D{
+                            static_cast<int32_t>(box.Left),
+                            static_cast<int32_t>(box.Top),
+                            static_cast<int32_t>(box.Front)},
+                        true))
+                {
+                    volumeShadowValid = false;
+                    volumeShadowLevel = 0xffffffffu;
+                    return E_FAIL;
+                }
+                uploadOldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+        }
+        else if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
         {
             if (!backend->UploadImage3D(image,format,w,h,d,level,
                     lockShadow.data(), lockShadow.size(), lockOriginalLayout,
@@ -6343,6 +6441,7 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     }
 
     lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0; lockIsVolume=false;
+    lockDirtyBoxes.clear();
     lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     return S_OK;
 }
