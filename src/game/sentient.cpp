@@ -923,7 +923,7 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
     if (self->ent->client)
     {
 #ifdef __SWITCH__
-        v6 = (glob.lastSample == 0) ? 1 : 0;
+        v6 = (glob.lastSample == 0) ? 1 : glob.lastSample - 1;
 #else
         v6 = glob.lastSample - 1;
         if (glob.lastSample - 1 < 0)
