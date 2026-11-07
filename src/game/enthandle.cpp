@@ -18,15 +18,81 @@ static int32_t g_usedEntHandle;
 static int32_t g_entHandleInfoHead;
 static int32_t g_maxUsedEntHandle;
 
+#ifdef __SWITCH__
+static bool Switch_EntHandleEntityToIndex(const gentity_s *ent, uint32_t *index)
+{
+    if (!ent)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&g_entities[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ent);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
+    if (offset >= arrayBytes || offset % sizeof(gentity_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(gentity_s));
+    return true;
+}
+
+#ifdef KISAK_SP
+static bool Switch_EntHandleSentientToIndex(const sentient_s *sentient, uint32_t *index)
+{
+    if (!sentient)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&g_sentients[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(sentient);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(g_sentients);
+    if (offset >= arrayBytes || offset % sizeof(sentient_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(sentient_s));
+    return true;
+}
+#endif
+#endif
+
 //Line 53042:  0006 : 0050c928       uint32_t g_maxUsedEntHandle   82cbc928     enthandle.obj
 
 void __cdecl EntHandleDissociate(gentity_s *ent)
 {
+#ifdef __SWITCH__
+    uint32_t entityIndex;
+    if (!Switch_EntHandleEntityToIndex(ent, &entityIndex))
+    {
+        Com_Error(ERR_DROP, "EntHandleDissociate: entity pointer is outside g_entities");
+        return;
+    }
+    EntHandleDissociateInternal(&g_entitiesHandleList[entityIndex]);
+#else
     EntHandleDissociateInternal(&g_entitiesHandleList[ent - g_entities]);
+#endif
 }
 
 void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
 {
+#ifdef __SWITCH__
+    if (!entHandleList)
+    {
+        Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle list is null");
+        return;
+    }
+    if (entHandleList->infoIndex >= ARRAY_COUNT(g_entHandleInfoArray))
+    {
+        Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle info index is out of range");
+        return;
+    }
+#endif
     const char *v1; // eax
     EntHandleInfo *info; // [esp+0h] [ebp-Ch]
     uint32_t infoIndexHead; // [esp+4h] [ebp-8h]
@@ -39,6 +105,13 @@ void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
         infoIndex = infoIndexHead;
         do
         {
+#ifdef __SWITCH__
+            if (infoIndex == 0 || infoIndex >= ARRAY_COUNT(g_entHandleInfoArray))
+            {
+                Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle chain index is out of range");
+                return;
+            }
+#endif
             info = &g_entHandleInfoArray[infoIndex];
             if (!info->handle)
             {
@@ -59,6 +132,13 @@ void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
 
 void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoIndex)
 {
+#ifdef __SWITCH__
+    if (!entHandleList || oldInfoIndex >= ARRAY_COUNT(g_entHandleInfoArray))
+    {
+        Com_Error(ERR_DROP, "RemoveEntHandleInfo: invalid handle list or info index");
+        return;
+    }
+#endif
     const char *v2; // eax
     EntHandleInfo *info; // [esp+0h] [ebp-10h]
     EntHandleInfo *prev; // [esp+Ch] [ebp-4h]
@@ -89,6 +169,13 @@ void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoI
 
 uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
 {
+#ifdef __SWITCH__
+    if (!entHandleList || !handle || entHandleList->infoIndex >= ARRAY_COUNT(g_entHandleInfoArray))
+    {
+        Com_Error(ERR_DROP, "AddEntHandleInfo: invalid handle list or handle");
+        return 0;
+    }
+#endif
     uint32_t v3; // [esp+0h] [ebp-14h]
     EntHandleInfo *info; // [esp+4h] [ebp-10h]
     uint32_t infoIndexHead; // [esp+8h] [ebp-Ch]
@@ -97,7 +184,17 @@ uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
 
     infoIndex = g_entHandleInfoHead;
     if (!g_entHandleInfoHead)
+    {
         Com_Error(ERR_DROP, "ENT_HANDLE_COUNT exceeded - increase size");
+        return 0;
+    }
+#ifdef __SWITCH__
+    if (infoIndex >= ARRAY_COUNT(g_entHandleInfoArray))
+    {
+        Com_Error(ERR_DROP, "AddEntHandleInfo: free-list index is out of range");
+        return 0;
+    }
+#endif
     info = &g_entHandleInfoArray[infoIndex];
     g_entHandleInfoHead = info->next;
     if (g_maxUsedEntHandle < ++g_usedEntHandle)
@@ -109,6 +206,14 @@ uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
     infoIndexHead = entHandleList->infoIndex;
     if (entHandleList->infoIndex)
     {
+#ifdef __SWITCH__
+        if (infoIndexHead >= ARRAY_COUNT(g_entHandleInfoArray)
+            || info->next >= ARRAY_COUNT(g_entHandleInfoArray))
+        {
+            Com_Error(ERR_DROP, "AddEntHandleInfo: linked-list index is out of range");
+            return 0;
+        }
+#endif
         infoHead = &g_entHandleInfoArray[infoIndexHead];
         info->next = infoHead->next;
         info->prev = infoIndexHead;
@@ -128,13 +233,30 @@ uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
 void EntHandle::setEnt(gentity_s *ent)
 {
     gentity_s *oldEnt; // [esp+4h] [ebp-8h]
+#ifdef __SWITCH__
+    uint32_t newEntityIndex = 0;
+    if (ent && !Switch_EntHandleEntityToIndex(ent, &newEntityIndex))
+    {
+        Com_Error(ERR_DROP, "EntHandle::setEnt: entity pointer is outside g_entities");
+        return;
+    }
+    if (this->number > MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "EntHandle::setEnt: stored entity number is out of range");
+        return;
+    }
+#endif
 
     if (this->isDefined())
     {
         oldEnt = this->ent();
         if (ent == oldEnt)
             return;
+#ifdef __SWITCH__
+        RemoveEntHandleInfo(&g_entitiesHandleList[this->number - 1], this->infoIndex);
+#else
         RemoveEntHandleInfo(&g_entitiesHandleList[oldEnt - g_entities], this->infoIndex);
+#endif
         if (!ent)
         {
             this->number = 0;
@@ -147,36 +269,61 @@ void EntHandle::setEnt(gentity_s *ent)
         return;
     }
 
+#ifdef __SWITCH__
+    this->infoIndex = AddEntHandleInfo(&g_entitiesHandleList[newEntityIndex], this);
+    this->number = static_cast<uint16_t>(newEntityIndex + 1);
+#else
     this->infoIndex = AddEntHandleInfo(&g_entitiesHandleList[ent - g_entities], this);
     this->number = ent - g_entities + 1;
+#endif
 }
 
 int32_t EntHandle::entnum()
 {
     int number = this->number;
-
+#ifdef __SWITCH__
+    if (number <= 0 || number > MAX_GENTITIES || !g_entities[number - 1].r.inuse)
+    {
+        Com_Error(ERR_DROP, "EntHandle::entnum: invalid or inactive entity handle");
+        return ENTITYNUM_NONE;
+    }
+#else
     bcassert(number - 1, ENTITYNUM_NONE);
     iassert(g_entities[number - 1].r.inuse);
-    
+#endif
     return number - 1;
 }
 
 bool EntHandle::isDefined() const
 {
     int number = this->number;
-
+#ifdef __SWITCH__
+    if (!number)
+        return false;
+    if (number > MAX_GENTITIES || !g_entities[number - 1].r.inuse)
+    {
+        Com_Error(ERR_DROP, "EntHandle::isDefined: invalid or inactive entity handle");
+        return false;
+    }
+#else
     iassert(!number || g_entities[number - 1].r.inuse);
-    
+#endif
     return number != 0;
 }
 
 gentity_s *EntHandle::ent() const
 {
     int number = this->number;
-
+#ifdef __SWITCH__
+    if (number <= 0 || number > MAX_GENTITIES || !g_entities[number - 1].r.inuse)
+    {
+        Com_Error(ERR_DROP, "EntHandle::ent: invalid or inactive entity handle");
+        return nullptr;
+    }
+#else
     bcassert(number - 1, ENTITYNUM_NONE);
     iassert(g_entities[number - 1].r.inuse);
-
+#endif
     return &g_entities[number - 1];
 }
 
@@ -240,21 +387,53 @@ EntHandleList g_sentientsHandleList[33];
 
 void SentientHandleDissociate(sentient_s *sentient)
 {
+#ifdef __SWITCH__
+    uint32_t sentientIndex;
+    if (!Switch_EntHandleSentientToIndex(sentient, &sentientIndex))
+    {
+        Com_Error(ERR_DROP, "SentientHandleDissociate: sentient pointer is outside g_sentients");
+        return;
+    }
+    EntHandleDissociateInternal(&g_sentientsHandleList[sentientIndex]);
+#else
     EntHandleDissociateInternal(&g_sentientsHandleList[sentient - g_sentients]);
+#endif
 }
 
 sentient_s *SentientHandle::sentient() const
 {
+#ifdef __SWITCH__
+    if (!this->number || this->number > MAX_SENTIENTS
+        || !g_sentients[this->number - 1].ent
+        || !g_sentients[this->number - 1].ent->r.inuse)
+    {
+        Com_Error(ERR_DROP, "SentientHandle::sentient: invalid or inactive sentient handle");
+        return nullptr;
+    }
+#else
     bcassert(this->number - 1, MAX_SENTIENTS);
     iassert((g_sentients[this->number - 1].ent));
     iassert(g_sentients[this->number - 1].ent->r.inuse);
-    
+#endif
     return &g_sentients[this->number - 1];
 }
 
 void SentientHandle::setSentient(sentient_s *sentient)
 {
     sentient_s *thisSentient; // r3
+#ifdef __SWITCH__
+    uint32_t newSentientIndex = 0;
+    if (sentient && !Switch_EntHandleSentientToIndex(sentient, &newSentientIndex))
+    {
+        Com_Error(ERR_DROP, "SentientHandle::setSentient: pointer is outside g_sentients");
+        return;
+    }
+    if (this->number > MAX_SENTIENTS)
+    {
+        Com_Error(ERR_DROP, "SentientHandle::setSentient: stored sentient number is out of range");
+        return;
+    }
+#endif
 
     if (this->isDefined())
     {
@@ -263,7 +442,11 @@ void SentientHandle::setSentient(sentient_s *sentient)
         if (sentient == thisSentient)
             return;
 
+#ifdef __SWITCH__
+        RemoveEntHandleInfo(&g_sentientsHandleList[this->number - 1], this->infoIndex);
+#else
         RemoveEntHandleInfo(&g_sentientsHandleList[thisSentient - g_sentients], this->infoIndex);
+#endif
 
         if (!sentient)
         {
@@ -277,8 +460,13 @@ void SentientHandle::setSentient(sentient_s *sentient)
         return;
     }
 
+#ifdef __SWITCH__
+    this->infoIndex = AddEntHandleInfo(&g_sentientsHandleList[newSentientIndex], this);
+    this->number = static_cast<uint16_t>(newSentientIndex + 1);
+#else
     this->infoIndex = AddEntHandleInfo(&g_sentientsHandleList[sentient - g_sentients], this);
     this->number = sentient - g_sentients + 1;
+#endif
 }
 
 void SentientHandle::Init()
@@ -289,10 +477,19 @@ void SentientHandle::Init()
 bool SentientHandle::isDefined() const
 {
     int number = this->number;
-
+#ifdef __SWITCH__
+    if (!number)
+        return false;
+    if (number > MAX_SENTIENTS || !g_sentients[number - 1].ent
+        || !g_sentients[number - 1].ent->r.inuse)
+    {
+        Com_Error(ERR_DROP, "SentientHandle::isDefined: invalid or inactive sentient handle");
+        return false;
+    }
+#else
     iassert(!number || g_sentients[number - 1].ent);
     iassert(!number || g_sentients[number - 1].ent->r.inuse);
-
+#endif
     //return (_cntlzw(this->number) & 0x20) == 0;
     return this->number != 0;
 }
