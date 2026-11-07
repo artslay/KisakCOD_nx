@@ -42,7 +42,7 @@ static bool Switch_SentientPointerToIndex(const sentient_s *sentient, uint32_t *
 
 static bool Switch_SentientTeamValid(team_t team, const char *function)
 {
-    if (team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
+    if (team < 0 || team < TEAM_BAD || team >= TEAM_NUM_TEAMS)
     {
         Com_Error(ERR_DROP, "%s: sentient team value is out of range", function);
         return false;
