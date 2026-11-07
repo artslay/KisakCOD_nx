@@ -257,6 +257,16 @@ struct PathData // sizeof=0x28
     int nodeTreeCount;
     pathnode_tree_t *nodeTree;
 };
+#ifdef __SWITCH__
+// The path-node tree and PathData are zone-backed structures. Freeze their
+// native pointer layout so no 32-bit serialized stride is used by traversal.
+static_assert(sizeof(pathnode_tree_nodes_t) == 0x10);
+static_assert(sizeof(pathnode_tree_info_t) == 0x10);
+static_assert(offsetof(pathnode_tree_t, u) == 0x08);
+static_assert(sizeof(pathnode_tree_t) == 0x18);
+static_assert(offsetof(PathData, nodeTree) == 0x48);
+static_assert(sizeof(PathData) == 0x50);
+#endif
 
 
 #ifdef KISAK_SP
