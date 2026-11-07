@@ -47,6 +47,7 @@ public:
     // True only on the thread that successfully began the active frame.
     // Command buffers and the frame uniform ring are not externally synchronized.
     bool IsFrameRecordingThread() const;
+    void RecordModelLightingUpload(uint64_t regions, uint64_t bytes, uint64_t fullBytes);
     enum class FrameSyncReason : uint8_t
     {
         Generic,
