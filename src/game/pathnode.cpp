@@ -2132,12 +2132,22 @@ int __cdecl Path_AllowedStancesForNode(pathnode_t *node)
 
 int __cdecl Path_SaveIndex(const pathnode_t *node)
 {
-    pathnode_t *nodes; // r11
-
     if (!node)
         return 0;
-    nodes = gameWorldSp.path.nodes;
-    if (node < gameWorldSp.path.nodes || node >= &gameWorldSp.path.nodes[g_path.actualNodeCount])
+
+#ifdef KISAK_SWITCH
+    // Use the ARM64-safe address/range validation shared with pathnode
+    // conversion. MyAssertHandler is non-fatal in the Switch configuration,
+    // so the legacy pointer comparison/subtraction could continue with an
+    // unrelated pointer after the assertion.
+    const uint32_t nodeIndex = Path_ConvertNodeToIndex(node);
+    if (nodeIndex == UINT32_MAX)
+        return 0;
+    return static_cast<int>(nodeIndex + 1u);
+#else
+    pathnode_t *nodes = gameWorldSp.path.nodes;
+    if (node < gameWorldSp.path.nodes ||
+        node >= &gameWorldSp.path.nodes[g_path.actualNodeCount])
     {
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp",
@@ -2148,6 +2158,7 @@ int __cdecl Path_SaveIndex(const pathnode_t *node)
         nodes = gameWorldSp.path.nodes;
     }
     return node - nodes + 1;
+#endif
 }
 
 pathnode_t *__cdecl Path_LoadNode(unsigned int index)
