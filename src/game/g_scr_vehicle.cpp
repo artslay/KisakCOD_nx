@@ -80,6 +80,9 @@ static vehicle_info_t *VEH_GetVehicleInfoChecked(int index)
         Com_Error(ERR_DROP, "Vehicle info index or count is out of range");
         return nullptr;
     }
+#else
+    iassert(index >= 0);
+    iassert(index < s_numVehicleInfos);
 #endif
     return &s_vehicleInfos[index];
 }
@@ -2989,8 +2992,8 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
         && (p_ownerNum = &player->r.ownerNum, p_ownerNum->isDefined())
 #ifdef __SWITCH__
         && Switch_VehicleEntityPointerValid(p_ownerNum->ent())
-#endif
         && Switch_VehicleRecordPointerValid(p_ownerNum->ent()->scr_vehicle)
+#endif
         && (scr_vehicle = p_ownerNum->ent()->scr_vehicle) != 0
         && (scr_vehicle->flags & 0xA) == 0)
     {
@@ -4316,19 +4319,29 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
         }
     }
 
+#ifdef __SWITCH__
     if (i >= ARRAY_COUNT(s_vehicles))
     {
         Com_Error(ERR_DROP, "Hit max vehicle count [%d]", ARRAY_COUNT(s_vehicles));
         return;
     }
+#else
+    if (i >= 64)
+        Com_Error(ERR_DROP, "Hit max vehicle count [%d]", 64);
+#endif
 
     VehicleInfoFromName = VEH_GetVehicleInfoFromName(typeName);
 
+#ifdef __SWITCH__
     if (VehicleInfoFromName < 0)
     {
         Com_Error(ERR_DROP, "Can't find info for script vehicle [%s]", typeName);
         return;
     }
+#else
+    if (VehicleInfoFromName < 0)
+        Com_Error(ERR_DROP, "Can't find info for script vehicle [%s]", typeName);
+#endif
 
     VEH_InitModelAndValidateTags(ent, &VehicleInfoFromName);
     v9 = VehicleInfoFromName;
