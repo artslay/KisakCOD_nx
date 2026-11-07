@@ -12748,6 +12748,8 @@ HRESULT IDirect3DDevice9::UpdateTexture(
     }
     source->layout = sourceOverallLayout;
     destination->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    destination->volumeShadowValid = false;
+    destination->volumeShadowLevel = 0xffffffffu;
 
     source->dirtyAll = false;
     source->dirtyBoxes.clear();
