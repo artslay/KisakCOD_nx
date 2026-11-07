@@ -91,6 +91,33 @@ static bool Switch_ActorPointerToIndex(const actor_s *actor, uint32_t *index)
     return true;
 }
 
+static bool Switch_ActorHasValidSpecies(const actor_s *actor, const char *function)
+{
+    if (!actor || actor->species < 0 || actor->species >= MAX_AI_SPECIES)
+    {
+        Com_Error(ERR_DROP, "%s: actor species is outside AIFuncTable", function);
+        return false;
+    }
+    return true;
+}
+
+static bool Switch_ActorHasValidState(const actor_s *actor, const char *function)
+{
+    if (!actor || actor->stateLevel >= ARRAY_COUNT(actor->eState))
+    {
+        Com_Error(ERR_DROP, "%s: actor state stack index is out of range", function);
+        return false;
+    }
+
+    const ai_state_t state = actor->eState[actor->stateLevel];
+    if (state <= AIS_INVALID || state >= AIS_COUNT)
+    {
+        Com_Error(ERR_DROP, "%s: actor state value is out of range", function);
+        return false;
+    }
+    return true;
+}
+
 static void Switch_LogActorSpawn(const gentity_s *ent)
 {
     if (!ent || g_switchActorSpawnTraceCount >= 64u)
@@ -666,9 +693,19 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
     int v6; // r8
     ai_state_t v7; // r8
 
-    actor = self->actor;
+    actor = self ? self->actor : nullptr;
+#ifdef __SWITCH__
+    if (!actor || !actor->inuse || !Switch_ActorHasValidSpecies(actor, "Actor_Touch")
+        || !Switch_ActorHasValidState(actor, "Actor_Touch"))
+    {
+        if (!actor || !actor->inuse)
+            Com_Error(ERR_DROP, "Actor_Touch: actor is null or not in use");
+        return;
+    }
+#else
     if (!actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1490, 0, "%s", "actor");
+#endif
     if (!actor->inuse)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1491, 0, "%s", "actor->inuse");
     stateLevel = actor->stateLevel;
@@ -690,6 +727,13 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
             "(actor->eState[actor->stateLevel] > AIS_INVALID && actor->eState[actor->stateLevel] < AIS_COUNT)",
             v6);
     v7 = actor->eState[actor->stateLevel];
+#ifdef __SWITCH__
+    if (!AIFuncTable[actor->species][v7].pfnTouch)
+    {
+        Com_Error(ERR_DROP, "Actor_Touch: current state has no touch callback");
+        return;
+    }
+#else
     if (!AIFuncTable[actor->species][v7].pfnTouch)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp",
@@ -698,7 +742,8 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
             "%s\n\t(actor->eState[actor->stateLevel]) = %i",
             "(AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnTouch)",
             v7);
-    AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnTouch(actor, other);
+#endif
+    AIFuncTable[actor->species][v7].pfnTouch(actor, other);
 }
 
 bool __cdecl Actor_InScriptedState(const actor_s *self)
@@ -743,9 +788,20 @@ void __cdecl Actor_Pain(
     WeaponDef *WeaponDef; // r30
     sentient_s *sentient; // r4
 
-    actor = self->actor;
+    actor = self ? self->actor : nullptr;
+#ifdef __SWITCH__
+    if (!actor || !actor->inuse || !vDir || !self->sentient
+        || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
+        || !Switch_ActorHasValidState(actor, "Actor_Pain"))
+    {
+        if (!actor || !actor->inuse || !vDir || !self->sentient || !actor->sentient)
+            Com_Error(ERR_DROP, "Actor_Pain: invalid actor, sentient, or direction pointer");
+        return;
+    }
+#else
     if (!actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1568, 0, "%s", "actor");
+#endif
     if (!actor->inuse)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1569, 0, "%s", "actor->inuse");
     if (!vDir)
@@ -798,6 +854,13 @@ void __cdecl Actor_Pain(
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1606, 0, "%s", "weapDef->szInternalName");
         Scr_SetStringFromCharString(&actor->damageWeapon, WeaponDef->szInternalName);
     }
+#ifdef __SWITCH__
+    if (!AIFuncTable[actor->species][v18].pfnPain)
+    {
+        Com_Error(ERR_DROP, "Actor_Pain: current state has no pain callback");
+        return;
+    }
+#else
     if (!AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnPain)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp",
@@ -805,7 +868,8 @@ void __cdecl Actor_Pain(
             0,
             "%s",
             "AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnPain");
-    AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnPain(
+#endif
+    AIFuncTable[actor->species][v18].pfnPain(
         actor,
         pAttacker,
         iDamage,
@@ -814,7 +878,7 @@ void __cdecl Actor_Pain(
         vDir,
         (const hitLocation_t)hitLoc);
     self->sentient->lastAttacker = pAttacker;
-    sentient = pAttacker->sentient;
+    sentient = pAttacker ? pAttacker->sentient : nullptr;
     if (sentient)
         Actor_WasAttackedBy(actor, sentient);
     if (!actor->sentient->syncedMeleeEnt.isDefined() && actor->allowPain)
@@ -844,9 +908,20 @@ void __cdecl Actor_Die(
     unsigned __int16 HitLocationString; // r3
     WeaponDef *WeaponDef; // r29
 
-    actor = self->actor;
+    actor = self ? self->actor : nullptr;
+#ifdef __SWITCH__
+    if (!actor || !actor->inuse || !vDir || !actor->ent || !self->sentient
+        || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
+        || !Switch_ActorHasValidState(actor, "Actor_Die"))
+    {
+        if (!actor || !actor->inuse || !vDir || !actor->ent || !self->sentient)
+            Com_Error(ERR_DROP, "Actor_Die: invalid actor, entity, sentient, or direction pointer");
+        return;
+    }
+#else
     if (!actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1643, 0, "%s", "actor");
+#endif
     if (!actor->inuse)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1644, 0, "%s", "actor->inuse");
     if (!vDir)
@@ -891,7 +966,11 @@ void __cdecl Actor_Die(
             "%s\n\t(actor->eState[actor->stateLevel]) = %i",
             "(actor->eState[actor->stateLevel] > AIS_INVALID && actor->eState[actor->stateLevel] < AIS_COUNT)",
             v17);
+#ifdef __SWITCH__
+    if (v17 != AIS_DEATH)
+#else
     if (actor->eState[actor->stateLevel] != AIS_DEATH)
+#endif
     {
         actor->iDamageTaken = iDamage;
         actor->damageDir[0] = *vDir;
@@ -926,8 +1005,13 @@ void __cdecl Actor_Die(
 
 bool __cdecl Actor_IsDying(const actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorHasValidState(self, "Actor_IsDying"))
+        return false;
+#else
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1712, 0, "%s", "self");
+#endif
     return self->eState[self->stateLevel] == AIS_DEATH;
 }
 
@@ -1507,6 +1591,10 @@ bool __cdecl Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self)
 {
     unsigned int stateLevel; // r11
 
+#ifdef __SWITCH__
+    if (!Switch_ActorHasValidState(self, "Actor_IsReactingToEnemyDuringReacquireMove"))
+        return false;
+#endif
     stateLevel = self->stateLevel;
     return self->eState[stateLevel] == AIS_EXPOSED
         && self->eSubState[stateLevel] == STATE_EXPOSED_COMBAT
