@@ -929,7 +929,6 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     int v20; // r30
     bool v21; // cr58
     EntHandle v22; // r30
-    int v23; // r30
     XAnim_s *anims; // r30
     unsigned __int8 *v25; // r3
     unsigned __int8 *v26; // r3
@@ -1038,6 +1037,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         v7->number = Scr_ConvertThreadFromLoad(v7->number);
         break;
     case SF_ANIMSCRIPT:
+    {
         const uintptr_t animScriptIndex = ReadSavePointerSlot(v7);
 
         if (animScriptIndex != UINTPTR_MAX && animScriptIndex > 298)
@@ -1054,6 +1054,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
                 reinterpret_cast<uintptr_t>(&g_scr_data.anim) +
                 static_cast<uintptr_t>(animScriptIndex - 1) * sizeof(scr_animscript_t);
         break;
+    }
     case SF_PATHNODE:
     {
         const uintptr_t nodeIndex = ReadSavePointerSlot(v7);
@@ -1063,7 +1064,6 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(Path_LoadNode(static_cast<uint32_t>(nodeIndex)));
         break;
     }
-        break;
     case SF_ANIMTREE:
         if (ReadSavePointerSlot(v7))
         {
