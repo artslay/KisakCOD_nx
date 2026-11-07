@@ -952,7 +952,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_ENTITY:
         v10 = *(int*)v7;
-        if (*(unsigned int *)v7 > MAX_GENTITIES || (v11 = v10 == 0, v10 < 0))
+        if (ReadSavePointerSlot(v7) > MAX_GENTITIES || (v11 = v10 == 0, v10 < 0))
         {
             Com_Error(ERR_DROP, "ReadField: entity out of range (%i)", *v7);
             v11 = v10 == 0;
@@ -971,7 +971,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_CLIENT:
         v13 = (int)*(int*)v7;
-        if (*(unsigned int *)v7 > 1 || (v14 = v13 == 0, v13 < 0))
+        if (ReadSavePointerSlot(v7) > 1 || (v14 = v13 == 0, v13 < 0))
         {
             Com_Error(ERR_DROP, "ReadField: client out of range (%i)", *v7);
             v14 = v13 == 0;
@@ -982,7 +982,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_ACTOR:
         v15 = (int)*(int*)v7;
-        if (*(unsigned int *)v7 > 32 || (v16 = v15 == 0, v15 < 0))
+        if (ReadSavePointerSlot(v7) > 32 || (v16 = v15 == 0, v15 < 0))
         {
             Com_Error(ERR_DROP, "ReadField: actor out of range (%i)", *v7);
             v16 = v15 == 0;
@@ -993,7 +993,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_SENTIENT:
         v17 = (int)*(int*)v7;
-        if (*(unsigned int *)v7 > 33 || (v18 = v17 == 0, v17 < 0))
+        if (ReadSavePointerSlot(v7) > 33 || (v18 = v17 == 0, v17 < 0))
         {
             Com_Error(ERR_DROP, "ReadField: sentient out of range (%i)", *v7);
             v18 = v17 == 0;
@@ -1017,7 +1017,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_VEHICLE:
         v20 = (int)*(int*)v7;
-        if (*(unsigned int *)v7 > 64 || (v21 = v20 == 0, v20 < 0))
+        if (ReadSavePointerSlot(v7) > 64 || (v21 = v20 == 0, v20 < 0))
         {
             Com_Error(ERR_DROP, "ReadField: vehicle out of range (%i)", *v7);
             v21 = v20 == 0;
@@ -1028,9 +1028,9 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     case SF_TURRETINFO:
         v22 = *v7;
-        if (*(unsigned int *)v7 > 0x40u)
+        if (ReadSavePointerSlot(v7) > 0x40u)
             Com_Error(ERR_DROP, "ReadField: turret out of range (%i)", *v7);
-        if (!*(unsigned int *)&v22)
+        if (!ReadSavePointerSlot(v7))
             goto LABEL_58;
         *(uintptr_t *)v7 = (uintptr_t)&level.turrets[*(unsigned int *)&v22 - 1];
         break;
@@ -1038,24 +1038,31 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         v7->number = Scr_ConvertThreadFromLoad(v7->number);
         break;
     case SF_ANIMSCRIPT:
-        v23 = (int)*(int*)v7;
+        const uintptr_t animScriptIndex = ReadSavePointerSlot(v7);
 
-        if (v23 > 298 || v23 < -1)
+        if (animScriptIndex != UINTPTR_MAX && animScriptIndex > 298)
         {
             Com_Error(ERR_DROP, "ReadField: animscript out of range (%i)", *v7);
         }
-        if (!v23)
+        if (!animScriptIndex)
             goto LABEL_58;
-        if (v23 == -1)
+        if (animScriptIndex == UINTPTR_MAX)
             *reinterpret_cast<uintptr_t *>(v7) =
                 reinterpret_cast<uintptr_t>(base + offsetof(actor_s, AnimScriptSpecific));
         else
             *reinterpret_cast<uintptr_t *>(v7) =
                 reinterpret_cast<uintptr_t>(&g_scr_data.anim) +
-                static_cast<uintptr_t>(v23 - 1) * sizeof(scr_animscript_t);
+                static_cast<uintptr_t>(animScriptIndex - 1) * sizeof(scr_animscript_t);
         break;
     case SF_PATHNODE:
-        *(uintptr_t *)v7 = (uintptr_t)Path_LoadNode(*(unsigned int*)v7);
+    {
+        const uintptr_t nodeIndex = ReadSavePointerSlot(v7);
+        if (nodeIndex > UINT32_MAX)
+            Com_Error(ERR_DROP, "ReadField: pathnode index out of range (%llu)",
+                static_cast<unsigned long long>(nodeIndex));
+        *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(Path_LoadNode(static_cast<uint32_t>(nodeIndex)));
+        break;
+    }
         break;
     case SF_ANIMTREE:
         if (ReadSavePointerSlot(v7))
