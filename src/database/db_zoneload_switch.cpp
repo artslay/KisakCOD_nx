@@ -70,6 +70,16 @@ struct ZoneLoadState
     // Weapon assets are copied into native 64-bit layout before registration. Their
     // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
     std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+
+    // Clip-map lists are translated from 32-bit disk records to native ARM64
+    // records. The clip map keeps pointers into these allocations for its
+    // lifetime, so ownership must follow the zone handle rather than globals.
+    std::unordered_map<const void *, std::vector<cStaticModel_s>>
+        convertedStaticModelsBySourceList;
+    std::unordered_set<const void *> convertedStaticModelLists;
+    std::unordered_map<const void *, std::vector<DynEntityClient>>
+        convertedDynEntityClientsByDiskList;
+    std::unordered_set<const DynEntityClient *> convertedDynEntityClientLists;
     // Retained for bounded BSP registration diagnostics.
     const char *zoneName = nullptr;
     // OAT bypasses Load_GfxImageAsset, so make stream-backed image names
@@ -88,6 +98,12 @@ struct ZoneHandle
 {
     void *zone = nullptr;
     std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+    std::unordered_map<const void *, std::vector<cStaticModel_s>>
+        convertedStaticModelsBySourceList;
+    std::unordered_set<const void *> convertedStaticModelLists;
+    std::unordered_map<const void *, std::vector<DynEntityClient>>
+        convertedDynEntityClientsByDiskList;
+    std::unordered_set<const DynEntityClient *> convertedDynEntityClientLists;
 };
 
 std::mutex s_zoneHandlesMutex;
@@ -680,19 +696,14 @@ struct DiskDynEntityClient
 };
 static_assert(sizeof(DiskDynEntityClient) == 12);
 
-void FixupClipMap(void *asset)
+void FixupClipMap(ZoneLoadState &state, void *asset)
 {
     auto *clipMap = static_cast<clipMap_t *>(asset);
-    static std::mutex s_convertedLock;
-    std::lock_guard<std::mutex> guard(s_convertedLock);
 
     // The OAT zone loader builds cStaticModel_s using its own generated IW3
     // definition. Rebuild the list with the engine's cStaticModel_s layout
     // before the clip map is cloned into the engine singleton. This keeps the
     // 32-bit serialized row stride out of the engine's native pointer accesses.
-    static std::unordered_map<const void *, std::vector<cStaticModel_s>>
-        s_convertedStaticModelsBySourceList;
-    static std::unordered_set<const void *> s_convertedStaticModelLists;
 
     const void *sourceStaticModelList = nullptr;
     size_t staticModelCount = 0;
@@ -704,7 +715,7 @@ void FixupClipMap(void *asset)
             0) &&
         sourceStaticModelList &&
         staticModelCount > 0 &&
-        !s_convertedStaticModelLists.count(clipMap->staticModelList))
+        !state.convertedStaticModelLists.count(clipMap->staticModelList))
     {
         std::vector<KisakZoneStaticModelRecord> records(staticModelCount);
         if (KisakZone_ExtractClipMapStaticModels(
@@ -715,7 +726,7 @@ void FixupClipMap(void *asset)
                 records.size()))
         {
             std::vector<cStaticModel_s> &storage =
-                s_convertedStaticModelsBySourceList[sourceStaticModelList];
+                state.convertedStaticModelsBySourceList[sourceStaticModelList];
             storage.resize(staticModelCount);
 
             for (size_t index = 0; index < staticModelCount; ++index)
@@ -746,27 +757,25 @@ void FixupClipMap(void *asset)
             }
 
             clipMap->staticModelList = storage.data();
-            s_convertedStaticModelLists.insert(storage.data());
+            state.convertedStaticModelLists.insert(storage.data());
         }
     }
 
     if (sizeof(DynEntityClient) == sizeof(DiskDynEntityClient))
         return;
 
-    // Converted lists must outlive the zone load; they are keyed by the loaded list they replace.
-    static std::unordered_map<const void *, std::vector<DynEntityClient>> s_convertedByDiskList;
-    static std::unordered_set<const DynEntityClient *> s_convertedLists;
+    // Keep the native replacement arrays owned by this zone. DB_FreeXFileContent_Switch
+    // releases them together with the loaded OAT zone.
 
     for (int drawType = 0; drawType < 2; ++drawType)
     {
         const uint16_t count = clipMap->dynEntCount[drawType];
         const DynEntityClient *loadedList = clipMap->dynEntClientList[drawType];
-        if (!count || !loadedList || s_convertedLists.count(loadedList))
+        if (!count || !loadedList || state.convertedDynEntityClientLists.count(loadedList))
             continue;
 
         const auto *diskEntries = reinterpret_cast<const DiskDynEntityClient *>(loadedList);
-        std::vector<DynEntityClient> &storage = s_convertedByDiskList[loadedList];
-        s_convertedLists.erase(storage.data());
+        std::vector<DynEntityClient> &storage = state.convertedDynEntityClientsByDiskList[loadedList];
         storage.assign(count, DynEntityClient{});
         for (uint16_t entryIndex = 0; entryIndex < count; ++entryIndex)
         {
@@ -777,7 +786,7 @@ void FixupClipMap(void *asset)
             storage[entryIndex].health = diskEntries[entryIndex].health;
         }
         clipMap->dynEntClientList[drawType] = storage.data();
-        s_convertedLists.insert(storage.data());
+        state.convertedDynEntityClientLists.insert(storage.data());
     }
 }
 
@@ -811,7 +820,7 @@ void *LinkAsset(void *context, int assetType, void *asset)
         break;
     case ASSET_TYPE_CLIPMAP:
     case ASSET_TYPE_CLIPMAP_PVS:
-        FixupClipMap(asset);
+        FixupClipMap(state, asset);
         break;
     default:
         break;
@@ -1048,6 +1057,13 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         ZoneHandle handle;
         handle.zone = zone;
         handle.nativeWeaponCopies = std::move(state.nativeWeaponCopies);
+        handle.convertedStaticModelsBySourceList =
+            std::move(state.convertedStaticModelsBySourceList);
+        handle.convertedStaticModelLists = std::move(state.convertedStaticModelLists);
+        handle.convertedDynEntityClientsByDiskList =
+            std::move(state.convertedDynEntityClientsByDiskList);
+        handle.convertedDynEntityClientLists =
+            std::move(state.convertedDynEntityClientLists);
         s_zoneHandles[zoneMem] = std::move(handle);
     }
 
