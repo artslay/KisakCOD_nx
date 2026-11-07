@@ -64,6 +64,21 @@ static bool Switch_SentientEntityPointerValid(const gentity_s *ent)
     const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
     return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
 }
+
+static bool Switch_SentientLinksValid(const sentient_s *self)
+{
+    if (!Switch_SentientPointerToIndex(self, nullptr)
+        || !Switch_SentientEntityPointerValid(self->ent))
+        return false;
+
+    if (self->ent->sentient != self || (!self->ent->actor && !self->ent->client))
+        return false;
+
+    if (self->ent->actor && !Switch_ActorPointerToIndex(self->ent->actor, nullptr))
+        return false;
+
+    return true;
+}
 #endif
 
 sentient_s *__cdecl Sentient_Alloc()
@@ -123,6 +138,14 @@ void __cdecl Sentient_DissociateSentient(sentient_s *self, sentient_s *other, te
 
 void __cdecl Sentient_GetOrigin(const sentient_s *self, float *vOriginOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vOriginOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetOrigin: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     iassert(self);
     iassert(self->ent);
     iassert(self->ent->actor || self->ent->client);
@@ -133,6 +156,14 @@ void __cdecl Sentient_GetOrigin(const sentient_s *self, float *vOriginOut)
 
 void __cdecl Sentient_GetForwardDir(sentient_s *self, float *vDirOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vDirOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetForwardDir: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     iassert(self);
     iassert(self->ent);
     iassert(self->ent->actor || self->ent->client);
@@ -143,6 +174,14 @@ void __cdecl Sentient_GetForwardDir(sentient_s *self, float *vDirOut)
 
 void __cdecl Sentient_GetVelocity(const sentient_s *self, float *vVelOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vVelOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetVelocity: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     iassert(self);
     iassert(self->ent);
     iassert(self->ent->actor || self->ent->client);
@@ -160,6 +199,14 @@ void __cdecl Sentient_GetVelocity(const sentient_s *self, float *vVelOut)
 
 void __cdecl Sentient_GetCentroid(sentient_s *self, float *vCentroidOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vCentroidOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetCentroid: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     gentity_s *ent; // r11
     double v5; // fp13
     double v6; // fp12
@@ -198,6 +245,14 @@ void __cdecl Sentient_GetCentroid(sentient_s *self, float *vCentroidOut)
 
 void __cdecl Sentient_GetEyePosition(const sentient_s *self, float *vEyePosOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vEyePosOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetEyePosition: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     iassert(self);
     iassert(self->ent);
     iassert(self->ent->actor || self->ent->client);
@@ -211,6 +266,14 @@ void __cdecl Sentient_GetEyePosition(const sentient_s *self, float *vEyePosOut)
 
 void __cdecl Sentient_GetDebugEyePosition(const sentient_s *self, float *vEyePosOut)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self) || !vEyePosOut)
+    {
+        Com_Error(ERR_DROP, "Sentient_GetDebugEyePosition: invalid sentient, entity, or output pointer");
+        return;
+    }
+#endif
+
     actor_s *actor; // r3
 
     if (!self)
@@ -235,6 +298,14 @@ void __cdecl Sentient_GetDebugEyePosition(const sentient_s *self, float *vEyePos
 
 float __cdecl Sentient_GetHeadHeight(const sentient_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self))
+    {
+        Com_Error(ERR_DROP, "Sentient_GetHeadHeight: invalid sentient or entity pointer");
+        return 0.0f;
+    }
+#endif
+
     double v2; // fp1
 
     if (!self)
@@ -258,6 +329,14 @@ float __cdecl Sentient_GetHeadHeight(const sentient_s *self)
 
 void __cdecl Sentient_UpdateActualChainPos(sentient_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_SentientLinksValid(self))
+    {
+        Com_Error(ERR_DROP, "Sentient_UpdateActualChainPos: invalid sentient links");
+        return;
+    }
+#endif
+
     pathnode_t *ChainPos; // r3
     float v3[4]; // [sp+50h] [-20h] BYREF
 
