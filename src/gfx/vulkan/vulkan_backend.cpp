@@ -169,10 +169,6 @@ void Switch_RecordFrameCpuEnd()
     };
 
     char message[1024];
-    const char *presentName =
-        m_backend.load(std::memory_order_acquire) != nullptr
-            ? "active" : "none";
-    (void)presentName;
     std::snprintf(
         message, sizeof(message),
         "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
