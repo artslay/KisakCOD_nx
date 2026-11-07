@@ -561,6 +561,7 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
         return;
     }
     if (!g_animScriptTable[self->species] || !g_animScriptTable[self->species]->init.func
+        || self->eState[0] <= AIS_INVALID || self->eState[0] >= AIS_COUNT
         || !AIFuncTable[self->species][self->eState[0]].pfnStart)
     {
         Com_Error(ERR_DROP, "Actor_InitAnimScript: missing species animation or start callback");
@@ -767,11 +768,13 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse
+        || !Switch_EntityPointerValid(actor->ent) || actor->ent != self
+        || !Switch_SentientPointerToIndex(actor->sentient, nullptr) || actor->sentient->ent != self
         || !Switch_ActorHasValidSpecies(actor, "Actor_Touch")
         || !Switch_ActorHasValidState(actor, "Actor_Touch"))
     {
-        if (!actor || !actor->inuse)
-            Com_Error(ERR_DROP, "Actor_Touch: actor is null or not in use");
+        if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse)
+            Com_Error(ERR_DROP, "Actor_Touch: actor pointer is invalid or actor is not in use");
         return;
     }
 #else
@@ -871,8 +874,10 @@ void __cdecl Actor_Pain(
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
         || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || !Switch_EntityPointerValid(actor->ent) || actor->ent != self
         || !Switch_SentientPointerToIndex(actor->sentient, nullptr)
-        || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
+        || actor->sentient != self->sentient || actor->sentient->ent != self
+        || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
         || !Switch_ActorHasValidState(actor, "Actor_Pain"))
     {
         if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
@@ -1000,8 +1005,10 @@ void __cdecl Actor_Die(
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
-        || !Switch_EntityPointerValid(actor->ent)
+        || !Switch_EntityPointerValid(actor->ent) || actor->ent != self
         || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || !Switch_SentientPointerToIndex(actor->sentient, nullptr)
+        || actor->sentient != self->sentient || actor->sentient->ent != self
         || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
         || !Switch_ActorHasValidState(actor, "Actor_Die"))
     {
@@ -1778,7 +1785,8 @@ int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || !Switch_SentientPointerToIndex(self->sentient, nullptr))
+        || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent)
     {
         Com_Error(ERR_DROP, "Actor_InFixedNodeExposedCombat: invalid actor links");
         return 0;
@@ -3547,8 +3555,10 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || !Switch_SentientPointerToIndex(self->sentient, nullptr) || !Switch_EntityPointerValid(player)
-        || !Switch_SentientPointerToIndex(player->sentient, nullptr) || !player->client)
+        || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent
+        || !Switch_EntityPointerValid(player) || !player->client
+        || !Switch_SentientPointerToIndex(player->sentient, nullptr) || player->sentient->ent != player)
     {
         Com_Error(ERR_DROP, "Actor_UpdatePlayerPush: invalid actor/player links");
         return;
@@ -5047,7 +5057,8 @@ void __cdecl Actor_UpdateAnglesAndDelta(actor_s *self)
 {
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
-        || !Switch_SentientPointerToIndex(self->sentient, nullptr))
+        || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent)
     {
         Com_Error(ERR_DROP, "Actor_UpdateAnglesAndDelta: invalid actor/entity/sentient links");
         return;
