@@ -1218,16 +1218,14 @@ bool VulkanBackend::CreateSwapchain()
     const bool mailboxImageCountSupported =
         !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
 #ifdef __SWITCH__
-    // Honor the engine's VSync setting. MAILBOX remains synchronized to the
-    // display but replaces a queued frame instead of blocking the CPU behind
-    // a full FIFO queue. Without VSync, prefer IMMEDIATE when available.
+    // FIFO is the only present mode that guarantees display-paced presentation
+    // and back-pressure when VSync is enabled. MAILBOX can keep accepting newer
+    // frames while the display is scanning out the previous one.
     const bool vsyncEnabled = !r_vsync || r_vsync->current.enabled;
     if (vsyncEnabled)
     {
-        if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
-            m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-        else
-            m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        // FIFO is guaranteed by Vulkan for every presentation-capable surface.
+        m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
     }
     else if (hasPresentMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
     {
@@ -1235,11 +1233,14 @@ bool VulkanBackend::CreateSwapchain()
     }
     else if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
     {
-        // MAILBOX is the tear-free fallback when IMMEDIATE is unavailable.
+        // No immediate mode: MAILBOX avoids tearing but does not throttle the
+        // producer to the display refresh rate.
         m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     }
     else
     {
+        // FIFO is the required final fallback; disabling VSync cannot be
+        // honored on a surface that exposes no non-vsynced presentation mode.
         m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
     }
 #else
