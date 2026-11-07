@@ -467,17 +467,38 @@ void R_VulkanUploadTexture(
 
 
 
-    // Re-upload directly in the active graphics command buffer. The image
-    // barriers order earlier sampling draws before the transfer write and later
-    // draws after it; a CPU fence wait plus ImmediateSubmit here serialized the
-    // renderer once before the upload and again after it.
+    // Only the thread that owns the active frame may append transfer
+    // commands to its command buffer. Other callers retain the previous
+    // synchronization-before-ImmediateSubmit path.
+    const bool recordInCurrentFrame = backend->IsFrameRecordingThread();
+    if (!recordInCurrentFrame &&
+        oldLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
+        backend->IsFrameActive())
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/texture_reupload_sync";
+#endif
+        if (!backend->SynchronizeActiveFrame())
+        {
+            char trace[384];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK TEXTURE REUPLOAD SYNC FAIL] name=%.96s mip=%u face=%u layer=%u layout=%u\n",
+                image->name ? image->name : "<null>", mipLevel,
+                static_cast<unsigned>(face), layer,
+                static_cast<unsigned>(oldLayout));
+            Switch_LogWrite(trace);
+            return;
+        }
+    }
+
     bool uploaded = false;
     if (image->mapType == MAPTYPE_3D)
     {
         uploaded = backend->UploadImage3D(
             texture->image, texture->format,
             width, height, depth, mipLevel,
-            source, bytes, oldLayout, VkOffset3D{}, true);
+            source, bytes, oldLayout, VkOffset3D{}, recordInCurrentFrame);
     }
     else
     {
@@ -485,7 +506,7 @@ void R_VulkanUploadTexture(
             texture->image, texture->format, info.aspect,
             width, height, mipLevel,
             source, bytes, oldLayout, layer, VkOffset3D{},
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, recordInCurrentFrame);
     }
 
     if (uploaded)
