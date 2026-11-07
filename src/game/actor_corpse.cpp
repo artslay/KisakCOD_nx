@@ -458,16 +458,34 @@ void __cdecl ActorCorpse_Free(gentity_s *ent)
     int number; // r10
     int v4; // r31
 
+#ifdef __SWITCH__
+    if (!ent)
+    {
+        Com_Error(ERR_DROP, "ActorCorpse_Free: entity is null");
+        return;
+    }
+#endif
     ActorCorpseIndex = G_GetActorCorpseIndex(ent);
+#ifdef __SWITCH__
+    if (ActorCorpseIndex < 0 || ActorCorpseIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+        return;
+#endif
     number = ent->s.number;
     v4 = ActorCorpseIndex;
     if (g_scr_data.actorCorpseInfo[ActorCorpseIndex].entnum != number)
+#ifdef __SWITCH__
+    {
+        Com_Error(ERR_DROP, "ActorCorpse_Free: corpse slot entity number mismatch");
+        return;
+    }
+#else
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
             294,
             0,
             "%s",
             "g_scr_data.actorCorpseInfo[actorCorpseIndex].entnum == ent->s.number");
+#endif
     g_scr_data.actorCorpseInfo[v4].entnum = -1;
 }
 
@@ -705,9 +723,27 @@ void __cdecl Actor_OrientCorpseToGround(gentity_s *self, int bLerp)
     iassert((self->s.eType == ET_ACTOR_CORPSE) || (self->s.eType == ET_ACTOR));
 
     if (self->s.eType == ET_ACTOR_CORPSE)
+    {
+#ifdef __SWITCH__
+        const int corpseIndex = G_GetActorCorpseIndex(self);
+        if (corpseIndex < 0 || corpseIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+            return;
+        p_proneInfo = &g_scr_data.actorCorpseInfo[corpseIndex].proneInfo;
+#else
         p_proneInfo = &g_scr_data.actorCorpseInfo[G_GetActorCorpseIndex(self)].proneInfo;
+#endif
+    }
     else
+    {
+#ifdef __SWITCH__
+        if (!self->actor)
+        {
+            Com_Error(ERR_DROP, "Actor_OrientCorpseToGround: actor entity has no actor record");
+            return;
+        }
+#endif
         p_proneInfo = &self->actor->ProneInfo;
+    }
 
     if (p_proneInfo->bCorpseOrientation)
     {
@@ -840,6 +876,13 @@ void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
 
 int __cdecl Actor_BecomeCorpse(gentity_s *self)
 {
+#ifdef __SWITCH__
+    if (!self || !self->actor)
+    {
+        Com_Error(ERR_DROP, "Actor_BecomeCorpse: actor entity or actor record is null");
+        return 0;
+    }
+#endif
     const int corpseIndex = G_GetFreeActorCorpseIndex(1);
     if (corpseIndex < 0)
         return 0;
@@ -912,6 +955,11 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
 
 XAnimTree_s *__cdecl G_GetActorCorpseAnimTree(gentity_s *ent)
 {
-    return g_scr_data.actorCorpseInfo[G_GetActorCorpseIndex(ent)].tree;
+    const int index = G_GetActorCorpseIndex(ent);
+#ifdef __SWITCH__
+    if (index < 0 || index >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+        return nullptr;
+#endif
+    return g_scr_data.actorCorpseInfo[index].tree;
 }
 
