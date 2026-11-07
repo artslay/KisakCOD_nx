@@ -3597,6 +3597,7 @@ static bool Switch_LogIsStartupMessage(const char *msg)
         "[KisakCOD][LOG]",
         "[KisakCOD][VK]",
         "[KisakCOD][VK FORMAT]",
+        "[KisakCOD][VK PRESENT MODE]",
         "[KisakCOD][DB LOAD]",
         "[KisakCOD][ZONE LOAD]",
         "[KisakCOD][IWI ROOT] index ready"
