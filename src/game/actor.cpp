@@ -1695,6 +1695,17 @@ gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
     const float *position,
     double radius)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || !Switch_EntityPointerValid(self->ent) || !position
+        || (volume && !Switch_EntityPointerValid(volume)))
+    {
+        Com_Error(ERR_DROP, "Actor_IsKnownEnemyInRegion: invalid actor, sentient, or entity pointer");
+        return nullptr;
+    }
+#endif
+
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 3772, 0, "%s", "self");
     if (!position)
@@ -2070,9 +2081,12 @@ void __cdecl Actor_CheckCollisions(actor_s *self)
 #ifdef __SWITCH__
             if (v8->inuse && v8 != self)
             {
-                if (!v8->sentient || !v8->sentient->ent)
+                if (!Switch_SentientPointerToIndex(v8->sentient, nullptr)
+                    || !Switch_EntityPointerValid(v8->sentient->ent)
+                    || v8->sentient->ent->sentient != v8->sentient
+                    || v8->sentient->ent->actor != v8)
                 {
-                    Com_Error(ERR_DROP, "Actor_CheckCollisions: active actor has no sentient entity");
+                    Com_Error(ERR_DROP, "Actor_CheckCollisions: active actor has invalid sentient/entity links");
                     return;
                 }
                 if (v6 && (v8->Physics.iHitEntnum < 0 || v8->Physics.iHitEntnum >= MAX_GENTITIES))
@@ -4994,6 +5008,15 @@ void __cdecl Actor_BadPlacesChanged()
 
 void __cdecl Actor_UpdateAnglesAndDelta(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr))
+    {
+        Com_Error(ERR_DROP, "Actor_UpdateAnglesAndDelta: invalid actor/entity/sentient links");
+        return;
+    }
+#endif
+
     gentity_s *ent; // r28
     int iPathEndTime; // r10
     ai_animmode_t eAnimMode; // r4
