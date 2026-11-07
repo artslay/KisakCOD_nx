@@ -574,7 +574,7 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
 #endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 #ifdef __SWITCH__
-if (context.state->prim.device)
+    if (context.state->prim.device)
         context.state->prim.device->SetParticleCloudPassActive(false);
 #endif
     iassert( g_primStats );
