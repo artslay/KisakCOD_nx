@@ -14,6 +14,14 @@ float __cdecl CG_FadeObjectives(const cg_s *cgameGlob)
 {
     float *fadeColor; // r3
 
+#ifdef __SWITCH__
+    // The pause menu uses the same owner-draw objective elements as the score
+    // overlay. Their owner-draw path is explicitly enabled while paused, so
+    // keep the corresponding objective content fully visible as well.
+    if (cg_paused->current.integer && cg_drawpaused->current.enabled)
+        return 1.0f;
+#endif
+
     if (!CG_IsHudHidden())
     {
         if (cgameGlob->showScores)
