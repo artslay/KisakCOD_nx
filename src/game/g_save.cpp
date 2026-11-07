@@ -53,6 +53,9 @@ static_assert(sizeof(scr_vehicle_s) == 0x338);
 static_assert(sizeof(TurretInfo) == 188);
 static_assert(sizeof(threat_bias_t) == 1060);
 static_assert(
+    offsetof(actor_s, pszDebugInfo) + sizeof(const char *) <= offsetof(actor_s, pPotentialCoverNode),
+    "actor debug pointer must remain inside the serialized actor prefix");
+static_assert(
     offsetof(scr_data_t, dogAnim) ==
     offsetof(scr_data_t, anim) + sizeof(AnimScriptList));
 static_assert(
@@ -1259,6 +1262,14 @@ void __cdecl WriteActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
     pathnode_t **pPotentialCoverNode; // r31
     int v6; // [sp+50h] [-30h] BYREF
 
+    if (pActor->iPotentialCoverNodeCount < 0 ||
+        pActor->iPotentialCoverNodeCount > static_cast<int>(ARRAY_COUNT(pActor->pPotentialCoverNode)))
+        Com_Error(
+            ERR_DROP,
+            "WriteActorPotentialCoverNodes: count out of range (%d, max %d)",
+            pActor->iPotentialCoverNodeCount,
+            static_cast<int>(ARRAY_COUNT(pActor->pPotentialCoverNode)));
+
     v4 = 0;
     if (pActor->iPotentialCoverNodeCount > 0)
     {
@@ -1278,6 +1289,14 @@ void __cdecl ReadActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
     int v4; // r30
     pathnode_t **pPotentialCoverNode; // r31
     unsigned int v6; // [sp+50h] [-30h] BYREF
+
+    if (pActor->iPotentialCoverNodeCount < 0 ||
+        pActor->iPotentialCoverNodeCount > static_cast<int>(ARRAY_COUNT(pActor->pPotentialCoverNode)))
+        Com_Error(
+            ERR_DROP,
+            "ReadActorPotentialCoverNodes: count out of range (%d, max %d)",
+            pActor->iPotentialCoverNodeCount,
+            static_cast<int>(ARRAY_COUNT(pActor->pPotentialCoverNode)));
 
     v4 = 0;
     if (pActor->iPotentialCoverNodeCount > 0)
@@ -1305,6 +1324,9 @@ void __cdecl WriteActor(actor_s *pActor, SaveGame *save)
     if (pActor->inuse)
     {
         memcpy(v4, pActor, sizeof(v4));
+        // pszDebugInfo is runtime-only and is reset after loading. Never write
+        // a process address into a portable savegame snapshot.
+        memset(v4 + offsetof(actor_s, pszDebugInfo), 0, sizeof(pActor->pszDebugInfo));
         G_WriteStruct(actorFields, (unsigned __int8 *)pActor, v4, sizeof(v4), save);
         WriteActorPotentialCoverNodes(pActor, save);
     }
