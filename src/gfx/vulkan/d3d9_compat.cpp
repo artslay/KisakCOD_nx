@@ -6172,6 +6172,7 @@ HRESULT KisakVkTexture::LockBox(
     if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
+    lockDirtyBoxes.clear();
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
     const size_t volumeBytes = slice * d;
     if (lockShadow.size() != volumeBytes)
@@ -6387,11 +6388,13 @@ HRESULT KisakVkTexture::AddDirtyBox(const _D3DBOX *box)
 
     // Null marks the entire volume dirty, as specified by the D3D9 volume
     // texture interface. Once the whole resource is dirty, narrower regions
-    // cannot improve the subsequent update.
+    // cannot improve the subsequent UpdateTexture operation.
     if (!box)
     {
         dirtyBoxes.clear();
         dirtyAll = true;
+        if (lockShadowActive && lockIsVolume)
+            lockDirtyBoxes.clear();
         return S_OK;
     }
 
@@ -6400,6 +6403,11 @@ HRESULT KisakVkTexture::AddDirtyBox(const _D3DBOX *box)
         box->Bottom > height || box->Back > depth)
         return E_FAIL;
 
+    // Keep the exact writes performed during LockBox separately from D3D9's
+    // managed-resource dirty tracking. This lets the Switch model-lighting
+    // texture upload only the patches RB_PatchModelLighting actually changed.
+    if (lockShadowActive && lockIsVolume)
+        lockDirtyBoxes.push_back(*box);
     if (!dirtyAll)
         dirtyBoxes.push_back(*box);
     return S_OK;
