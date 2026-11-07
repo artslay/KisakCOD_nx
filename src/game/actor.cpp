@@ -2677,13 +2677,6 @@ void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
     }
 #endif
 
-#ifdef __SWITCH__
-    if (!Switch_ActorPointerToIndex(self, nullptr))
-    {
-        Com_Error(ERR_DROP, "Actor_AddStationaryMoveHistory: actor pointer is invalid");
-        return;
-    }
-#endif
     if (level.time / 50 == 10 * (level.time / 50 / 10)) // KISAKHERTZ
     {
         Actor_UpdateMoveHistory(self);
@@ -5787,6 +5780,15 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
     v12 = (gentityFlags_t)0;
     if (!self->Physics.bStuck && Actor_IsDodgeEntity(self, self->Physics.iHitEntnum) && Path_IsTrimmed(&self->Path))
     {
+#ifdef __SWITCH__
+        if (self->Path.wPathLen < 2
+            || self->Path.wPathLen - 2 >= ARRAY_COUNT(self->Path.pts)
+            || self->Path.wNegotiationStartNode >= self->Path.wPathLen - 1)
+        {
+            Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: trimmed path indices are out of range");
+            return 0;
+        }
+#endif
         if ((unsigned __int16)self->Path.wNegotiationStartNode >= 0x8000u)
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp",
@@ -6677,6 +6679,13 @@ void __cdecl Actor_UpdateOriginAndAngles(actor_s *self)
         {
             Actor_UpdateAnglesAndDelta(self);
             Actor_DoMove(self);
+#ifdef __SWITCH__
+            if (self->Physics.iHitEntnum < 0 || self->Physics.iHitEntnum >= MAX_GENTITIES)
+            {
+                Com_Error(ERR_DROP, "Actor_UpdateOriginAndAngles: updated hit entity number is out of range");
+                return;
+            }
+#endif
             if (level.gentities[self->Physics.iHitEntnum].sentient)
             {
                 if (!self->noDodgeMove)
