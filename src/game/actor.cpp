@@ -71,6 +71,26 @@ static uint32_t g_switchActorInitTraceCount;
 static uint32_t g_switchActorDeathTraceCount;
 static bool g_switchActorThinkLogged[MAX_ACTORS];
 
+static bool Switch_ActorPointerToIndex(const actor_s *actor, uint32_t *index)
+{
+    if (!actor || !level.actors)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.actors);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(actor);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(actor_s) * MAX_ACTORS;
+    if (offset >= arrayBytes || offset % sizeof(actor_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(actor_s));
+    return true;
+}
+
 static void Switch_LogActorSpawn(const gentity_s *ent)
 {
     if (!ent || g_switchActorSpawnTraceCount >= 64u)
@@ -121,8 +141,8 @@ static void Switch_LogActorThinkOnce(const actor_s *actor)
     if (!actor || !actor->ent || !level.actors)
         return;
 
-    const std::ptrdiff_t index = actor - level.actors;
-    if (index < 0 || index >= MAX_ACTORS || g_switchActorThinkLogged[index])
+    uint32_t index;
+    if (!Switch_ActorPointerToIndex(actor, &index) || g_switchActorThinkLogged[index])
         return;
 
     g_switchActorThinkLogged[index] = true;
@@ -306,11 +326,21 @@ void __cdecl G_InitActors()
 
 unsigned int __cdecl G_GetActorIndex(actor_s *actor)
 {
+#ifdef __SWITCH__
+    uint32_t index;
+    if (!Switch_ActorPointerToIndex(actor, &index))
+    {
+        Com_Error(ERR_DROP, "G_GetActorIndex: actor pointer is outside level.actors");
+        return 0;
+    }
+    return index;
+#else
     iassert(actor);
     iassert(actor - level.actors >= 0);
     iassert(actor - level.actors < MAX_ACTORS);
 
     return (unsigned int)(actor - level.actors);
+#endif
 }
 
 XAnimTree_s *__cdecl G_GetActorAnimTree(actor_s *actor)
@@ -523,6 +553,15 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     if (!pPrevActor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 909, 0, "%s", "pPrevActor");
     actors = level.actors;
+#ifdef __SWITCH__
+    uint32_t previousIndex;
+    if (!Switch_ActorPointerToIndex(pPrevActor, &previousIndex))
+    {
+        Com_Error(ERR_DROP, "Actor_NextActor: previous actor is outside level.actors");
+        return 0;
+    }
+    v5 = static_cast<int>(previousIndex) + 1;
+#else
     if (pPrevActor < level.actors || pPrevActor >= &level.actors[32])
     {
         MyAssertHandler(
@@ -544,6 +583,7 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
         actors = level.actors;
     }
     v5 = pPrevActor - actors + 1;
+#endif
     if (v5 >= 32)
         return 0;
     v6 = v5;
@@ -2674,6 +2714,14 @@ void __cdecl Actor_Free(actor_s *actor)
     if (!actor)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 404, 0, "%s", "actor");
     actors = level.actors;
+#ifdef __SWITCH__
+    uint32_t actorIndex;
+    if (!Switch_ActorPointerToIndex(actor, &actorIndex))
+    {
+        Com_Error(ERR_DROP, "Actor_Free: actor pointer is outside level.actors");
+        return;
+    }
+#else
     if (!level.actors)
     {
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 405, 0, "%s", "level.actors");
@@ -2696,6 +2744,7 @@ void __cdecl Actor_Free(actor_s *actor)
             0,
             "%s",
             "&level.actors[actor - level.actors] == actor");
+#endif
     if (!actor->sentient)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 408, 0, "%s", "actor->sentient");
     if (!actor->inuse)
