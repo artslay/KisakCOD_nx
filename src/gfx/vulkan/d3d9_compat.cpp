@@ -6091,6 +6091,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         if (!backend || info.format == VK_FORMAT_UNDEFINED)
             return E_FAIL;
         if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+            !lockWasUndefined &&
             !backend->SynchronizeActiveFrame(
                 VulkanBackend::FrameSyncReason::TextureUnlockRect))
             return E_FAIL;
@@ -6183,13 +6184,6 @@ HRESULT KisakVkTexture::LockBox(
     if (!backend)
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
-    if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
-        !(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
-    {
-        if (!backend->SynchronizeActiveFrame(
-                VulkanBackend::FrameSyncReason::TextureLockBox))
-            return E_FAIL;
-    }
     lockDirtyBoxes.clear();
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
     const size_t volumeBytes = slice * d;
@@ -6239,6 +6233,12 @@ HRESULT KisakVkTexture::LockBox(
     }
     else if (!canReuseVolumeShadow)
     {
+        if (backend->IsFrameActive() && !backend->IsFrameRecordingThread())
+        {
+            if (!backend->SynchronizeActiveFrame(
+                    VulkanBackend::FrameSyncReason::TextureLockBox))
+                return E_FAIL;
+        }
         if (!backend->DownloadImage3D(
                 image, w, h, d, level, lockShadow.data(), lockShadow.size(),
                 old, true, VulkanBackend::FrameSyncReason::TextureLockBox))
@@ -6283,10 +6283,6 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 #endif
         if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
             return E_FAIL;
-        if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
-            !backend->SynchronizeActiveFrame(
-                VulkanBackend::FrameSyncReason::TextureUnlockBox))
-            return E_FAIL;
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
         const bool modelLightingPatchUpload =
@@ -6306,6 +6302,13 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
         {
             // No model-lighting patch touched this volume in this frame.
             // Keep the existing GPU image and persistent CPU mirror as-is.
+        }
+        else if (backend->IsFrameActive() && !backend->IsFrameRecordingThread() &&
+                 !lockWasUndefined &&
+                 !backend->SynchronizeActiveFrame(
+                     VulkanBackend::FrameSyncReason::TextureUnlockBox))
+        {
+            return E_FAIL;
         }
         else if (modelLightingPatchUpload)
         {
