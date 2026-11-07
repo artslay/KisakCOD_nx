@@ -870,7 +870,9 @@ void __cdecl Actor_Pain(
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
-        || !self->sentient || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || !Switch_SentientPointerToIndex(actor->sentient, nullptr)
+        || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
         || !Switch_ActorHasValidState(actor, "Actor_Pain"))
     {
         if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
@@ -998,7 +1000,9 @@ void __cdecl Actor_Die(
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
-        || !actor->ent || !self->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
+        || !Switch_EntityPointerValid(actor->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
         || !Switch_ActorHasValidState(actor, "Actor_Die"))
     {
         if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
@@ -1726,10 +1730,29 @@ gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
             continue;
 
         const gentity_s *ent = candidate->ent;
-        if (!ent || ent->health == 0)
+#ifdef __SWITCH__
+        if (!ent)
+            continue;
+        if (!Switch_EntityPointerValid(ent) || ent->sentient != candidate)
+        {
+            Com_Error(ERR_DROP, "Actor_IsKnownEnemyInRegion: candidate sentient has an invalid entity");
+            return nullptr;
+        }
+#else
+        if (!ent)
+            continue;
+#endif
+        if (ent->health == 0)
             continue;
 
         const actor_s *actor = ent->actor;
+#ifdef __SWITCH__
+        if (actor && !Switch_ActorPointerToIndex(actor, nullptr))
+        {
+            Com_Error(ERR_DROP, "Actor_IsKnownEnemyInRegion: candidate actor is outside the actor pool");
+            return nullptr;
+        }
+#endif
         if (actor && (actor->ignoreForFixedNodeSafeCheck || Actor_IsDying(actor)))
             continue;
 
@@ -1772,6 +1795,13 @@ int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
     TargetEntity = Actor_GetTargetEntity(self);
     if (!TargetEntity)
         return 0;
+#ifdef __SWITCH__
+    if (!Switch_EntityPointerValid(TargetEntity))
+    {
+        Com_Error(ERR_DROP, "Actor_InFixedNodeExposedCombat: target entity is outside g_entities");
+        return 0;
+    }
+#endif
     sentient = TargetEntity->sentient;
     if (sentient)
     {
@@ -2668,8 +2698,14 @@ unsigned int __cdecl G_GetActorFriendlyIndex(int iEntNum)
 #endif
     ent = &g_entities[iEntNum];
     actor = ent->actor;
+#ifdef __SWITCH__
+    if (!actor || !actor->bDrawOnCompass || !Switch_SentientPointerToIndex(ent->sentient, nullptr)
+        || ent->sentient->eTeam != TEAM_ALLIES)
+        return -1;
+#else
     if (!actor || !actor->bDrawOnCompass || !ent->sentient || ent->sentient->eTeam != TEAM_ALLIES)
         return -1;
+#endif
 
 #ifdef __SWITCH__
     uint32_t actorIndex;
@@ -3639,7 +3675,8 @@ actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
     float *v10; // r11
 
 #ifdef __SWITCH__
-    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->sentient
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || !Switch_SentientPointerToIndex(self->sentient, nullptr)
         || !Switch_ActorHasValidSpecies(self, "Actor_CallThink")
         || !Switch_ActorHasValidState(self, "Actor_CallThink"))
     {
