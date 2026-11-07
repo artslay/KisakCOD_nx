@@ -614,6 +614,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
     uint16_t v13; // [esp+54h] [ebp-2Ch]
     uint16_t v14; // [esp+58h] [ebp-28h]
     uint32_t caseValue; // [esp+6Ch] [ebp-14h]
+    uint32_t jumpOffset32; // 32-bit relative branch operand
     uintptr_t jumpOffset; // Switch operand width
     int caseCount; // [esp+74h] [ebp-Ch]
     VariableValue value; // [esp+78h] [ebp-8h] BYREF
@@ -857,8 +858,8 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 else
                     return (char*)pos;
             case 98:
-                memcpy(&v9, pos, sizeof(v9));
-                return const_cast<char *>(pos + v9 + sizeof(v9));
+                memcpy(&jumpOffset32, pos, sizeof(jumpOffset32));
+                return const_cast<char *>(pos + jumpOffset32 + sizeof(jumpOffset32));
             case 99:
                 memcpy(&v13, pos, sizeof(v13));
                 return const_cast<char *>(pos - v13 + sizeof(v13));
