@@ -820,6 +820,9 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
 
 void VulkanBackend::Shutdown()
 {
+    if (g_frameRecordingBackend == this)
+        g_frameRecordingBackend = nullptr;
+
     // Stop any in-flight cinematic upload before destroying Vulkan resources.
     // ImmediateSubmit takes these locks in the same order.
     std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
@@ -1894,6 +1897,8 @@ bool VulkanBackend::RecreateSwapchain()
     FlushDeferredResources();
 
     m_frameActive = false;
+    if (g_frameRecordingBackend == this)
+        g_frameRecordingBackend = nullptr;
     m_imageAvailablePending = false;
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
