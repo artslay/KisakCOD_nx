@@ -667,8 +667,11 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         {
             v4 = static_cast<unsigned int>(
                 *reinterpret_cast<gentity_s * const *>(v3) - g_entities + 1);
-            if (v4 > 0x880)
+            if (v4 > MAX_GENTITIES)
+            {
                 Com_Error(ERR_DROP, "WriteField1: entity out of range (%i)", v4);
+                return;
+            }
 
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v4);
         }
@@ -684,7 +687,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v5 = v3->entnum();
             v6 = v5 + 1;
             if ((int)(v5 + 1) > MAX_GENTITIES || v6 < 0)
+            {
                 Com_Error(ERR_DROP, "WriteField1: entity out of range (%i)", v5 + 1);
+                return;
+            }
 
             *(int *)v3 = v6;
         }
@@ -699,7 +705,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v7 = static_cast<unsigned int>(
                 *reinterpret_cast<gclient_s * const *>(v3) - level.clients + 1);
             if (v7 >= 2)
+            {
                 Com_Error(ERR_DROP, "WriteField1: client out of range (%i)", v7);
+                return;
+            }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v7);
         }
         else
@@ -713,7 +722,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v8 = static_cast<unsigned int>(
                 *reinterpret_cast<actor_s * const *>(v3) - level.actors + 1);
             if (v8 > 0x20)
+            {
                 Com_Error(ERR_DROP, "WriteField1: actor out of range (%i)", v8);
+                return;
+            }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v8);
         }
         else
@@ -727,7 +739,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v9 = static_cast<unsigned int>(
                 *reinterpret_cast<sentient_s * const *>(v3) - level.sentients + 1);
             if (v9 >= 0x22)
+            {
                 Com_Error(ERR_DROP, "WriteField1: sentient out of range (%i)", v9);
+                return;
+            }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v9);
         }
         else
@@ -742,7 +757,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             //v10 = SentientHandle::sentient((SentientHandle *)v3) - level.sentients + 1;
             v10 = senthand->sentient() - level.sentients + 1;
             if (v10 >= 0x22)
+            {
                 Com_Error(ERR_DROP, "WriteField1: sentient out of range (%i)", v10);
+                return;
+            }
 
             *(int *)v3 = v10;
         }
@@ -757,7 +775,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v11 = static_cast<unsigned int>(
                 *reinterpret_cast<scr_vehicle_s * const *>(v3) - level.vehicles + 1);
             if (v11 > 0x40)
+            {
                 Com_Error(ERR_DROP, "WriteField1: vehicle out of range (%i)", v11);
+                return;
+            }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v11);
         }
         else
@@ -771,7 +792,10 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
             v12 = static_cast<unsigned int>(
                 *reinterpret_cast<TurretInfo * const *>(v3) - level.turrets + 1);
             if (v12 > 0x20)
+            {
                 Com_Error(ERR_DROP, "WriteField1: turret out of range (%i)", v12);
+                return;
+            }
             *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v12);
         }
         else
@@ -801,6 +825,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                     ((animAddress - animBase) % sizeof(scr_animscript_t)) != 0)
                 {
                     Com_Error(ERR_DROP, "WriteField1: animscript pointer out of range (%p)", v13);
+                    return;
                 }
 
                 v14 = static_cast<int>((animAddress - animBase) / sizeof(scr_animscript_t));
@@ -808,6 +833,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 if (v15 <= 0 || v15 > 298)
                 {
                     Com_Error(ERR_DROP, "WriteField1: animscript index out of range (%i)", v15);
+                    return;
                 }
                 *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v15);
             }
