@@ -897,14 +897,6 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
     }
 #endif
 
-#ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle)
-    {
-        Com_Error(ERR_DROP, "VEH_TouchEntities: invalid entity or vehicle pointer");
-        return;
-    }
-#endif
-
     int32_t v1; // [esp+Ch] [ebp-1080h]
     float maxs[3]; // [esp+18h] [ebp-1074h] BYREF
     DObj_s *obj; // [esp+24h] [ebp-1068h]
@@ -4943,6 +4935,14 @@ void CMD_VEH_SetJitterParams(scr_entref_t entref)
 
 void G_FreeVehicle(gentity_s *ent)
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(ent->scr_vehicle))
+    {
+        Com_Error(ERR_DROP, "G_FreeVehicle: invalid entity or vehicle record");
+        return;
+    }
+#endif
+
     scr_vehicle_s *scr_vehicle; // r11
 
     iassert(ent->scr_vehicle->entNum != ENTITYNUM_NONE);
