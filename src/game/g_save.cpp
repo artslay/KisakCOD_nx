@@ -42,6 +42,10 @@ extern int g_switchPlayerInputTraceFrames;
 // SF_ANIMSCRIPT serializes indices across the adjacent human and dog tables.
 // These checks prevent another ABI change from silently invalidating that map.
 static_assert(sizeof(scr_animscript_t) == 8);
+static_assert(sizeof(animscripted_s) == 96,
+    "Switch animscripted save record size changed");
+static_assert(sizeof(threat_bias_t) == 1060,
+    "Switch threat-bias save record size changed");
 static_assert(sizeof(animscripted_s) == 96, "SF_TYPE_SCRIPTED raw save record must stay pointer-free and 96 bytes");
 static_assert(sizeof(tagInfo_s) == 2 * sizeof(void *) + 8 + 96);
 static_assert(offsetof(tagInfo_s, name) == 2 * sizeof(void *));
