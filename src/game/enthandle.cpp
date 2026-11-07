@@ -121,15 +121,31 @@ void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
                 return;
             }
 #endif
+#ifdef __SWITCH__
+            if (!info->handle)
+            {
+                Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle node is empty");
+                return;
+            }
+#else
             if (!info->handle)
             {
                 v1 = va("%d %p", infoIndex, info);
-                MyAssertHandler(".\\game\\enthandle.cpp", 137, 0, "%s\n\t%s", "info->handle", v1);
+                MyAssertHandler(".\\game\\enthandle.cpp", 137, 0, "%s\\n\\t%s", "info->handle", v1);
             }
+#endif
             *(_DWORD *)info->handle = 0;
             info->handle = 0;
+#ifdef __SWITCH__
+            if (g_usedEntHandle <= 0)
+            {
+                Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle count underflow");
+                return;
+            }
+#else
             if (!g_usedEntHandle)
                 MyAssertHandler(".\\game\\enthandle.cpp", 142, 0, "%s", "g_usedEntHandle");
+#endif
             --g_usedEntHandle;
             infoIndex = info->next;
         } while (infoIndex != infoIndexHead);
@@ -164,11 +180,21 @@ void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoI
 #endif
         if (entHandleList->infoIndex == oldInfoIndex)
             entHandleList->infoIndex = oldInfoIndex != info->next ? info->next : 0;
+#ifdef __SWITCH__
+        if (!info->handle || g_usedEntHandle <= 0)
+        {
+            Com_Error(ERR_DROP, "RemoveEntHandleInfo: empty handle node or count underflow");
+            return;
+        }
+#else
         if (!info->handle)
         {
             v2 = va("%d %p", oldInfoIndex, info);
-            MyAssertHandler(".\\game\\enthandle.cpp", 194, 0, "%s\n\t%s", "info->handle", v2);
+            MyAssertHandler(".\\game\\enthandle.cpp", 194, 0, "%s\\n\\t%s", "info->handle", v2);
         }
+        if (!g_usedEntHandle)
+            MyAssertHandler(".\\game\\enthandle.cpp", 196, 0, "%s", "g_usedEntHandle");
+#endif
         info->handle = 0;
         if (!g_usedEntHandle)
             MyAssertHandler(".\\game\\enthandle.cpp", 196, 0, "%s", "g_usedEntHandle");
@@ -425,7 +451,7 @@ sentient_s *SentientHandle::sentient() const
 {
 #ifdef __SWITCH__
     if (!this->number || this->number > MAX_SENTIENTS
-        || !g_sentients[this->number - 1].ent
+        || !Switch_EntHandleEntityToIndex(g_sentients[this->number - 1].ent, nullptr)
         || !g_sentients[this->number - 1].ent->r.inuse)
     {
         Com_Error(ERR_DROP, "SentientHandle::sentient: invalid or inactive sentient handle");
