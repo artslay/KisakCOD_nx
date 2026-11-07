@@ -186,7 +186,7 @@ gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
 void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 {
 #ifdef __SWITCH__
-    if (!ent || !veh || !VEH_GetVehicleInfoChecked(infoIdx))
+    if (!Switch_VehicleEntityPointerValid(ent) || !veh || !VEH_GetVehicleInfoChecked(infoIdx))
     {
         Com_Error(ERR_DROP, "VEH_InitEntity: invalid entity, vehicle, or info index");
         return;
@@ -253,7 +253,7 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
 #ifdef __SWITCH__
-    if (!ent || !veh || !VEH_GetVehicleInfoChecked(static_cast<int>(infoIdx)))
+    if (!Switch_VehicleEntityPointerValid(ent) || !veh || !VEH_GetVehicleInfoChecked(static_cast<int>(infoIdx)))
     {
         Com_Error(ERR_DROP, "VEH_InitVehicle: invalid entity, vehicle, or info index");
         return;
@@ -867,6 +867,14 @@ void __cdecl VEH_BackupPosition(gentity_s *ent)
 
 void __cdecl VEH_TouchEntities(gentity_s *ent)
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle)
+    {
+        Com_Error(ERR_DROP, "VEH_TouchEntities: invalid entity or vehicle pointer");
+        return;
+    }
+#endif
+
     int32_t v1; // [esp+Ch] [ebp-1080h]
     float maxs[3]; // [esp+18h] [ebp-1074h] BYREF
     DObj_s *obj; // [esp+24h] [ebp-1068h]
@@ -912,7 +920,7 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
 #ifdef __SWITCH__
     if (v1 < 0 || v1 > MAX_GENTITIES)
     {
-        Com_Error(ERR_DROP, "VEH_PushEntity: area entity count is out of range");
+        Com_Error(ERR_DROP, "VEH_TouchEntities: area entity count is out of range");
         return;
     }
 #endif
@@ -921,7 +929,7 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
 #ifdef __SWITCH__
         if (entityList[i] < 0 || entityList[i] >= MAX_GENTITIES)
         {
-            Com_Error(ERR_DROP, "VEH_PushEntity: area entity number is out of range");
+            Com_Error(ERR_DROP, "VEH_TouchEntities: area entity number is out of range");
             return;
         }
 #endif
@@ -2976,7 +2984,7 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
     float sqrLen; // [esp+28h] [ebp-4h]
 
 #ifdef __SWITCH__
-    if (!ent || !ent->scr_vehicle || !origin || idx < 0 || idx >= ARRAY_COUNT(s_wheelTags))
+    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle || !origin || idx < 0 || idx >= ARRAY_COUNT(s_wheelTags))
     {
         Com_Error(ERR_DROP, "VEH_GetWheelOrigin: invalid entity, output, or wheel index");
         return;
