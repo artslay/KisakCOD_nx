@@ -4412,7 +4412,8 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             // NOOVERWRITE targets bytes that earlier draws do not read. Because
             // these allocations are HOST_VISIBLE|HOST_COHERENT, backend-thread
             // writes before queue submission need no transfer commands/barrier.
-            if (firstUpdate.waitForGpu && !SynchronizeActiveFrame())
+            if (firstUpdate.waitForGpu &&
+                !SynchronizeActiveFrame(FrameSyncReason::MappedBufferWrite))
             {
                 requeueRemaining(i);
                 return false;
@@ -4469,7 +4470,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
                 m_pendingBufferUpdateData.data() + dataBegin;
             if (!AllocateUniform(stagedData, stagedSize, &source))
             {
-                if (!SynchronizeActiveFrame() ||
+                if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted) ||
                     !AllocateUniform(stagedData, stagedSize, &source))
                 {
                     requeueRemaining(i);
