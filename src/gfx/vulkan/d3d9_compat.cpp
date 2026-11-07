@@ -5712,7 +5712,8 @@ HRESULT KisakVkBuffer::Lock(
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/resource_lock/static_buffer_lock_sync";
 #endif
-        if (backend && !backend->SynchronizeActiveFrame())
+        if (backend && !backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::StaticBufferLock))
             return E_FAIL;
     }
 
@@ -6030,7 +6031,10 @@ HRESULT KisakVkTexture::LockRect(
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/resource_lock/texture_lock_rect_sync";
 #endif
-    if (!backend || !backend->SynchronizeActiveFrame())
+    if (!backend ||
+        (!(flags & D3DLOCK_DISCARD) &&
+         !backend->SynchronizeActiveFrame(
+             VulkanBackend::FrameSyncReason::TextureLockRect)))
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     lockShadow.resize(TextureLevelSize(sourceFormat, w, h));
@@ -6079,7 +6083,8 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_sync";
 #endif
         if (!backend || info.format == VK_FORMAT_UNDEFINED ||
-            !backend->SynchronizeActiveFrame())
+            !backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureUnlockRect))
             return E_FAIL;
         const uint32_t w = std::max(1u, width >> level);
         const uint32_t h = std::max(1u, height >> level);
@@ -6167,7 +6172,10 @@ HRESULT KisakVkTexture::LockBox(
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/resource_lock/texture_lock_box_sync";
 #endif
-    if (!backend || !backend->SynchronizeActiveFrame())
+    if (!backend ||
+        (!(flags & D3DLOCK_DISCARD) &&
+         !backend->SynchronizeActiveFrame(
+             VulkanBackend::FrameSyncReason::TextureLockBox)))
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
@@ -6214,7 +6222,8 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
         g_switchFrameStage = "frame/resource_lock/texture_unlock_box_sync";
 #endif
         if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth ||
-            !backend->SynchronizeActiveFrame())
+            !backend->SynchronizeActiveFrame(
+                VulkanBackend::FrameSyncReason::TextureUnlockBox))
             return E_FAIL;
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
@@ -12303,7 +12312,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     if (switchFloorOcclusionPool != VK_NULL_HANDLE)
     {
         switchFloorReadbackFrameSyncAttempted = true;
-        switchFloorReadbackFrameSynced = m_backend->SynchronizeActiveFrame();
+        switchFloorReadbackFrameSynced = m_backend->SynchronizeActiveFrame(
+            VulkanBackend::FrameSyncReason::DiagnosticReadback);
         if (!switchFloorReadbackFrameSynced)
         {
             Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=frame_sync\n");
@@ -12387,7 +12397,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             else if ((switchFloorReadbackFrameSyncAttempted &&
                       !switchFloorReadbackFrameSynced) ||
                      (!switchFloorReadbackFrameSyncAttempted &&
-                      !m_backend->SynchronizeActiveFrame()))
+                      !m_backend->SynchronizeActiveFrame(
+                          VulkanBackend::FrameSyncReason::DiagnosticReadback)))
             {
                 Switch_LogWrite("[KisakCOD][VK FLOOR PIXEL READBACK] result=fail reason=frame_sync\n");
             }
