@@ -4204,6 +4204,13 @@ void G_UpdateVehicleTags(gentity_s *ent)
 
 void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(ent) || !typeName || !*typeName)
+    {
+        Com_Error(ERR_DROP, "G_SpawnVehicle: invalid entity or vehicle type name");
+        return;
+    }
+#endif
     //int *i; // r11
     int v9; // r24
     int WeaponIndexForName; // r3
@@ -4224,13 +4231,19 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
         }
     }
 
-    if (i >= 64)
-        Com_Error(ERR_DROP, "Hit max vehicle count [%d]", 64);
+    if (i >= ARRAY_COUNT(s_vehicles))
+    {
+        Com_Error(ERR_DROP, "Hit max vehicle count [%d]", ARRAY_COUNT(s_vehicles));
+        return;
+    }
 
     VehicleInfoFromName = VEH_GetVehicleInfoFromName(typeName);
 
     if (VehicleInfoFromName < 0)
+    {
         Com_Error(ERR_DROP, "Can't find info for script vehicle [%s]", typeName);
+        return;
+    }
 
     VEH_InitModelAndValidateTags(ent, &VehicleInfoFromName);
     v9 = VehicleInfoFromName;
@@ -4381,8 +4394,16 @@ gentity_s *G_GetPlayerVehicle(const gentity_s *player)
     }
 #endif
     v5 = p_ownerNum->ent();
+#ifdef __SWITCH__
+    if (!v5->scr_vehicle)
+    {
+        Com_Error(ERR_DROP, "G_GetPlayerVehicle: owner entity is not a vehicle");
+        return nullptr;
+    }
+#else
     if (!v5->scr_vehicle)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 3988, 0, "%s", "vehEnt->scr_vehicle");
+#endif
     if ((v5->scr_vehicle->flags & 1) == 0)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp",
