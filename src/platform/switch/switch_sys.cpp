@@ -3743,25 +3743,9 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
 
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
-    // Aggregated scene and sound timings are emitted once per 120 samples.
-    // Keep these explicit prefixes instead of opening general profiling traces.
-    if (!msg)
-        return false;
-
-    static constexpr const char *const kPerformancePrefixes[] =
-    {
-        "[KisakCOD][CPU SCENE PERF]",
-        "[KisakCOD][CL SOUND PERF]",
-        "[KisakCOD][SND UPDATE PERF]",
-        "[KisakCOD][SND CHANNEL PERF]",
-        "[KisakCOD][SND STREAM FILL PERF]"
-    };
-    for (const char *prefix : kPerformancePrefixes)
-    {
-        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
-            return true;
-    }
-    return false;
+    // No performance/profiling diagnostics belong in the runtime log.
+    // Match the marker case-insensitively so new PERF categories are filtered too.
+    return Switch_LogContainsInsensitive(msg, "perf");
 }
 
 // Bounded HUD and cinematic lifecycle diagnostics. These are deliberately
@@ -3867,8 +3851,9 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
-    // HUD/compass/subtitle diagnostics are fully disabled on Switch.
-    if (!msg || !*msg || Switch_LogIsHudDiagnostic(msg))
+    // HUD/compass/subtitle and all performance diagnostics are disabled on Switch.
+    if (!msg || !*msg || Switch_LogIsHudDiagnostic(msg) ||
+        Switch_LogIsPerformanceDiagnostic(msg))
         return;
 
     // The normal Switch log is intentionally error-only. Routine engine output
@@ -3876,7 +3861,6 @@ void Switch_LogWrite(const char *msg)
     if (!Switch_LogIsImportant(msg) &&
         !Switch_LogIsFxDiagnostic(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
-        !Switch_LogIsPerformanceDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
         !Switch_LogIsStartupMessage(msg) &&
@@ -3980,7 +3964,8 @@ void Switch_LogWrite(const char *msg)
 
 void Switch_LogWriteInit(const char *msg)
 {
-    if (!msg || !*msg || Switch_LogIsVerboseTrace(msg))
+    if (!msg || !*msg || Switch_LogIsPerformanceDiagnostic(msg) ||
+        Switch_LogIsVerboseTrace(msg))
         return;
 
     // Called only while Com_Init is running. Unlike the runtime error-only
@@ -4006,7 +3991,7 @@ void Switch_LogWriteInit(const char *msg)
 
 void Switch_LogWriteError(const char *msg)
 {
-    if (!msg || !*msg)
+    if (!msg || !*msg || Switch_LogIsPerformanceDiagnostic(msg))
         return;
 
     // Flush buffered Switch fault context before the engine error so that
