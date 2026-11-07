@@ -67,6 +67,10 @@ uint16_t *s_flashTags[5] =
 
 short s_numVehicleInfos;
 
+#ifdef __SWITCH__
+static bool Switch_VehicleRecordPointerValid(const scr_vehicle_s *veh);
+#endif
+
 static vehicle_info_t *VEH_GetVehicleInfoChecked(int index)
 {
 #ifdef __SWITCH__
@@ -201,7 +205,8 @@ gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
 void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 {
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !veh || !VEH_GetVehicleInfoChecked(infoIdx))
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(veh)
+        || !VEH_GetVehicleInfoChecked(infoIdx))
     {
         Com_Error(ERR_DROP, "VEH_InitEntity: invalid entity, vehicle, or info index");
         return;
@@ -268,7 +273,8 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !veh || !VEH_GetVehicleInfoChecked(static_cast<int>(infoIdx)))
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(veh)
+        || !VEH_GetVehicleInfoChecked(static_cast<int>(infoIdx)))
     {
         Com_Error(ERR_DROP, "VEH_InitVehicle: invalid entity, vehicle, or info index");
         return;
@@ -883,7 +889,7 @@ void __cdecl VEH_BackupPosition(gentity_s *ent)
 void __cdecl VEH_TouchEntities(gentity_s *ent)
 {
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(ent->scr_vehicle)
         || static_cast<unsigned int>(ent->handler) >= ARRAY_COUNT(entityHandlers))
     {
         Com_Error(ERR_DROP, "VEH_TouchEntities: invalid entity, vehicle, or handler index");
@@ -2992,6 +2998,7 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
 #ifdef __SWITCH__
         && Switch_VehicleEntityPointerValid(p_ownerNum->ent())
 #endif
+        && Switch_VehicleRecordPointerValid(p_ownerNum->ent()->scr_vehicle)
         && (scr_vehicle = p_ownerNum->ent()->scr_vehicle) != 0
         && (scr_vehicle->flags & 0xA) == 0)
     {
@@ -3022,7 +3029,8 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
     float sqrLen; // [esp+28h] [ebp-4h]
 
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle || !origin || idx < 0 || idx >= ARRAY_COUNT(s_wheelTags))
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(ent->scr_vehicle)
+        || !origin || idx < 0 || idx >= ARRAY_COUNT(s_wheelTags))
     {
         Com_Error(ERR_DROP, "VEH_GetWheelOrigin: invalid entity, output, or wheel index");
         return;
@@ -4176,6 +4184,23 @@ static void VEH_UpdateNonPilotClient(gentity_s *vehEnt)
 
 scr_vehicle_s s_vehicles[64]{ 0 };
 
+#ifdef __SWITCH__
+static bool Switch_VehicleRecordPointerValid(const scr_vehicle_s *veh)
+{
+    if (!veh)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&s_vehicles[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(veh);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(s_vehicles);
+    return offset < arrayBytes && offset % sizeof(scr_vehicle_s) == 0;
+}
+#endif
+
 gentity_s * VEH_GetCollMap(const char *modelname)
 {
     const char *targetname; // [esp+0h] [ebp-Ch]
@@ -4234,8 +4259,16 @@ void G_UpdateVehicleTags(gentity_s *ent)
     int *wheel;
     uint16_t **wheelTag;
 
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(ent->scr_vehicle))
+    {
+        Com_Error(ERR_DROP, "G_UpdateVehicleTags: invalid vehicle entity or record pointer");
+        return;
+    }
+#else
     iassert(ent);
     iassert(ent->scr_vehicle);
+#endif
 
     scr_vehicle_s *veh = ent->scr_vehicle;
     veh->boneIndex.player = SV_DObjGetBoneIndex(ent, scr_const.tag_player);
@@ -4455,7 +4488,7 @@ gentity_s *G_GetPlayerVehicle(const gentity_s *player)
 #endif
     v5 = p_ownerNum->ent();
 #ifdef __SWITCH__
-    if (!v5->scr_vehicle)
+    if (!Switch_VehicleRecordPointerValid(v5->scr_vehicle))
     {
         Com_Error(ERR_DROP, "G_GetPlayerVehicle: owner entity is not a vehicle");
         return nullptr;
@@ -5654,7 +5687,7 @@ void Scr_Vehicle_Init(gentity_s *pSelf)
     //float v23; // [sp+68h] [-68h]
 
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(pSelf) || !pSelf->scr_vehicle)
+    if (!Switch_VehicleEntityPointerValid(pSelf) || !Switch_VehicleRecordPointerValid(pSelf->scr_vehicle))
     {
         Com_Error(ERR_DROP, "Scr_Vehicle_Init: invalid entity or vehicle record");
         return;
