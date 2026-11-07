@@ -67,6 +67,31 @@ uint16_t *s_flashTags[5] =
 
 short s_numVehicleInfos;
 
+static vehicle_info_t *VEH_GetVehicleInfoChecked(int index)
+{
+#ifdef __SWITCH__
+    if (s_numVehicleInfos < 0 || s_numVehicleInfos > ARRAY_COUNT(s_vehicleInfos)
+        || index < 0 || index >= s_numVehicleInfos || index >= ARRAY_COUNT(s_vehicleInfos))
+    {
+        Com_Error(ERR_DROP, "Vehicle info index or count is out of range");
+        return nullptr;
+    }
+#endif
+    return &s_vehicleInfos[index];
+}
+
+#ifdef __SWITCH__
+static bool Switch_VehicleInfoCountValid(const char *function)
+{
+    if (s_numVehicleInfos < 0 || s_numVehicleInfos > ARRAY_COUNT(s_vehicleInfos))
+    {
+        Com_Error(ERR_DROP, "%s: vehicle info count is out of range", function);
+        return false;
+    }
+    return true;
+}
+#endif
+
 cspField_t s_vehicleFields[33] =
 {
   { "type", offsetof(vehicle_info_t, type), CSPFT_NUM_BASE_FIELD_TYPES },
@@ -115,7 +140,15 @@ gentity_s *__cdecl GScr_GetVehicle(scr_entref_t entref)
 
 gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
 {
+#ifdef __SWITCH__
+    if (entNum < 0 || entNum >= MAX_GENTITIES)
+    {
+        Scr_Error(va("entity %i is outside the entity array", entNum));
+        return nullptr;
+    }
+#else
     iassert(entNum < MAX_GENTITIES);
+#endif
 
     if (g_entities[entNum].classname != scr_const.script_vehicle)
     {
@@ -140,7 +173,7 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
     ent->s.lerp.apos.trType = TR_INTERPOLATE;
     ent->s.time2 = 0;
     ent->s.loopSound = 0;
-    ent->s.weapon = (uint8_t)G_GetWeaponIndexForName(s_vehicleInfos[infoIdx].turretWeapon);
+    ent->s.weapon = (uint8_t)G_GetWeaponIndexForName(VEH_GetVehicleInfoChecked(infoIdx)->turretWeapon);
     ent->s.weaponModel = 0;
     ent->s.lerp.u.vehicle.bodyPitch = 0.0f;
     ent->s.lerp.u.vehicle.bodyRoll = 0.0f;
@@ -170,9 +203,9 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
     ent->s.time2 = 0;
     ent->s.loopSound = 0;
     ent->s.weaponModel = 0;
-    ent->s.weapon = G_GetWeaponIndexForName(s_vehicleInfos[infoIdx].turretWeapon);
+    ent->s.weapon = G_GetWeaponIndexForName(VEH_GetVehicleInfoChecked(infoIdx)->turretWeapon);
     ent->s.lerp.u.turret.gunAngles[2] = 0.0;
-    if (s_vehicleInfos[infoIdx].type == 1)
+    if (VEH_GetVehicleInfoChecked(infoIdx)->type == 1)
         ent->s.lerp.eFlags |= 0x10000u;
     ent->s.lerp.u.turret.gunAngles[0] = 0.0;
     ent->s.lerp.u.turret.gunAngles[1] = 0.0;
@@ -239,9 +272,9 @@ void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
     veh->engineSndLerp = 0.0f;
     veh->turretHitNum = 0;
 #ifdef KISAK_SP
-    if (s_vehicleInfos[infoIdx].sndIndices[VEH_LOW_IDLE_SND] && s_vehicleInfos[infoIdx].sndIndices[VEH_HIGH_IDLE_SND])
+    if (VEH_GetVehicleInfoChecked(infoIdx)->sndIndices[VEH_LOW_IDLE_SND] && VEH_GetVehicleInfoChecked(infoIdx)->sndIndices[VEH_HIGH_IDLE_SND])
         veh->idleSndEnt.setEnt(G_SpawnSoundBlend());
-    if (s_vehicleInfos[infoIdx].sndIndices[VEH_LOW_ENGINE_SND] && s_vehicleInfos[infoIdx].sndIndices[VEH_HIGH_ENGINE_SND])
+    if (VEH_GetVehicleInfoChecked(infoIdx)->sndIndices[VEH_LOW_ENGINE_SND] && VEH_GetVehicleInfoChecked(infoIdx)->sndIndices[VEH_HIGH_ENGINE_SND])
         veh->engineSndEnt.setEnt(G_SpawnSoundBlend());
 #endif
     veh->hover.hoverRadius = 30.0f;
@@ -678,7 +711,7 @@ void __cdecl Scr_Vehicle_Think(gentity_s *pSelf)
     iassert(pSelf->scr_vehicle);
 
     veh = pSelf->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
 
     VEH_BackupPosition(pSelf);
     memset((uint8_t *)&s_phys, 0, sizeof(s_phys));
@@ -1069,7 +1102,7 @@ void __cdecl VEH_UpdateAim(gentity_s *ent)
     float tgtPos[3]; // [esp+184h] [ebp-Ch] BYREF
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     tgtEnt = 0;
     if (veh->hasTarget && ent->health > 0)
     {
@@ -1356,12 +1389,12 @@ void __cdecl VEH_UpdateMoveToGoal(gentity_s *ent, const float *goalPos)
         Vec3Mad(phys->origin, dt, averageVel, phys->origin);
         VEH_UpdateMoveOrientation(ent, desiredDir);
     }
-    if (s_vehicleInfos[veh->infoIdx].engineSndSpeed == 0.0f)
-        MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 3386, 0, "%s", "s_vehicleInfos[veh->infoIdx].engineSndSpeed");
-    v12 = veh->speed / s_vehicleInfos[veh->infoIdx].engineSndSpeed;
+    if (VEH_GetVehicleInfoChecked(veh->infoIdx)->engineSndSpeed == 0.0f)
+        MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 3386, 0, "%s", "VEH_GetVehicleInfoChecked(veh->infoIdx)->engineSndSpeed");
+    v12 = veh->speed / VEH_GetVehicleInfoChecked(veh->infoIdx)->engineSndSpeed;
     v5 = v12 - 1.0f;
     if (v5 < 0.0f)
-        v13 = veh->speed / s_vehicleInfos[veh->infoIdx].engineSndSpeed;
+        v13 = veh->speed / VEH_GetVehicleInfoChecked(veh->infoIdx)->engineSndSpeed;
     else
         v13 = 1.0f;
     v4 = 0.0f - v12;
@@ -1615,7 +1648,7 @@ float __cdecl VEH_CalcAccelFraction(float accel, int32_t infoIdx)
     float maxAccel; // [esp+1Ch] [ebp-4h]
 
     minAccel = MPH_TO_INCHES_PER_SEC * 0.0f;
-    maxAccel = s_vehicleInfos[infoIdx].accel;
+    maxAccel = VEH_GetVehicleInfoChecked(infoIdx)->accel;
     if (minAccel >= maxAccel)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 2784, 0, "%s", "maxAccel > minAccel");
     v6 = accel - maxAccel;
@@ -2145,7 +2178,7 @@ void __cdecl CMD_VEH_Script_SetSpeed(gentity_s *ent)
     if (!ent)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 4868, 0, "%s", "ent");
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     if (!veh)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 4873, 0, "%s", "veh");
     if (!info)
@@ -2228,7 +2261,7 @@ void __cdecl CMD_VEH_SetMaxPitchRoll(scr_entref_t entref)
     scr_vehicle_s *veh; // [esp+4h] [ebp-8h]
 
     veh = GScr_GetVehicle(entref)->scr_vehicle;
-    if (s_vehicleInfos[veh->infoIdx].type != 5)
+    if (VEH_GetVehicleInfoChecked(veh->infoIdx)->type != 5)
         Scr_Error("Max Pitch Roll only valid for helicopters");
     veh->phys.maxPitchAngle = Scr_GetFloat(0);
     veh->phys.maxRollAngle = Scr_GetFloat(1);
@@ -2493,7 +2526,7 @@ void __cdecl CMD_VEH_SetWeapon(scr_entref_t entref)
 
 char __cdecl VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx)
 {
-    vehicle_info_t *info = &s_vehicleInfos[infoIdx];
+    vehicle_info_t *info = VEH_GetVehicleInfoChecked(infoIdx);
     if (info->type == VEH_WHEELS_4 || info->type == VEH_TANK)
     {
         int numWheels = info->type != VEH_WHEELS_4 ? 6 : 4;
@@ -2546,7 +2579,7 @@ void __cdecl CMD_VEH_FireWeapon(scr_entref_t entref)
 
     ent = GScr_GetVehicle(entref);
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     if ((float)ent->health <= 0.0f)
     {
         Scr_Error(va("Vehicle must have health to control the turret"));
@@ -2785,7 +2818,7 @@ gentity_s *G_IsVehicleUnusable(gentity_s *player)
 
 bool G_IsVehicleImmune(gentity_s *ent, int mod, char damageFlags, uint32_t weapon)
 {
-    vehicle_info_t *v4 = &s_vehicleInfos[ent->scr_vehicle->infoIdx];
+    vehicle_info_t *v4 = VEH_GetVehicleInfoChecked(ent->scr_vehicle->infoIdx);
     int result;
     uint32_t damageValue;
 
@@ -2849,7 +2882,7 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
         && (scr_vehicle = p_ownerNum->ent()->scr_vehicle) != 0
         && (scr_vehicle->flags & 0xA) == 0)
     {
-        return s_vehicleInfos[scr_vehicle->infoIdx].type != 4;
+        return VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx)->type != 4;
     }
     else
     {
@@ -2859,10 +2892,14 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
 
 vehicle_info_t *__cdecl VEH_GetVehicleInfo(short index)
 {
+#ifdef __SWITCH__
+    return VEH_GetVehicleInfoChecked(static_cast<int>(index));
+#else
     iassert(index >= 0);
     iassert(index < s_numVehicleInfos);
 
     return &s_vehicleInfos[index];
+#endif
 }
 
 void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
@@ -2871,6 +2908,13 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
     scr_vehicle_s *veh; // [esp+24h] [ebp-8h]
     float sqrLen; // [esp+28h] [ebp-4h]
 
+#ifdef __SWITCH__
+    if (!ent || !ent->scr_vehicle || !origin || idx < 0 || idx >= ARRAY_COUNT(s_wheelTags))
+    {
+        Com_Error(ERR_DROP, "VEH_GetWheelOrigin: invalid entity, output, or wheel index");
+        return;
+    }
+#endif
     veh = ent->scr_vehicle;
     if (veh->boneIndex.wheel[idx] < 0)
     {
@@ -2878,7 +2922,15 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
     }
 
     mtx = G_DObjGetLocalBoneIndexMatrix(ent, veh->boneIndex.wheel[idx]);
+#ifdef __SWITCH__
+    if (!mtx)
+    {
+        Com_Error(ERR_DROP, "VEH_GetWheelOrigin: wheel bone matrix is null");
+        return;
+    }
+#else
     iassert(mtx);
+#endif
     Vec3Copy(mtx->trans, origin);
 
 #ifdef KISAK_MP
@@ -2898,6 +2950,20 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
 
 static void VEH_Strcpy(unsigned char *pMember, const char *pKeyValue)
 {
+#ifdef __SWITCH__
+    if (!pMember || !pKeyValue)
+    {
+        Com_Error(ERR_DROP, "VEH_Strcpy: source or destination is null");
+        return;
+    }
+    while (true)
+    {
+        const unsigned char value = static_cast<unsigned char>(*pKeyValue++);
+        *pMember++ = value;
+        if (!value)
+            break;
+    }
+#else
     int v2; // r10
     int v3; // r11
 
@@ -2907,6 +2973,7 @@ static void VEH_Strcpy(unsigned char *pMember, const char *pKeyValue)
         v3 = *(unsigned char *)pKeyValue;
         ((char *)pKeyValue++)[v2] = v3;
     } while (v3);
+#endif
 }
 
 int VEH_ParseSpecificField(uint8_t *pStruct, const char *pValue, int fieldType)
@@ -2943,7 +3010,16 @@ int32_t __cdecl G_LoadVehicle(const char *name)
     char fileName[68];
     char loadBuffer[8192];
 
+#ifdef __SWITCH__
+    if (!name || !Switch_VehicleInfoCountValid("G_LoadVehicle")
+        || s_numVehicleInfos >= ARRAY_COUNT(s_vehicleInfos))
+    {
+        Com_Error(ERR_DROP, "G_LoadVehicle: invalid name or vehicle info table is full");
+        return -1;
+    }
+#else
     iassert(name);
+#endif
 
     snprintf(fileName, ARRAY_COUNT(fileName), "vehicles/%s", name);
     char *infoString = Com_LoadInfoString(fileName, "vehicle file", "VEHICLEFILE", loadBuffer);
@@ -3021,7 +3097,7 @@ static void VEH_GroundPlantInternal(gentity_s *ent, vehicle_physic_t *phys, int3
     iassert(phys);
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     iassert((info->type == VEH_WHEELS_4) || (info->type == VEH_TANK));
 
     if (info->type != VEH_WHEELS_4)
@@ -3287,7 +3363,7 @@ void VEH_UpdateSounds(gentity_s *ent)
     VehicleTurretState turretState; // r10
 
     scr_vehicle = ent->scr_vehicle;
-    sndIndices = (unsigned short *)s_vehicleInfos[scr_vehicle->infoIdx].sndIndices;
+    sndIndices = (unsigned short *)VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx)->sndIndices;
     v4 = ent->health <= 0;
     iassert(ent->r.inuse);
     ent->s.loopSound = 0;
@@ -3388,9 +3464,13 @@ int32_t __cdecl VEH_GetVehicleInfoFromName(const char *name)
 
     if (!name || !*name)
         return -1;
+#ifdef __SWITCH__
+    if (!Switch_VehicleInfoCountValid("VEH_GetVehicleInfoFromName"))
+        return -1;
+#endif
     for (i = 0; i < s_numVehicleInfos; ++i)
     {
-        if (!I_stricmp(name, s_vehicleInfos[i].name))
+        if (!I_stricmp(name, VEH_GetVehicleInfoChecked(i)->name))
             return i;
     }
     i = G_LoadVehicle(name);
@@ -3399,7 +3479,7 @@ int32_t __cdecl VEH_GetVehicleInfoFromName(const char *name)
     Com_PrintWarning(CON_CHANNEL_SERVER, "WARNING: couldn't find vehicle info for '%s', attempting to use 'defaultvehicle'.\n", name);
     for (i = 0; i < s_numVehicleInfos; ++i)
     {
-        if (!I_stricmp(DEFAULT_VEHICLE_NAME, s_vehicleInfos[i].name))
+        if (!I_stricmp(DEFAULT_VEHICLE_NAME, VEH_GetVehicleInfoChecked(i)->name))
             return i;
     }
     i = G_LoadVehicle(DEFAULT_VEHICLE_NAME);
@@ -3468,7 +3548,7 @@ void __cdecl VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, flo
     float axis[3][3]; // [esp+1Ch] [ebp-24h] BYREF
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     intensity = CLAMP(intensity, 0.0f, 1.0f);
     AnglesToAxis(veh->phys.angles, axis);
     veh->joltDir[0] = Vec3Dot(dir, axis[0]);
@@ -3517,7 +3597,7 @@ void __cdecl VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *
     float frac;
 
     veh  = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
 
     if (veh->joltTime > 0.0f)
     {
@@ -3712,7 +3792,7 @@ void __cdecl VEH_UpdateClient(gentity_s *ent)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 2417, 0, "%s", "ent->scr_vehicle");
 
     veh  = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
 
     if (ent->r.ownerNum.isDefined())
     {
@@ -3809,7 +3889,7 @@ void __cdecl VEH_UpdatePath(gentity_s *ent)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 2517, 0, "%s", "ent->scr_vehicle");
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     memcpy(&nextVpp, &veh->pathPos, sizeof(nextVpp));
     prevSpeed = veh->speed;
     waitNodeHit = false;
@@ -4088,10 +4168,10 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
     v9 = VehicleInfoFromName;
     if (!level.initializing)
     {
-        WeaponIndexForName = G_GetWeaponIndexForName(s_vehicleInfos[VehicleInfoFromName].turretWeapon);
+        WeaponIndexForName = G_GetWeaponIndexForName(VEH_GetVehicleInfoChecked(VehicleInfoFromName)->turretWeapon);
         if (!IsItemRegistered(WeaponIndexForName))
         {
-            Scr_Error(va("vehicle '%s' not precached", s_vehicleInfos[v9].name));
+            Scr_Error(va("vehicle '%s' not precached", VEH_GetVehicleInfoChecked(v9)->name));
         }
     }
     memset(veh, 0, sizeof(scr_vehicle_s));
@@ -4126,7 +4206,7 @@ const char* G_GetVehicleInfoName(__int16 index)
     iassert(index >= 0);
     iassert(index < s_numVehicleInfos);
 
-    return s_vehicleInfos[index].name;
+    return VEH_GetVehicleInfoChecked(index)->name;
 }
 
 int G_GetVehicleInfoIndex(const char *name)
@@ -4168,7 +4248,7 @@ void G_PrecacheDefaultVehicle()
 
     G_ModelIndex("defaultvehicle");
     VehicleInfoFromName = VEH_GetVehicleInfoFromName("defaultvehicle");
-    G_GetWeaponIndexForName(s_vehicleInfos[VehicleInfoFromName].turretWeapon);
+    G_GetWeaponIndexForName(VEH_GetVehicleInfoChecked(VehicleInfoFromName)->turretWeapon);
 }
 
 #ifdef __SWITCH__
@@ -4266,9 +4346,13 @@ void G_FreeScrVehicles()
 
 void G_RestartScrVehicleInfo()
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleInfoCountValid("G_RestartScrVehicleInfo"))
+        return;
+#endif
     for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        vehicle_info_t *info = VEH_GetVehicleInfoChecked(vehicleIndex);
         for (int soundIndex = 0; soundIndex < NUM_VEHICLE_SNDS; ++soundIndex)
         {
             if (info->sndIndices[soundIndex])
@@ -4353,7 +4437,7 @@ void CMD_VEH_AttachPath(scr_entref_t entref)
         Vehicle = VEH_GetVehicle(entref.entnum);
     }
     scr_vehicle = Vehicle->scr_vehicle;
-    v4 = &s_vehicleInfos[scr_vehicle->infoIdx];
+    v4 = VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx);
     VehicleNodeIndex = GScr_GetVehicleNodeIndex(0);
     G_VehSetUpPathPos(&scr_vehicle->pathPos, VehicleNodeIndex);
     scr_vehicle->phys.origin[0] = scr_vehicle->pathPos.origin[0];
@@ -4401,7 +4485,7 @@ void CMD_VEH_GetAttachPos(scr_entref_t entref)
         Vehicle = VEH_GetVehicle(entref.entnum);
     }
     scr_vehicle = Vehicle->scr_vehicle;
-    v4 = &s_vehicleInfos[scr_vehicle->infoIdx];
+    v4 = VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx);
     VehicleNodeIndex = GScr_GetVehicleNodeIndex(0);
     G_VehSetUpPathPos(&v7, VehicleNodeIndex);
     Com_Memcpy(&v6, &scr_vehicle->phys, 244);
@@ -4804,7 +4888,7 @@ void CMD_VEH_GetWheelSurface(scr_entref_t entref)
         Vehicle = VEH_GetVehicle(entref.entnum);
     }
     scr_vehicle = Vehicle->scr_vehicle;
-    v3 = &s_vehicleInfos[scr_vehicle->infoIdx];
+    v3 = VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx);
     ConstString = Scr_GetConstString(0);
     v5 = 0;
     if (v3->type != VEH_TANK && v3->type != VEH_WHEELS_4)
@@ -5198,7 +5282,7 @@ void VEH_CancelAIMove(gentity_s *ent)
     scr_vehicle = ent->scr_vehicle;
     infoIdx = scr_vehicle->infoIdx;
     scr_vehicle->flags &= ~2u;
-    if (s_vehicleInfos[infoIdx].type == 5)
+    if (VEH_GetVehicleInfoChecked(infoIdx)->type == 5)
         HELI_CancelAIMove(ent);
 }
 
@@ -5361,9 +5445,13 @@ void(* ScriptVehicle_GetMethod(const char **pName))(scr_entref_t)
 // of runtime gate state. A few bytes per vehicle-info-type is negligible.
 void G_SaveVehicleInfo(SaveGame *save)
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleInfoCountValid("G_SaveVehicleInfo"))
+        return;
+#endif
     for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        vehicle_info_t *info = VEH_GetVehicleInfoChecked(vehicleIndex);
         // Always serialize all six slots. The runtime indices can be zero
         // at save time and nonzero by load time (or vice versa), so gating
         // either side on the current value would misalign the following fields.
@@ -5373,9 +5461,13 @@ void G_SaveVehicleInfo(SaveGame *save)
 
 void G_LoadVehicleInfo(SaveGame *save)
 {
+#ifdef __SWITCH__
+    if (!Switch_VehicleInfoCountValid("G_LoadVehicleInfo"))
+        return;
+#endif
     for (int vehicleIndex = 0; vehicleIndex < s_numVehicleInfos; ++vehicleIndex)
     {
-        vehicle_info_t *info = &s_vehicleInfos[vehicleIndex];
+        vehicle_info_t *info = VEH_GetVehicleInfoChecked(vehicleIndex);
         SaveMemory_LoadRead(info->sndIndices, sizeof(info->sndIndices), save);
     }
 }
@@ -5395,7 +5487,7 @@ void Scr_Vehicle_Init(gentity_s *pSelf)
     //float v23; // [sp+68h] [-68h]
 
     veh = pSelf->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     type = info->type;
 
     if (info->type == VEH_WHEELS_4 || type == VEH_TANK)
@@ -5516,7 +5608,7 @@ void Scr_Vehicle_Touch(gentity_s *pSelf, gentity_s *pOther, int bTouched)
 
     scr_vehicle = pSelf->scr_vehicle;
     eType = pOther->s.eType;
-    info = &s_vehicleInfos[scr_vehicle->infoIdx];
+    info = VEH_GetVehicleInfoChecked(scr_vehicle->infoIdx);
     if ((eType == ET_PLAYER || eType == ET_ACTOR || eType == ET_SCRIPTMOVER)
         && pOther->takedamage
         && !pOther->tagInfo
@@ -6017,7 +6109,7 @@ void __cdecl VEH_UpdateWeapon(gentity_s *ent)
     trace_t trace;
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     if (!ent->r.ownerNum.isDefined() || !ent->s.weapon)
         return;
 
@@ -6108,7 +6200,7 @@ void __cdecl VEH_UpdateWeapon(gentity_s *ent)
 void __cdecl VEH_UpdateMaterialTime(gentity_s *ent)
 {
     scr_vehicle_s *veh = ent->scr_vehicle;
-    vehicle_info_t *info = &s_vehicleInfos[veh->infoIdx];
+    vehicle_info_t *info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     float forward[3];
     float velocityDir[3];
 
@@ -6147,7 +6239,7 @@ void __cdecl VEH_UpdateMaterialTime(gentity_s *ent, float frameTime)
     float deltaTime; // [esp+8h] [ebp-4h]
 
     veh = ent->scr_vehicle;
-    info = &s_vehicleInfos[veh->infoIdx];
+    info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     if (info->texScroll)
     {
         if (vehTextureScrollScale->current.value <= 0.0)
@@ -6168,7 +6260,7 @@ void __cdecl VEH_UpdateMaterialTime(gentity_s *ent, float frameTime)
 void __cdecl VEH_UpdateSteering(gentity_s *ent)
 {
     scr_vehicle_s *veh = ent->scr_vehicle;
-    vehicle_info_t *info = &s_vehicleInfos[veh->infoIdx];
+    vehicle_info_t *info = VEH_GetVehicleInfoChecked(veh->infoIdx);
     float forward[3];
 
     if (!info->steerWheels)
@@ -6216,7 +6308,7 @@ void __cdecl VEH_UpdateSteering(gentity_s *ent)
     float deltaYaw; // [esp+28h] [ebp-4h]
 
     veh = ent->scr_vehicle;
-    if (s_vehicleInfos[veh->infoIdx].steerWheels)
+    if (VEH_GetVehicleInfoChecked(veh->infoIdx)->steerWheels)
     {
         deltaYawa = AngleDelta(veh->phys.angles[1], veh->phys.prevAngles[1]);
         deltaYaw = deltaYawa * 10.0;
