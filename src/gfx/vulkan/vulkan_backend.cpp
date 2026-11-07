@@ -1299,12 +1299,13 @@ bool VulkanBackend::CreateSwapchain()
         m_presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE" : "FIFO";
     std::snprintf(
         presentTrace, sizeof(presentTrace),
-        "[KisakCOD][VK PRESENT MODE] mode=%s vsync=%u imagesRequested=%u surfaceMin=%u surfaceMax=%u frameSlots=%u gpuInFlightLimit=1 sharedTargets=1\n",
+        "[KisakCOD][VK PRESENT MODE] mode=%s vsync=%u imagesRequested=%u surfaceMin=%u surfaceMax=%u frameSlots=%u gpuInFlightLimit=%u sharedTargets=1\n",
         presentName,
         vsyncEnabled ? 1u : 0u,
         imageCount,
         caps.minImageCount,
         caps.maxImageCount,
+        FramesInFlight,
         FramesInFlight);
     Switch_LogWrite(presentTrace);
 #endif
@@ -1804,17 +1805,17 @@ bool VulkanBackend::BeginFrame()
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
-    // The D3D9 compatibility renderer still shares its offscreen color and
-    // depth attachments across both CPU/GPU frame slots. A fence for the slot
-    // being reused does not protect those shared images from the other slot.
-    // Retire the immediately preceding GPU frame before recording into them.
-    // CPU frontend work remains overlapped through the two legacy resource
-    // rings; true two-frame GPU overlap must wait until render targets/depth
-    // attachments are duplicated per slot.
-    const uint32_t previousSlot =
-        (m_nextFrameSlot + FramesInFlight - 1u) % FramesInFlight;
-    if (!WaitForFrameSlot(previousSlot))
-        return false;
+    // The D3D9 compatibility renderer shares offscreen color/depth images
+    // between frame slots. Keep them shared: all frame command buffers are
+    // submitted to the same graphics queue, and TransitionImage inserts the
+    // image memory dependencies needed when those attachments are reused.
+    // Do not wait for the immediately preceding frame here; doing so collapses
+    // GPU execution to one in-flight frame. The frontend's CPU-side rings are
+    // fenced separately before each pool is reused (r_rendercmds.cpp).
+    //
+    // Wait only for the selected slot below. Its fence protects that slot's
+    // command pool, uniform range, descriptor/query state and other transient
+    // resources from being recycled while its previous submission is pending.
 
     // Reuse only the selected slot's command resources and frame-local
     // allocations after its previous submission has completed.
