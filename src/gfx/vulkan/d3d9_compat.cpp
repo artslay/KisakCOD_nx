@@ -6254,7 +6254,11 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             if (!backend->UploadImage3D(image,format,w,h,d,level,
                     lockShadow.data(), lockShadow.size(), lockOriginalLayout,
                     VkOffset3D{}, true))
+            {
+                volumeShadowValid = false;
+                volumeShadowLevel = 0xffffffffu;
                 return E_FAIL;
+            }
         }
         else
         {
@@ -6282,7 +6286,11 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
                     packed.data(), packed.size(), lockOriginalLayout,
                     VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),
                                static_cast<int32_t>(lockFront)}, true))
+            {
+                volumeShadowValid = false;
+                volumeShadowLevel = 0xffffffffu;
                 return E_FAIL;
+            }
         }
         SetSubresourceLayout(level,0,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         layout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
