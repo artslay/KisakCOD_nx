@@ -60,7 +60,7 @@ VkFormat SwitchDepthVkFormat(_D3DFORMAT format)
     }
 }
 
-bool SwitchDepthFormatSupportsRenderTarget(_D3DFORMAT format)
+bool SwitchDepthFormatSupportsRenderTarget(_D3DFORMAT format, bool requireLinearFiltering)
 {
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend || !backend->PhysicalDevice())
@@ -73,11 +73,14 @@ bool SwitchDepthFormatSupportsRenderTarget(_D3DFORMAT format)
     // These depth images also back sampled shadow-map render targets. Validate
     // the format features for the same use flags requested by R_VulkanAllocTexture
     // before committing to a format during renderer initialization.
-    const VkFormatFeatureFlags requiredFeatures =
+    VkFormatFeatureFlags requiredFeatures =
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
         VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if (requireLinearFiltering)
+        requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+
     VkFormatProperties properties{};
     vkGetPhysicalDeviceFormatProperties(
         backend->PhysicalDevice(), vkFormat, &properties);
@@ -149,10 +152,17 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
         D3DFMT_D24FS8,
         D3DFMT_D15S1
     };
-    for (const _D3DFORMAT candidate : candidates)
+    // Prefer a depth format that can honor the shadow-map sampler's LINEAR
+    // filtering. Only fall back to a non-linear-filterable format when no
+    // stencil-capable candidate supports the full feature set.
+    for (int pass = 0; pass < 2; ++pass)
     {
-        if (R_IsDepthStencilFormatOk(renderTargetFormat, candidate))
+        const bool requireLinearFiltering = (pass == 0);
+        for (const _D3DFORMAT candidate : candidates)
         {
+            if (!SwitchDepthFormatSupportsRenderTarget(candidate, requireLinearFiltering))
+                continue;
+
             const VkFormat selectedVkFormat = SwitchDepthVkFormat(candidate);
             VkFormatProperties selectedProperties{};
             vkGetPhysicalDeviceFormatProperties(
@@ -165,12 +175,13 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
             char message[384];
             std::snprintf(
                 message, sizeof(message),
-                "[KisakCOD][VK FORMAT] selected depth target d3d=%s(%u) vk=%s(%u) aspect=DEPTH|STENCIL usage=ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST linear_filter=%u features=0x%08x\n",
+                "[KisakCOD][VK FORMAT] selected depth target d3d=%s(%u) vk=%s(%u) aspect=DEPTH|STENCIL usage=ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST linear_filter=%u preferred_linear=%u features=0x%08x\\n",
                 SwitchDepthD3DFormatName(candidate),
                 static_cast<unsigned>(candidate),
                 SwitchDepthVkFormatName(selectedVkFormat),
                 static_cast<unsigned>(selectedVkFormat),
                 supportsLinearFiltering ? 1u : 0u,
+                requireLinearFiltering ? 1u : 0u,
                 static_cast<unsigned>(selectedProperties.optimalTilingFeatures));
             Switch_LogWrite(message);
             return candidate;
