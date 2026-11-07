@@ -4045,7 +4045,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             command,
             VK_PIPELINE_STAGE_HOST_BIT | sourceStages,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 1, &stagingSourceBarrier, 0, nullptr,
+            0, 0, nullptr, 1, &stagingSourceBarrier,
             count, toTransfer.data());
 
         for (uint32_t i = 0; i < count; ++i)
