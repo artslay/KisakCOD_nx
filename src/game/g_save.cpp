@@ -929,6 +929,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     int v20; // r30
     bool v21; // cr58
     XAnim_s *anims; // r30
+    uintptr_t animTreeIndex;
     unsigned __int8 *v25; // r3
     unsigned __int8 *v26; // r3
 
@@ -1067,11 +1068,15 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         break;
     }
     case SF_ANIMTREE:
-        if (ReadSavePointerSlot(v7))
+        animTreeIndex = ReadSavePointerSlot(v7);
+        if (animTreeIndex > UINT32_MAX)
+            Com_Error(ERR_DROP, "ReadField: animtree index out of range (%llu)",
+                static_cast<unsigned long long>(animTreeIndex));
+        if (animTreeIndex)
         {
-            anims = Scr_GetAnims(static_cast<unsigned int>(ReadSavePointerSlot(v7)));
+            anims = Scr_GetAnims(static_cast<uint32_t>(animTreeIndex));
             iassert(anims);
-            *(uintptr_t *)v7 = (uintptr_t)Com_XAnimCreateSmallTree(anims);
+            *(uintptr_t *)v7 = reinterpret_cast<uintptr_t>(Com_XAnimCreateSmallTree(anims));
         }
         else
         {
