@@ -3748,6 +3748,18 @@ static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
     return Switch_LogContainsInsensitive(msg, "perf");
 }
 
+static bool Switch_LogIsVulkanFrameTiming(const char *msg)
+{
+    static constexpr char prefix[] = "[KisakCOD][VK FRAME TIMING]";
+    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
+}
+
+static bool Switch_LogIsCpuSceneTiming(const char *msg)
+{
+    static constexpr char prefix[] = "[KisakCOD][CPU SCENE TIMING]";
+    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
+}
+
 // Bounded HUD and cinematic lifecycle diagnostics. These are deliberately
 // whitelisted by prefix: without this category Switch_LogWrite() drops normal
 // state transitions because they are neither errors nor performance/FX traces.
@@ -3859,6 +3871,8 @@ void Switch_LogWrite(const char *msg)
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
+        !Switch_LogIsVulkanFrameTiming(msg) &&
+        !Switch_LogIsCpuSceneTiming(msg) &&
         !Switch_LogIsFxDiagnostic(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
