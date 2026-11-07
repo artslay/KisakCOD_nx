@@ -7,6 +7,7 @@
 #elif KISAK_SP
 #include <cgame/cg_local.h>
 #include "g_main.h"
+#include "sentient.h"
 #endif
 
 #include <bgame/bg_public.h>
@@ -435,9 +436,6 @@ void __cdecl EntHandle::Init()
 
 
 #ifdef KISAK_SP
-
-#include "sentient.h"
-#include "g_main.h"
 
 EntHandleList g_sentientsHandleList[33];
 
