@@ -121,10 +121,10 @@ void __cdecl Scr_Target_SetShader()
             v2 += 3;
             break;
         }
-        v4 += 112;
+        v4 += 4;
         v2 += 4;
         v3 += 4;
-        if (v4 >= 0x380)
+        if (v4 >= MAX_TARGETS)
             break;
     }
     if (v2 == 32)
@@ -188,10 +188,10 @@ void __cdecl Scr_Target_SetOffscreenShader()
             v2 += 3;
             break;
         }
-        v4 += 112;
+        v4 += 4;
         v2 += 4;
         v3 += 4;
-        if (v4 >= 0x380)
+        if (v4 >= MAX_TARGETS)
             break;
     }
     if (v2 == 32)
@@ -303,10 +303,10 @@ void __cdecl Scr_Target_Set()
             v3 += 3;
             break;
         }
-        v5 += 112;
+        v5 += 4;
         v3 += 4;
         v4 += 4;
-        if (v5 >= 0x380)
+        if (v5 >= MAX_TARGETS)
             break;
     }
     if (v3 == 32)
@@ -333,10 +333,10 @@ void __cdecl Scr_Target_Set()
                 v3 += 3;
                 break;
             }
-            v6 += 112;
+            v6 += 4;
             v3 += 4;
             v7 += 4;
-            if (v6 >= 0x380)
+            if (v6 >= MAX_TARGETS)
                 goto LABEL_27;
         }
         if (v3 < 0x20)
@@ -523,10 +523,10 @@ int __cdecl ScrGetTargetScreenPos(float *screenPos)
             v10 += 3;
             break;
         }
-        v11 += 112;
+        v11 += 4;
         v10 += 4;
         v12 += 4;
-        if (v11 >= 0x380)
+        if (v11 >= MAX_TARGETS)
             break;
     }
     if (v10 == 32)
