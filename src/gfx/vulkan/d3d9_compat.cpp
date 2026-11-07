@@ -7649,10 +7649,13 @@ HRESULT IDirect3DDevice9::SetScissorRect(const tagRECT *rect)
 
 HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
 {
-    bool changed = true;
+    bool changed = false;
     switch (state)
     {
-    case D3DRS_ZENABLE: m_depthEnable = value != 0; break;
+    case D3DRS_ZENABLE:
+        changed = m_depthEnable != (value != 0);
+        m_depthEnable = value != 0;
+        break;
     case D3DRS_FILLMODE:
         if (value != D3DFILL_POINT && value != D3DFILL_WIREFRAME &&
             value != D3DFILL_SOLID)
@@ -7668,9 +7671,9 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
                 Switch_LogWrite(
                     "[KisakCOD][VK STATE] point/wireframe fill requested but fillModeNonSolid is unavailable; retaining solid fill\n");
             }
-            changed = false;
             break;
         }
+        changed = m_fillMode != value;
         m_fillMode = value;
         break;
     case D3DRS_ADAPTIVETESS_Y:
@@ -7702,63 +7705,157 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
         }
         else
         {
-            changed = false;
             LogUnsupportedRenderState(state, value);
         }
         break;
-    case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
-    case D3DRS_ZFUNC: m_depthFunc = value; break;
+    case D3DRS_ZWRITEENABLE:
+        changed = m_depthWrite != (value != 0);
+        m_depthWrite = value != 0;
+        break;
+    case D3DRS_ZFUNC:
+        changed = m_depthFunc != value;
+        m_depthFunc = value;
+        break;
     case D3DRS_ALPHABLENDENABLE:
         changed = m_blendEnable != (value != 0);
         m_blendEnable = value != 0;
         break;
-    case D3DRS_SEPARATEALPHABLENDENABLE: m_separateAlphaBlend = value != 0; break;
-    case D3DRS_SRCBLEND: m_srcBlend = value; break;
-    case D3DRS_DESTBLEND: m_dstBlend = value; break;
-    case D3DRS_SRCBLENDALPHA: m_srcBlendAlpha = value; break;
-    case D3DRS_DESTBLENDALPHA: m_dstBlendAlpha = value; break;
-    case D3DRS_BLENDOP: m_blendOp = value; break;
+    case D3DRS_SEPARATEALPHABLENDENABLE:
+        changed = m_separateAlphaBlend != (value != 0);
+        m_separateAlphaBlend = value != 0;
+        break;
+    case D3DRS_SRCBLEND:
+        changed = m_srcBlend != value;
+        m_srcBlend = value;
+        break;
+    case D3DRS_DESTBLEND:
+        changed = m_dstBlend != value;
+        m_dstBlend = value;
+        break;
+    case D3DRS_SRCBLENDALPHA:
+        changed = m_srcBlendAlpha != value;
+        m_srcBlendAlpha = value;
+        break;
+    case D3DRS_DESTBLENDALPHA:
+        changed = m_dstBlendAlpha != value;
+        m_dstBlendAlpha = value;
+        break;
+    case D3DRS_BLENDOP:
+        changed = m_blendOp != value;
+        m_blendOp = value;
+        break;
     case D3DRS_MULTISAMPLEANTIALIAS:
         // D3D9 FALSE means replicate the pixel-center result to every sample,
         // not Vulkan alpha-to-coverage. The latter changes blending semantics,
         // so do not approximate this state with alphaToCoverageEnable.
-        changed = false;
         if (value == 0)
             LogUnsupportedRenderState(state, value);
         break;
-    case D3DRS_MULTISAMPLEMASK: m_multisampleMask = value; break;
+    case D3DRS_MULTISAMPLEMASK:
+        changed = m_multisampleMask != value;
+        m_multisampleMask = value;
+        break;
     case D3DRS_BLENDFACTOR:
         m_blendFactor = value;
-        changed = false; // Vulkan blend constants are dynamic state.
+        // Vulkan blend constants are dynamic state.
         break;
-    case D3DRS_BLENDOPALPHA: m_blendOpAlpha = value; break;
-    case D3DRS_CULLMODE: m_cullMode = value; break;
-    case D3DRS_SCISSORTESTENABLE: m_scissor = value != 0; break;
-    case D3DRS_COLORWRITEENABLE: m_colorWriteMask = value & 0xF; break;
-    case D3DRS_ALPHATESTENABLE: m_alphaTest = value != 0; break;
-    case D3DRS_ALPHAFUNC: m_alphaFunc = value; break;
-    case D3DRS_ALPHAREF: m_alphaRef = value & 0xFFu; break;
+    case D3DRS_BLENDOPALPHA:
+        changed = m_blendOpAlpha != value;
+        m_blendOpAlpha = value;
+        break;
+    case D3DRS_CULLMODE:
+        changed = m_cullMode != value;
+        m_cullMode = value;
+        break;
+    case D3DRS_SCISSORTESTENABLE:
+        changed = m_scissor != (value != 0);
+        m_scissor = value != 0;
+        break;
+    case D3DRS_COLORWRITEENABLE:
+        changed = m_colorWriteMask != (value & 0xFu);
+        m_colorWriteMask = value & 0xFu;
+        break;
+    case D3DRS_ALPHATESTENABLE:
+        changed = m_alphaTest != (value != 0);
+        m_alphaTest = value != 0;
+        break;
+    case D3DRS_ALPHAFUNC:
+        changed = m_alphaFunc != value;
+        m_alphaFunc = value;
+        break;
+    case D3DRS_ALPHAREF:
+        changed = m_alphaRef != (value & 0xFFu);
+        m_alphaRef = value & 0xFFu;
+        break;
     case D3DRS_DEPTHBIAS:
+    {
+        uint32_t oldBits = 0;
+        std::memcpy(&oldBits, &m_depthBias, sizeof(oldBits));
+        changed = oldBits != value;
         std::memcpy(&m_depthBias, &value, sizeof(value));
         break;
+    }
     case D3DRS_SLOPESCALEDEPTHBIAS:
+    {
+        uint32_t oldBits = 0;
+        std::memcpy(&oldBits, &m_slopeDepthBias, sizeof(oldBits));
+        changed = oldBits != value;
         std::memcpy(&m_slopeDepthBias, &value, sizeof(value));
         break;
-    case D3DRS_STENCILENABLE: m_stencilEnable = value != 0; break;
-    case D3DRS_STENCILFUNC: m_stencilFunc = value; break;
-    case D3DRS_STENCILREF: m_stencilRef = value; break;
-    case D3DRS_STENCILMASK: m_stencilMask = value; break;
-    case D3DRS_STENCILWRITEMASK: m_stencilWriteMask = value; break;
-    case D3DRS_STENCILFAIL: m_stencilFail = value; break;
-    case D3DRS_STENCILZFAIL: m_stencilZFail = value; break;
-    case D3DRS_STENCILPASS: m_stencilPass = value; break;
-    case D3DRS_TWOSIDEDSTENCILMODE: m_twoSidedStencil = value != 0; break;
-    case D3DRS_CCW_STENCILFUNC: m_ccwStencilFunc = value; break;
-    case D3DRS_CCW_STENCILFAIL: m_ccwStencilFail = value; break;
-    case D3DRS_CCW_STENCILZFAIL: m_ccwStencilZFail = value; break;
-    case D3DRS_CCW_STENCILPASS: m_ccwStencilPass = value; break;
+    }
+    case D3DRS_STENCILENABLE:
+        changed = m_stencilEnable != (value != 0);
+        m_stencilEnable = value != 0;
+        break;
+    case D3DRS_STENCILFUNC:
+        changed = m_stencilFunc != value;
+        m_stencilFunc = value;
+        break;
+    case D3DRS_STENCILREF:
+        changed = m_stencilRef != value;
+        m_stencilRef = value;
+        break;
+    case D3DRS_STENCILMASK:
+        changed = m_stencilMask != value;
+        m_stencilMask = value;
+        break;
+    case D3DRS_STENCILWRITEMASK:
+        changed = m_stencilWriteMask != value;
+        m_stencilWriteMask = value;
+        break;
+    case D3DRS_STENCILFAIL:
+        changed = m_stencilFail != value;
+        m_stencilFail = value;
+        break;
+    case D3DRS_STENCILZFAIL:
+        changed = m_stencilZFail != value;
+        m_stencilZFail = value;
+        break;
+    case D3DRS_STENCILPASS:
+        changed = m_stencilPass != value;
+        m_stencilPass = value;
+        break;
+    case D3DRS_TWOSIDEDSTENCILMODE:
+        changed = m_twoSidedStencil != (value != 0);
+        m_twoSidedStencil = value != 0;
+        break;
+    case D3DRS_CCW_STENCILFUNC:
+        changed = m_ccwStencilFunc != value;
+        m_ccwStencilFunc = value;
+        break;
+    case D3DRS_CCW_STENCILFAIL:
+        changed = m_ccwStencilFail != value;
+        m_ccwStencilFail = value;
+        break;
+    case D3DRS_CCW_STENCILZFAIL:
+        changed = m_ccwStencilZFail != value;
+        m_ccwStencilZFail = value;
+        break;
+    case D3DRS_CCW_STENCILPASS:
+        changed = m_ccwStencilPass != value;
+        m_ccwStencilPass = value;
+        break;
     default:
-        changed = false;
         LogUnsupportedRenderState(state, value);
         break;
     }
