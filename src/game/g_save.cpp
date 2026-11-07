@@ -919,18 +919,8 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     EntHandle *v7; // r31
     MemoryFile *MemoryFile; // r3
     const char *CString; // r3
-    int v10; // r30
-    bool v11; // cr58
     int v12; // r30
-    int v13; // r30
-    bool v14; // cr58
-    int v15; // r30
-    bool v16; // cr58
-    int v17; // r30
-    bool v18; // cr58
     int v19; // r30
-    int v20; // r30
-    bool v21; // cr58
     XAnim_s *anims; // r30
     uintptr_t animTreeIndex;
     uintptr_t serializedIndex;
