@@ -105,6 +105,21 @@ static bool Switch_VehicleEntityPointerValid(const gentity_s *ent)
     const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
     return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
 }
+
+static bool Switch_VehicleActorPointerValid(const actor_s *actor)
+{
+    if (!actor || !level.actors)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.actors);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(actor);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(actor_s) * MAX_ACTORS;
+    return offset < arrayBytes && offset % sizeof(actor_s) == 0;
+}
 #endif
 
 cspField_t s_vehicleFields[33] =
@@ -868,6 +883,15 @@ void __cdecl VEH_BackupPosition(gentity_s *ent)
 void __cdecl VEH_TouchEntities(gentity_s *ent)
 {
 #ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle
+        || static_cast<unsigned int>(ent->handler) >= ARRAY_COUNT(entityHandlers))
+    {
+        Com_Error(ERR_DROP, "VEH_TouchEntities: invalid entity, vehicle, or handler index");
+        return;
+    }
+#endif
+
+#ifdef __SWITCH__
     if (!Switch_VehicleEntityPointerValid(ent) || !ent->scr_vehicle)
     {
         Com_Error(ERR_DROP, "VEH_TouchEntities: invalid entity or vehicle pointer");
@@ -934,6 +958,13 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
         }
 #endif
         target = &g_entities[entityList[i]];
+#ifdef __SWITCH__
+        if (static_cast<unsigned int>(target->handler) >= ARRAY_COUNT(entityHandlers))
+        {
+            Com_Error(ERR_DROP, "VEH_TouchEntities: target handler index is out of range");
+            return;
+        }
+#endif
         v12 = entityHandlers[target->handler].touch;
         if (target->s.number == ent->s.number)
             continue;
@@ -979,6 +1010,13 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
             if (touch)
                 touch(ent, target, 1);
             // CoD3SP 0x82260d3c: push players, or actors that are alive
+#ifdef __SWITCH__
+            if (target->actor && !Switch_VehicleActorPointerValid(target->actor))
+            {
+                Com_Error(ERR_DROP, "VEH_TouchEntities: target actor pointer is outside level.actors");
+                return;
+            }
+#endif
             if (target->s.eType != ET_PLAYER
                 && (!target->actor || !target->actor->Physics.bIsAlive))
                 continue;
