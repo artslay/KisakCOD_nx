@@ -712,7 +712,8 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
 
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
-    if (!actor || !actor->inuse || !Switch_ActorHasValidSpecies(actor, "Actor_Touch")
+    if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse
+        || !Switch_ActorHasValidSpecies(actor, "Actor_Touch")
         || !Switch_ActorHasValidState(actor, "Actor_Touch"))
     {
         if (!actor || !actor->inuse)
@@ -807,11 +808,12 @@ void __cdecl Actor_Pain(
 
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
-    if (!actor || !actor->inuse || !vDir || !self->sentient
-        || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
+    if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
+        || !self->sentient || !actor->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Pain")
         || !Switch_ActorHasValidState(actor, "Actor_Pain"))
     {
-        if (!actor || !actor->inuse || !vDir || !self->sentient || !actor->sentient)
+        if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
+            || !self->sentient || !actor->sentient)
             Com_Error(ERR_DROP, "Actor_Pain: invalid actor, sentient, or direction pointer");
         return;
     }
@@ -927,11 +929,12 @@ void __cdecl Actor_Die(
 
     actor = self ? self->actor : nullptr;
 #ifdef __SWITCH__
-    if (!actor || !actor->inuse || !vDir || !actor->ent || !self->sentient
-        || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
+    if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
+        || !actor->ent || !self->sentient || !Switch_ActorHasValidSpecies(actor, "Actor_Die")
         || !Switch_ActorHasValidState(actor, "Actor_Die"))
     {
-        if (!actor || !actor->inuse || !vDir || !actor->ent || !self->sentient)
+        if (!Switch_ActorPointerToIndex(actor, nullptr) || !actor->inuse || !vDir
+            || !actor->ent || !self->sentient)
             Com_Error(ERR_DROP, "Actor_Die: invalid actor, entity, sentient, or direction pointer");
         return;
     }
@@ -2612,7 +2615,7 @@ void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorInd
             v11);
     }
 #ifdef __SWITCH__
-    if (*actorIndex < 0 || *actorIndex >= ARRAY_COUNT(level.cgData_actorTeam))
+    if (*actorIndex < 0 || *actorIndex >= MAX_ACTORS)
     {
         Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorIndexAndTeam: actor index out of range");
         return;
@@ -2668,7 +2671,7 @@ unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
             v8);
     }
 #ifdef __SWITCH__
-    if (v2 >= ARRAY_COUNT(level.cgData_actorOnCompass))
+    if (v2 >= MAX_ACTORS || v2 >= ARRAY_COUNT(level.cgData_actorOnCompass))
     {
         Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorFriendlyIndex: actor index out of range");
         return static_cast<unsigned int>(-1);
@@ -2868,7 +2871,8 @@ bool __cdecl Actor_IsInsideArc(
 void __cdecl SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index)
 {
 #ifdef __SWITCH__
-    if (!pTo || !pFrom || index < 0 || index >= ARRAY_COUNT(pTo->sentientInfo))
+    if (!Switch_ActorPointerToIndex(pTo, nullptr) || !Switch_ActorPointerToIndex(pFrom, nullptr)
+        || index < 0 || index >= ARRAY_COUNT(pTo->sentientInfo))
     {
         Com_Error(ERR_DROP, "SentientInfo_Copy: invalid actor pointer or sentient index");
         return;
@@ -3374,7 +3378,8 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     float v10[16]; // [sp+60h] [-40h] BYREF
 
 #ifdef __SWITCH__
-    if (!self || !self->ent || !self->sentient || !player || !player->client || !player->sentient
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->ent || !self->sentient
+        || !player || !player->client || !player->sentient
         || !Switch_ActorHasValidSpecies(self, "Actor_UpdatePlayerPush")
         || !Switch_ActorHasValidState(self, "Actor_UpdatePlayerPush"))
     {
@@ -3484,7 +3489,8 @@ actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
     float *v10; // r11
 
 #ifdef __SWITCH__
-    if (!self || !self->sentient || !Switch_ActorHasValidSpecies(self, "Actor_CallThink")
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !self->sentient
+        || !Switch_ActorHasValidSpecies(self, "Actor_CallThink")
         || !Switch_ActorHasValidState(self, "Actor_CallThink"))
     {
         Com_Error(ERR_DROP, "Actor_CallThink: invalid actor, sentient, species, or state");
