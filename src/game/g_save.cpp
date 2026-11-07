@@ -933,6 +933,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     bool v21; // cr58
     XAnim_s *anims; // r30
     uintptr_t animTreeIndex;
+    uintptr_t serializedIndex;
     unsigned __int8 *v25; // r3
     unsigned __int8 *v26; // r3
 
@@ -953,15 +954,19 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         }
         break;
     case SF_ENTITY:
-        v10 = *(int*)v7;
-        if (ReadSavePointerSlot(v7) > MAX_GENTITIES || (v11 = v10 == 0, v10 < 0))
+        serializedIndex = ReadSavePointerSlot(v7);
+        if (serializedIndex > MAX_GENTITIES)
         {
-            Com_Error(ERR_DROP, "ReadField: entity out of range (%i)", *v7);
-            v11 = v10 == 0;
+            Com_Error(ERR_DROP, "ReadField: entity out of range (%llu)",
+                static_cast<unsigned long long>(serializedIndex));
+            break;
         }
-        if (v11)
-            goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&g_entities[v10 - 1];
+        if (!serializedIndex)
+        {
+            WriteSavePointerSlot(v7, 0);
+            break;
+        }
+        WriteSavePointerSlot(v7, reinterpret_cast<uintptr_t>(&g_entities[serializedIndex - 1]));
         break;
     case SF_ENTHANDLE:
         v12 = (int)*(int *)v7;
@@ -972,37 +977,49 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
             v7->setEnt(&g_entities[v12 - 1]);
         break;
     case SF_CLIENT:
-        v13 = (int)*(int*)v7;
-        if (ReadSavePointerSlot(v7) > 1 || (v14 = v13 == 0, v13 < 0))
+        serializedIndex = ReadSavePointerSlot(v7);
+        if (serializedIndex > 1)
         {
-            Com_Error(ERR_DROP, "ReadField: client out of range (%i)", *v7);
-            v14 = v13 == 0;
+            Com_Error(ERR_DROP, "ReadField: client out of range (%llu)",
+                static_cast<unsigned long long>(serializedIndex));
+            break;
         }
-        if (v14)
-            goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&level.clients[v13 - 1];
+        if (!serializedIndex)
+        {
+            WriteSavePointerSlot(v7, 0);
+            break;
+        }
+        WriteSavePointerSlot(v7, reinterpret_cast<uintptr_t>(&level.clients[serializedIndex - 1]));
         break;
     case SF_ACTOR:
-        v15 = (int)*(int*)v7;
-        if (ReadSavePointerSlot(v7) > 32 || (v16 = v15 == 0, v15 < 0))
+        serializedIndex = ReadSavePointerSlot(v7);
+        if (serializedIndex > 32)
         {
-            Com_Error(ERR_DROP, "ReadField: actor out of range (%i)", *v7);
-            v16 = v15 == 0;
+            Com_Error(ERR_DROP, "ReadField: actor out of range (%llu)",
+                static_cast<unsigned long long>(serializedIndex));
+            break;
         }
-        if (v16)
-            goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&level.actors[v15 - 1];
+        if (!serializedIndex)
+        {
+            WriteSavePointerSlot(v7, 0);
+            break;
+        }
+        WriteSavePointerSlot(v7, reinterpret_cast<uintptr_t>(&level.actors[serializedIndex - 1]));
         break;
     case SF_SENTIENT:
-        v17 = (int)*(int*)v7;
-        if (ReadSavePointerSlot(v7) > 33 || (v18 = v17 == 0, v17 < 0))
+        serializedIndex = ReadSavePointerSlot(v7);
+        if (serializedIndex > 33)
         {
-            Com_Error(ERR_DROP, "ReadField: sentient out of range (%i)", *v7);
-            v18 = v17 == 0;
+            Com_Error(ERR_DROP, "ReadField: sentient out of range (%llu)",
+                static_cast<unsigned long long>(serializedIndex));
+            break;
         }
-        if (v18)
-            goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&level.sentients[v17 - 1];
+        if (!serializedIndex)
+        {
+            WriteSavePointerSlot(v7, 0);
+            break;
+        }
+        WriteSavePointerSlot(v7, reinterpret_cast<uintptr_t>(&level.sentients[serializedIndex - 1]));
         break;
     case SF_SENTIENTHANDLE:
         v19 = (int)*(int*)v7;
@@ -1018,15 +1035,19 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         }
         break;
     case SF_VEHICLE:
-        v20 = (int)*(int*)v7;
-        if (ReadSavePointerSlot(v7) > 64 || (v21 = v20 == 0, v20 < 0))
+        serializedIndex = ReadSavePointerSlot(v7);
+        if (serializedIndex > 64)
         {
-            Com_Error(ERR_DROP, "ReadField: vehicle out of range (%i)", *v7);
-            v21 = v20 == 0;
+            Com_Error(ERR_DROP, "ReadField: vehicle out of range (%llu)",
+                static_cast<unsigned long long>(serializedIndex));
+            break;
         }
-        if (v21)
-            goto LABEL_58;
-        *(uintptr_t *)v7 = (uintptr_t)&level.vehicles[v20 - 1];
+        if (!serializedIndex)
+        {
+            WriteSavePointerSlot(v7, 0);
+            break;
+        }
+        WriteSavePointerSlot(v7, reinterpret_cast<uintptr_t>(&level.vehicles[serializedIndex - 1]));
         break;
     case SF_TURRETINFO:
     {
