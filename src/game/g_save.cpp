@@ -1028,7 +1028,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     case SF_TURRETINFO:
     {
         const uintptr_t turretIndex = ReadSavePointerSlot(v7);
-        if (turretIndex > 0x40u)
+        if (turretIndex > 0x20u)
             Com_Error(ERR_DROP, "ReadField: turret out of range (%llu)",
                 static_cast<unsigned long long>(turretIndex));
         if (!turretIndex)
