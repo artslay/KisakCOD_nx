@@ -21,7 +21,6 @@
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern int g_switchPlayerAngleTraceFrames;
-extern int g_switchPlayerInputTraceFrames;
 extern const dvar_t *input_invertPitch;
 extern const dvar_t *input_viewSensitivity;
 #endif
@@ -43,9 +42,6 @@ namespace
 {
 float s_switchRightStickYaw = 0.0f;
 float s_switchRightStickPitch = 0.0f;
-int s_switchInputSampleLastWindow = 0;
-int s_switchInputActiveBudget = 8;
-int s_switchInputIdleBudget = 4;
 
 // Give the stick a small deadzone and a gentle response curve so tiny physical
 // fluctuations do not shake the view and small intentional movements are easier
@@ -1155,20 +1151,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 
     AimAssist_UpdateGamePadInput(&aimInput, &aimOutput);
 
-    if (g_switchPlayerAngleTraceFrames > 0)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][PLAYER INPUT] remain=%d stick=(%.3f,%.3f) move=(%.2f,%.2f) clientYaw=%.2f->%.2f sensitivity=%.3f cmdMove=(%d,%d)\n",
-            g_switchPlayerAngleTraceFrames,
-            yawAxis, pitchAxis, forwardAxis, rightAxis,
-            clients[0].viewangles[1], aimOutput.yaw,
-            effectiveSensitivity, cmd->forwardmove, cmd->rightmove);
-        Switch_LogWrite(trace);
-    }
-
     clients[0].viewangles[0] = aimOutput.pitch;
     clients[0].viewangles[1] = aimOutput.yaw;
     cmd->meleeChargeDist = aimOutput.meleeChargeDist;
@@ -1700,58 +1682,6 @@ void __cdecl CL_CreateCmd(usercmd_s *result)
     }
     CL_FinishMove(result);
 #ifdef __SWITCH__
-    const int inputTraceWindow = g_switchPlayerInputTraceFrames;
-    if (inputTraceWindow > s_switchInputSampleLastWindow)
-    {
-        s_switchInputActiveBudget = 8;
-        s_switchInputIdleBudget = 4;
-    }
-    s_switchInputSampleLastWindow = inputTraceWindow;
-
-    if (inputTraceWindow > 0)
-    {
-        const float rightYawAxis = CL_GamepadAxisValue(0, 3);
-        const float rightPitchAxis = CL_GamepadAxisValue(0, 4);
-        const float forwardAxis = CL_GamepadAxisValue(0, 1);
-        const float rightAxis = CL_GamepadAxisValue(0, 0);
-        const bool stickActive =
-            std::fabs(rightYawAxis) > 0.02f ||
-            std::fabs(rightPitchAxis) > 0.02f ||
-            std::fabs(forwardAxis) > 0.02f ||
-            std::fabs(rightAxis) > 0.02f;
-        const bool takeInputSample =
-            (stickActive && s_switchInputActiveBudget > 0) ||
-            (!stickActive && inputTraceWindow % 50 == 0 &&
-                s_switchInputIdleBudget > 0);
-
-        if (takeInputSample)
-        {
-            char trace[384];
-            const int controller = CL_ControllerIndexFromClientNum(0);
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] window=%d route=%s catcher=0x%x locInfo=%d padActive=%d stick=(%.3f,%.3f) move=(%.3f,%.3f) view=(%.2f,%.2f) cmdAngles=(%d,%d) cmdMove=(%d,%d)\n",
-                inputTraceWindow,
-                switchLocationSelectionHandled ? "location" : "gameplay",
-                clientUIActives[0].keyCatchers,
-                cgArray[0].predictedPlayerState.locationSelectionInfo ? 1 : 0,
-                GPad_IsActive(controller) ? 1 : 0,
-                rightYawAxis, rightPitchAxis, forwardAxis, rightAxis,
-                clients[0].viewangles[0], clients[0].viewangles[1],
-                static_cast<int>(result->angles[0]),
-                static_cast<int>(result->angles[1]),
-                static_cast<int>(result->forwardmove),
-                static_cast<int>(result->rightmove));
-            Switch_LogWrite(trace);
-            if (stickActive)
-                --s_switchInputActiveBudget;
-            else
-                --s_switchInputIdleBudget;
-        }
-
-        --g_switchPlayerInputTraceFrames;
-    }
 #endif
 }
 
