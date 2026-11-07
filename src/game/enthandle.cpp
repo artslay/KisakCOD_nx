@@ -113,6 +113,14 @@ void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
             }
 #endif
             info = &g_entHandleInfoArray[infoIndex];
+#ifdef __SWITCH__
+            if (!info->next || info->next >= ARRAY_COUNT(g_entHandleInfoArray)
+                || !info->prev || info->prev >= ARRAY_COUNT(g_entHandleInfoArray))
+            {
+                Com_Error(ERR_DROP, "EntHandleDissociateInternal: handle link is out of range");
+                return;
+            }
+#endif
             if (!info->handle)
             {
                 v1 = va("%d %p", infoIndex, info);
@@ -145,11 +153,17 @@ void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoI
 
     if (oldInfoIndex)
     {
-        if (entHandleList->infoIndex == oldInfoIndex)
-            entHandleList->infoIndex = oldInfoIndex != g_entHandleInfoArray[oldInfoIndex].next
-            ? g_entHandleInfoArray[oldInfoIndex].next
-            : 0;
         info = &g_entHandleInfoArray[oldInfoIndex];
+#ifdef __SWITCH__
+        if (!info->next || info->next >= ARRAY_COUNT(g_entHandleInfoArray)
+            || !info->prev || info->prev >= ARRAY_COUNT(g_entHandleInfoArray))
+        {
+            Com_Error(ERR_DROP, "RemoveEntHandleInfo: handle link is out of range");
+            return;
+        }
+#endif
+        if (entHandleList->infoIndex == oldInfoIndex)
+            entHandleList->infoIndex = oldInfoIndex != info->next ? info->next : 0;
         if (!info->handle)
         {
             v2 = va("%d %p", oldInfoIndex, info);
@@ -215,6 +229,13 @@ uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
         }
 #endif
         infoHead = &g_entHandleInfoArray[infoIndexHead];
+#ifdef __SWITCH__
+        if (!infoHead->next || infoHead->next >= ARRAY_COUNT(g_entHandleInfoArray))
+        {
+            Com_Error(ERR_DROP, "AddEntHandleInfo: linked-list index is out of range");
+            return 0;
+        }
+#endif
         info->next = infoHead->next;
         info->prev = infoIndexHead;
         g_entHandleInfoArray[infoHead->next].prev = infoIndex;
@@ -480,7 +501,8 @@ bool SentientHandle::isDefined() const
 #ifdef __SWITCH__
     if (!number)
         return false;
-    if (number > MAX_SENTIENTS || !g_sentients[number - 1].ent
+    if (number > MAX_SENTIENTS
+        || !Switch_EntHandleEntityToIndex(g_sentients[number - 1].ent, nullptr)
         || !g_sentients[number - 1].ent->r.inuse)
     {
         Com_Error(ERR_DROP, "SentientHandle::isDefined: invalid or inactive sentient handle");
