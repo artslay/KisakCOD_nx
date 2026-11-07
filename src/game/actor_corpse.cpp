@@ -89,9 +89,9 @@ XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
 int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
 {
 #ifdef __SWITCH__
-    if (!ent)
+    if (!Switch_ActorCorpseEntityPointerValid(ent))
     {
-        Com_Error(ERR_DROP, "G_GetActorCorpseIndex: entity is null");
+        Com_Error(ERR_DROP, "G_GetActorCorpseIndex: entity pointer is outside level.gentities");
         return -1;
     }
 #endif
@@ -494,9 +494,9 @@ void __cdecl ActorCorpse_Free(gentity_s *ent)
     int v4; // r31
 
 #ifdef __SWITCH__
-    if (!ent)
+    if (!Switch_ActorCorpseEntityPointerValid(ent))
     {
-        Com_Error(ERR_DROP, "ActorCorpse_Free: entity is null");
+        Com_Error(ERR_DROP, "ActorCorpse_Free: entity pointer is outside level.gentities");
         return;
     }
 #endif
@@ -753,6 +753,13 @@ void __cdecl Actor_OrientCorpseToGround(gentity_s *self, int bLerp)
     float roll; // [sp+54h] [-4Ch] BYREF
     float height; //v28
 
+#ifdef __SWITCH__
+    if (!Switch_ActorCorpseEntityPointerValid(self))
+    {
+        Com_Error(ERR_DROP, "Actor_OrientCorpseToGround: entity pointer is outside level.gentities");
+        return;
+    }
+#endif
     eType = self->s.eType;
 
     iassert((self->s.eType == ET_ACTOR_CORPSE) || (self->s.eType == ET_ACTOR));
@@ -912,15 +919,24 @@ void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
 int __cdecl Actor_BecomeCorpse(gentity_s *self)
 {
 #ifdef __SWITCH__
-    if (!self || !self->actor)
+    if (!Switch_ActorCorpseEntityPointerValid(self)
+        || !Switch_ActorCorpsePointerToIndex(self->actor, nullptr))
     {
-        Com_Error(ERR_DROP, "Actor_BecomeCorpse: actor entity or actor record is null");
+        Com_Error(ERR_DROP, "Actor_BecomeCorpse: invalid actor entity or actor pointer");
         return 0;
     }
 #endif
     const int corpseIndex = G_GetFreeActorCorpseIndex(1);
+#ifdef __SWITCH__
+    if (corpseIndex < 0 || corpseIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    {
+        Com_Error(ERR_DROP, "Actor_BecomeCorpse: corpse slot index is out of range");
+        return 0;
+    }
+#else
     if (corpseIndex < 0)
         return 0;
+#endif
 
     actor_s *actor = self->actor;
     const unsigned int actorIndex = G_GetActorIndex(actor);
