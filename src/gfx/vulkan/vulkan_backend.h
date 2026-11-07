@@ -216,7 +216,8 @@ public:
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         uint32_t baseArrayLayer = 0,
         VkOffset3D imageOffset = {},
-        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        bool recordInActiveFrame = false);
 
     bool DownloadImage2D(
         VkImage image,
@@ -227,7 +228,9 @@ public:
         void *data,
         size_t bytes,
         VkImageLayout oldLayout,
-        uint32_t baseArrayLayer = 0);
+        uint32_t baseArrayLayer = 0,
+        bool recordInActiveFrame = false,
+        FrameSyncReason waitReason = FrameSyncReason::Generic);
 
     bool UploadImage3D(
         VkImage image,
@@ -239,7 +242,8 @@ public:
         const void *data,
         size_t bytes,
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        VkOffset3D imageOffset = {});
+        VkOffset3D imageOffset = {},
+        bool recordInActiveFrame = false);
 
     bool DownloadImage3D(
         VkImage image,
@@ -249,7 +253,9 @@ public:
         uint32_t mipLevel,
         void *data,
         size_t bytes,
-        VkImageLayout oldLayout);
+        VkImageLayout oldLayout,
+        bool recordInActiveFrame = false,
+        FrameSyncReason waitReason = FrameSyncReason::Generic);
 
     void TransitionImage(
         VkImage image,
