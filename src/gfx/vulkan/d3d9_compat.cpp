@@ -6385,6 +6385,8 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             const uint32_t fullRows = h;
             const size_t fullSlice = static_cast<size_t>(fullPitch) * fullRows;
             VkImageLayout uploadOldLayout = lockOriginalLayout;
+            uint64_t uploadedRegionCount = 0;
+            uint64_t uploadedBytes = 0;
             for (const _D3DBOX &box : mergedBoxes)
             {
                 if (box.Left >= box.Right || box.Top >= box.Bottom ||
@@ -6428,7 +6430,12 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
                     return E_FAIL;
                 }
                 uploadOldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                ++uploadedRegionCount;
+                uploadedBytes += static_cast<uint64_t>(packed.size());
             }
+            backend->RecordModelLightingUpload(
+                uploadedRegionCount, uploadedBytes,
+                static_cast<uint64_t>(lockShadow.size()));
         }
         else if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
         {
