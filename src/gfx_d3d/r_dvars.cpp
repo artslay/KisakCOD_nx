@@ -1527,15 +1527,9 @@
      flags = 0;
      defaultState = 1;
      helpString = "Enable worker thread";
-#ifdef __SWITCH__
-     // Switch schedules runnable threads across the process core mask; do not
-     // reserve a dedicated core for the backend. Keep up to (CPU count - 1)
-     // renderer workers available so the shared command queues can use both
-     // workers on the normal three-core application mask. Idle workers sleep.
-     const bool insufficientThreads = workerIndex + 1u >= Sys_GetCpuCount();
-#else
+     // Match the original renderer's thread-context limit. Contexts 0 and 1
+     // are the main and render threads; workers start at context 2.
      const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
-#endif
      if (insufficientThreads || !sys_smp_allowed->current.enabled)
      {
          flags = 64;
