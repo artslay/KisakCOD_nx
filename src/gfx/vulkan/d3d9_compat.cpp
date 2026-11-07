@@ -6450,6 +6450,13 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
                 volumeShadowLevel = 0xffffffffu;
                 return E_FAIL;
             }
+            if (std::strcmp(debugName, "$model_lighting") == 0 && level == 0)
+            {
+                backend->RecordModelLightingUpload(
+                    1u,
+                    static_cast<uint64_t>(lockShadow.size()),
+                    static_cast<uint64_t>(lockShadow.size()));
+            }
         }
         else
         {
