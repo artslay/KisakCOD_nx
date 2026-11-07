@@ -2375,13 +2375,31 @@ unsigned int __cdecl G_GetActorFriendlyIndex(int iEntNum)
     if (!level.bDrawCompassFriendlies)
         return -1;
 
+#ifdef __SWITCH__
+    if (iEntNum < 0 || iEntNum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "G_GetActorFriendlyIndex: entity number out of range");
+        return static_cast<unsigned int>(-1);
+    }
+#else
     iassert(iEntNum < MAX_GENTITIES);
+#endif
     ent = &g_entities[iEntNum];
     actor = ent->actor;
-    if (!actor || !actor->bDrawOnCompass || ent->sentient->eTeam != TEAM_ALLIES)
+    if (!actor || !actor->bDrawOnCompass || !ent->sentient || ent->sentient->eTeam != TEAM_ALLIES)
         return -1;
 
+#ifdef __SWITCH__
+    uint32_t actorIndex;
+    if (!Switch_ActorPointerToIndex(actor, &actorIndex))
+    {
+        Com_Error(ERR_DROP, "G_GetActorFriendlyIndex: actor pointer is outside level.actors");
+        return static_cast<unsigned int>(-1);
+    }
+    return actorIndex;
+#else
     return (int)(actor - level.actors);
+#endif
 }
 
 void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorIndex, int *team)
@@ -2399,6 +2417,18 @@ void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorInd
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5416, 0, "%s", "actorIndex");
     if (!team)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5417, 0, "%s", "team");
+#ifdef __SWITCH__
+    if (!actorIndex || !team)
+    {
+        Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorIndexAndTeam: null output pointer");
+        return;
+    }
+    if (iEntNum < 0 || iEntNum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorIndexAndTeam: entity number out of range");
+        return;
+    }
+#endif
     *actorIndex = level.specialIndex[iEntNum];
     if (*actorIndex >= 32)
     {
@@ -2425,6 +2455,13 @@ void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorInd
             "*actorIndex < MAX_ACTORS",
             v11);
     }
+#ifdef __SWITCH__
+    if (*actorIndex < 0 || *actorIndex >= ARRAY_COUNT(level.cgData_actorTeam))
+    {
+        Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorIndexAndTeam: actor index out of range");
+        return;
+    }
+#endif
     *team = level.cgData_actorTeam[*actorIndex];
 }
 
@@ -2441,6 +2478,13 @@ unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
 
     if (!Sys_IsMainThread())
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5431, 0, "%s", "Sys_IsMainThread()");
+#ifdef __SWITCH__
+    if (iEntNum < 0 || iEntNum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorFriendlyIndex: entity number out of range");
+        return static_cast<unsigned int>(-1);
+    }
+#endif
     v2 = level.specialIndex[iEntNum];
     if (v2 >= 0x20)
     {
@@ -2467,6 +2511,13 @@ unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
             "actorIndex < MAX_ACTORS",
             v8);
     }
+#ifdef __SWITCH__
+    if (v2 >= ARRAY_COUNT(level.cgData_actorOnCompass))
+    {
+        Com_Error(ERR_DROP, "G_BypassForCG_GetClientActorFriendlyIndex: actor index out of range");
+        return static_cast<unsigned int>(-1);
+    }
+#endif
     result = v2;
     if (!level.cgData_actorOnCompass[v2])
         return -1;
@@ -2475,8 +2526,16 @@ unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
 
 gentity_s *__cdecl G_GetFriendlyIndexActor(int iFriendlyIndex)
 {
+#ifdef __SWITCH__
+    if (iFriendlyIndex < 0 || iFriendlyIndex >= MAX_ACTORS || !level.actors)
+    {
+        Com_Error(ERR_DROP, "G_GetFriendlyIndexActor: actor index out of range");
+        return nullptr;
+    }
+#else
     if (iFriendlyIndex >= 32)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5451, 0, "%s", "iFriendlyIndex < MAX_ACTORS");
+#endif
     return level.actors[iFriendlyIndex].ent;
 }
 
@@ -2652,6 +2711,18 @@ bool __cdecl Actor_IsInsideArc(
 
 void __cdecl SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index)
 {
+#ifdef __SWITCH__
+    if (!pTo || !pFrom || index < 0 || index >= ARRAY_COUNT(pTo->sentientInfo))
+    {
+        Com_Error(ERR_DROP, "SentientInfo_Copy: invalid actor pointer or sentient index");
+        return;
+    }
+    if (pTo->species < 0 || pTo->species >= MAX_AI_SPECIES)
+    {
+        Com_Error(ERR_DROP, "SentientInfo_Copy: actor species out of range");
+        return;
+    }
+#endif
     if (!pTo)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 153, 0, "%s", "pTo");
     if (!pFrom)
@@ -2679,11 +2750,19 @@ actor_s *__cdecl Actor_Alloc()
     int v1; // r11
 
     actors = level.actors;
+#ifdef __SWITCH__
+    if (!actors)
+    {
+        Com_Error(ERR_DROP, "Actor_Alloc: level.actors is null");
+        return nullptr;
+    }
+#else
     if (!level.actors)
     {
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 375, 0, "%s", "level.actors != NULL");
         actors = level.actors;
     }
+#endif
     v1 = 0;
     while (actors->inuse)
     {
