@@ -820,6 +820,10 @@ static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
     out->sun.glareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 456);
     out->sun.glareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 460);
     std::memcpy(out->sun.sunFxPosition, serialized + 464, sizeof(out->sun.sunFxPosition));
+    std::memcpy(
+        out->outdoorLookupMatrix,
+        serialized + 476,
+        sizeof(out->outdoorLookupMatrix));
 
     Switch_SeedSerializedPointer(out->outdoorImage, serialized, 540);
     Switch_SeedSerializedPointer(out->cellCasterBits, serialized, 544);
