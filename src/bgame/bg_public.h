@@ -837,6 +837,10 @@ struct TurretInfo
     uint16_t stopSnd;
     uint16_t stopSndPlayer;
 };
+#ifdef __SWITCH__
+static_assert(sizeof(TurretInfo) == 0xBC,
+    "Switch turret save-field layout changed");
+#endif
 
 struct spawner_ent_t
 {
