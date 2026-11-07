@@ -18,8 +18,27 @@
 
 float playerEyePos[3];
 
+#ifdef __SWITCH__
+static bool Switch_ValidateCorpseEntityNumber(int entnum, const char *function)
+{
+    if (!level.gentities || entnum < 0 || entnum >= level.num_entities || entnum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "%s: actor corpse entity number is out of range", function);
+        return false;
+    }
+    return true;
+}
+#endif
+
 XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
 {
+#ifdef __SWITCH__
+    if (index >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    {
+        Com_Error(ERR_DROP, "G_GetActorCorpseIndexAnimTree: corpse index out of range");
+        return nullptr;
+    }
+#else
     if (index >= 0x10)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
@@ -28,11 +47,19 @@ XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
             "index doesn't index ARRAY_COUNT( g_scr_data.actorCorpseInfo )\n\t%i not in [0, %i)",
             index,
             16);
+#endif
     return g_scr_data.actorCorpseInfo[index].tree;
 }
 
 int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
 {
+#ifdef __SWITCH__
+    if (!ent)
+    {
+        Com_Error(ERR_DROP, "G_GetActorCorpseIndex: entity is null");
+        return -1;
+    }
+#endif
     const int number = ent->s.number;
     for (int index = 0; index < ARRAY_COUNT(g_scr_data.actorCorpseInfo); ++index)
     {
@@ -40,6 +67,10 @@ int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
             return index;
     }
 
+#ifdef __SWITCH__
+    Com_Error(ERR_DROP, "G_GetActorCorpseIndex called for a non-corpse entity");
+    return -1;
+#else
     if (!alwaysfails)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
@@ -47,6 +78,7 @@ int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
             0,
             "G_GetActorCorpseIndex called for non actor corpse");
     return 0;
+#endif
 }
 
 int G_GetFreeActorCorpseIndex(int reuse)
@@ -59,9 +91,24 @@ int G_GetFreeActorCorpseIndex(int reuse)
     double maxDistSide = -1.0;
     double maxDist = -1.0;
 
+#ifdef __SWITCH__
+    if (level.actorCorpseCount < 0 || level.actorCorpseCount > ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    {
+        Com_Error(ERR_DROP, "G_GetFreeActorCorpseIndex: actor corpse count out of range");
+        return -1;
+    }
+#endif
     gentity_s *playerEnt = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
+#ifdef __SWITCH__
+    if (!playerEnt || !playerEnt->sentient)
+    {
+        Com_Error(ERR_DROP, "G_GetFreeActorCorpseIndex: player entity or sentient is missing");
+        return -1;
+    }
+#else
     iassert(playerEnt);
     iassert(playerEnt->sentient);
+#endif
 
     // Get player's eye position and view direction
     float playerEyePos[3];
@@ -115,6 +162,10 @@ int G_GetFreeActorCorpseIndex(int reuse)
             continue;
         }
 
+#ifdef __SWITCH__
+        if (!Switch_ValidateCorpseEntityNumber(entnum, "G_GetFreeActorCorpseIndex"))
+            return -1;
+#endif
         gentity_s *corpseEnt = &level.gentities[entnum];
         foundAnyCorpse = 1;
 
@@ -170,6 +221,16 @@ int G_GetFreeActorCorpseIndex(int reuse)
         }
 
         // Free entity at selected corpse index and mark slot free
+#ifdef __SWITCH__
+        if (selectedIndex < 0 || selectedIndex >= ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+        {
+            Com_Error(ERR_DROP, "G_GetFreeActorCorpseIndex: selected corpse index out of range");
+            return -1;
+        }
+        if (!Switch_ValidateCorpseEntityNumber(
+                g_scr_data.actorCorpseInfo[selectedIndex].entnum, "G_GetFreeActorCorpseIndex"))
+            return -1;
+#endif
         G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[selectedIndex].entnum]);
         g_scr_data.actorCorpseInfo[selectedIndex].entnum = -1;
 
@@ -182,6 +243,15 @@ int G_GetFreeActorCorpseIndex(int reuse)
 
 void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
 {
+#ifdef __SWITCH__
+    if (allowedCorpseCount > ARRAY_COUNT(g_scr_data.actorCorpseInfo)
+        || level.actorCorpseCount < 0 || level.actorCorpseCount > ARRAY_COUNT(g_scr_data.actorCorpseInfo)
+        || !level.gentities)
+    {
+        Com_Error(ERR_DROP, "G_RemoveActorCorpses: invalid corpse count or entity array");
+        return;
+    }
+#else
     if (allowedCorpseCount > 0x10)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
@@ -190,6 +260,7 @@ void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
             "%s\n\t(allowedCorpseCount) = %i",
             "(allowedCorpseCount >= 0 && allowedCorpseCount <= 16)",
             allowedCorpseCount);
+#endif
 
     // Use array indexing rather than assuming a 32-bit corpseInfo_t stride.
     for (int corpseIndex = static_cast<int>(allowedCorpseCount);
@@ -197,8 +268,17 @@ void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
          ++corpseIndex)
     {
         const int entnum = g_scr_data.actorCorpseInfo[corpseIndex].entnum;
+#ifdef __SWITCH__
+        if (entnum != -1)
+        {
+            if (!Switch_ValidateCorpseEntityNumber(entnum, "G_RemoveActorCorpses"))
+                return;
+            G_FreeEntity(&level.gentities[entnum]);
+        }
+#else
         if (entnum >= 0)
             G_FreeEntity(&level.gentities[entnum]);
+#endif
     }
     level.actorCorpseCount = allowedCorpseCount;
 }
@@ -207,7 +287,21 @@ void __cdecl G_UpdateActorCorpses()
 {
     signed int integer; // r31
 
+#ifdef __SWITCH__
+    if (!ai_corpseCount)
+    {
+        Com_Error(ERR_DROP, "G_UpdateActorCorpses: ai_corpseCount is null");
+        return;
+    }
+#endif
     integer = ai_corpseCount->current.integer;
+#ifdef __SWITCH__
+    if (integer < 1 || integer > ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    {
+        Com_Error(ERR_DROP, "G_UpdateActorCorpses: configured corpse count out of range");
+        return;
+    }
+#else
     if (integer < 1 || integer > 16)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
