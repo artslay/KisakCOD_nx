@@ -3738,6 +3738,18 @@ bool VulkanBackend::UploadImage2D(
         toTransfer.subresourceRange.baseArrayLayer = baseArrayLayer;
         toTransfer.subresourceRange.layerCount = 1;
 
+        VkBufferMemoryBarrier uploadSourceBarrier{};
+        uploadSourceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        uploadSourceBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        uploadSourceBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        uploadSourceBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        uploadSourceBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        uploadSourceBarrier.buffer = uploadBuffer;
+        uploadSourceBarrier.offset = uploadOffset;
+        uploadSourceBarrier.size = static_cast<VkDeviceSize>(bytes);
+        vkCmdPipelineBarrier(
+            command, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &uploadSourceBarrier, 0, nullptr);
         vkCmdPipelineBarrier(
             command, sourceStage, VK_PIPELINE_STAGE_TRANSFER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &toTransfer);
@@ -3794,13 +3806,9 @@ bool VulkanBackend::UploadImage2D(
             // The ring belongs to this frame slot. Retire its current contents
             // before recycling the slice, then try the upload allocation once
             // more. This is the exceptional path, not the normal texture-write path.
-            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted) ||
-                !AllocateUniform(data, bytes, &uploadSource))
-            {
-                // A transfer staging allocation remains available for unusually
-                // large uploads that do not fit the per-frame ring.
-            }
-            else
+            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
+                return false;
+            if (AllocateUniform(data, bytes, &uploadSource))
             {
                 EndRendering();
                 recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
@@ -4059,6 +4067,18 @@ bool VulkanBackend::DownloadImage2D(
         copy.imageExtent = {width, height, 1};
         vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                staging, 1, &copy);
+        VkBufferMemoryBarrier readbackBarrier{};
+        readbackBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        readbackBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        readbackBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        readbackBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        readbackBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        readbackBarrier.buffer = staging;
+        readbackBarrier.offset = 0;
+        readbackBarrier.size = static_cast<VkDeviceSize>(bytes);
+        vkCmdPipelineBarrier(
+            command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+            0, 0, nullptr, 1, &readbackBarrier, 0, nullptr);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         aspect, range, command);
     };
@@ -4146,6 +4166,19 @@ bool VulkanBackend::UploadImage3D(
         default:
             break;
         }
+
+        VkBufferMemoryBarrier uploadSourceBarrier{};
+        uploadSourceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        uploadSourceBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        uploadSourceBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        uploadSourceBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        uploadSourceBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        uploadSourceBarrier.buffer = uploadBuffer;
+        uploadSourceBarrier.offset = uploadOffset;
+        uploadSourceBarrier.size = static_cast<VkDeviceSize>(bytes);
+        vkCmdPipelineBarrier(
+            command, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &uploadSourceBarrier, 0, nullptr);
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -4276,6 +4309,18 @@ bool VulkanBackend::DownloadImage3D(
         copy.imageExtent = {width, height, depth};
         vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                staging, 1, &copy);
+        VkBufferMemoryBarrier readbackBarrier{};
+        readbackBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        readbackBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        readbackBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        readbackBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        readbackBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        readbackBarrier.buffer = staging;
+        readbackBarrier.offset = 0;
+        readbackBarrier.size = static_cast<VkDeviceSize>(bytes);
+        vkCmdPipelineBarrier(
+            command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+            0, 0, nullptr, 1, &readbackBarrier, 0, nullptr);
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         VK_IMAGE_ASPECT_COLOR_BIT, range, command);
     };
