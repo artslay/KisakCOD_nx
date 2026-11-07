@@ -2897,7 +2897,7 @@ void Phys_ArchiveState(MemoryFile *memFile)
     }
     else
     {
-        MemFile_ReadData(memFile, sizeof(archivedWorldData), archivedWorldData);
+        MemFile_ReadData(memFile, sizeof(archivedWorldData), reinterpret_cast<uint8_t *>(archivedWorldData));
 
         for (unsigned int i = 0; i < ARRAY_COUNT(physGlob.worldData); ++i)
         {
@@ -2913,7 +2913,7 @@ void Phys_ArchiveState(MemoryFile *memFile)
             // Preserve the runtime callback installed by Phys_Init / game code.
         }
 
-        MemFile_ReadData(memFile, sizeof(physGlob.gravityDirection), physGlob.gravityDirection);
+        MemFile_ReadData(memFile, sizeof(physGlob.gravityDirection), reinterpret_cast<uint8_t *>(physGlob.gravityDirection));
     }
 }
 
