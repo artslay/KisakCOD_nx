@@ -90,6 +90,21 @@ static bool Switch_VehicleInfoCountValid(const char *function)
     }
     return true;
 }
+
+static bool Switch_VehicleEntityPointerValid(const gentity_s *ent)
+{
+    if (!ent)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(&g_entities[0]);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ent);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(gentity_s) * MAX_GENTITIES;
+    return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
+}
 #endif
 
 cspField_t s_vehicleFields[33] =
@@ -153,10 +168,16 @@ gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
     if (g_entities[entNum].classname != scr_const.script_vehicle)
     {
         Scr_Error(va("entity %i is not a script_vehicle\n", entNum));
+#ifdef __SWITCH__
+        return nullptr;
+#endif
     }
     if (!g_entities[entNum].scr_vehicle)
     {
         Scr_Error(va("entity %i doesn't have a script_vehicle\n", entNum));
+#ifdef __SWITCH__
+        return nullptr;
+#endif
     }
 
     return &g_entities[entNum];
@@ -164,6 +185,13 @@ gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
 
 void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 {
+#ifdef __SWITCH__
+    if (!ent || !veh || !VEH_GetVehicleInfoChecked(infoIdx))
+    {
+        Com_Error(ERR_DROP, "VEH_InitEntity: invalid entity, vehicle, or info index");
+        return;
+    }
+#endif
 #ifdef KISAK_MP
     ent->handler = ENT_HANDLER_HELICOPTER;
     ent->r.svFlags = 4;
@@ -224,6 +252,13 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 
 void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
+#ifdef __SWITCH__
+    if (!ent || !veh || !VEH_GetVehicleInfoChecked(static_cast<int>(infoIdx)))
+    {
+        Com_Error(ERR_DROP, "VEH_InitVehicle: invalid entity, vehicle, or info index");
+        return;
+    }
+#endif
 #ifdef KISAK_SP
     G_VehInitPathPos(&veh->pathPos);
 #endif
@@ -1115,6 +1150,13 @@ void __cdecl VEH_UpdateAim(gentity_s *ent)
         }
         else
         {
+#ifdef __SWITCH__
+            if (veh->targetEnt < 0 || veh->targetEnt >= MAX_GENTITIES)
+            {
+                Com_Error(ERR_DROP, "VEH_UpdateTurret: target entity number is out of range");
+                return;
+            }
+#endif
             tgtEnt = &g_entities[veh->targetEnt];
             Vec3Add(tgtEnt->r.currentOrigin, veh->targetOffset, tgtPos);
         }
@@ -2872,13 +2914,24 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
     const EntHandle *p_ownerNum; // r31
     scr_vehicle_s *scr_vehicle; // r11
 
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(player))
+    {
+        Com_Error(ERR_DROP, "G_IsPlayerDrivingVehicle: player entity pointer is invalid");
+        return false;
+    }
+#else
     iassert(player);
+#endif
 
     client = player->client;
     if (client
         && (eFlags = client->ps.eFlags, (eFlags & 0x20000) != 0)
         && (eFlags & 0x80000) == 0
         && (p_ownerNum = &player->r.ownerNum, p_ownerNum->isDefined())
+#ifdef __SWITCH__
+        && Switch_VehicleEntityPointerValid(p_ownerNum->ent())
+#endif
         && (scr_vehicle = p_ownerNum->ent()->scr_vehicle) != 0
         && (scr_vehicle->flags & 0xA) == 0)
     {
@@ -2919,6 +2972,7 @@ void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
     if (veh->boneIndex.wheel[idx] < 0)
     {
         Com_Error(ERR_DROP, "Script vehicle [%s] needs [%s]", SL_ConvertToString(ent->targetname), SL_ConvertToString(*s_wheelTags[idx]));
+        return;
     }
 
     mtx = G_DObjGetLocalBoneIndexMatrix(ent, veh->boneIndex.wheel[idx]);
@@ -3740,6 +3794,13 @@ void __cdecl VEH_VerifyPosition(gentity_s *ent)
         if ((other_veh->flags & 1) == 0)
             continue;
 
+#ifdef __SWITCH__
+        if (other_veh->entNum < 0 || other_veh->entNum >= MAX_GENTITIES)
+        {
+            Com_Error(ERR_DROP, "vehicle collision pass: other vehicle entity number is out of range");
+            return;
+        }
+#endif
         other = &g_entities[other_veh->entNum];
         mins[0] = other->r.currentOrigin[0] + (other_veh->phys.mins[0] - 64.0f);
         mins[1] = other->r.currentOrigin[1] + (other_veh->phys.mins[1] - 64.0f);
@@ -4061,6 +4122,13 @@ gentity_s * VEH_GetCollMap(const char *modelname)
     gentity_s *ent; // [esp+4h] [ebp-8h]
     int i; // [esp+8h] [ebp-4h]
 
+#ifdef __SWITCH__
+    if (level.num_entities < 0 || level.num_entities > MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "VEH_GetCollMap: entity count is out of range");
+        return nullptr;
+    }
+#endif
     for (i = 0; i < level.num_entities; ++i)
     {
         ent = &g_entities[i];
@@ -4285,15 +4353,33 @@ gentity_s *G_GetPlayerVehicle(const gentity_s *player)
     const EntHandle *p_ownerNum; // r29
     gentity_s *v5; // r29
 
+#ifdef __SWITCH__
+    if (!Switch_VehicleEntityPointerValid(player) || !player->client)
+    {
+        Com_Error(ERR_DROP, "G_GetPlayerVehicle: invalid player entity or client");
+        return nullptr;
+    }
+#else
     if (!player)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 3976, 0, "%s", "player");
     client = player->client;
     if (!client)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 3979, 0, "%s", "client");
+#endif
+#ifdef __SWITCH__
+    client = player->client;
+#endif
     if ((client->ps.eFlags & 0x20000) == 0)
         return 0;
     p_ownerNum = &player->r.ownerNum;
     iassert(player->r.ownerNum.isDefined());
+#ifdef __SWITCH__
+    if (!p_ownerNum->isDefined() || !Switch_VehicleEntityPointerValid(p_ownerNum->ent()))
+    {
+        Com_Error(ERR_DROP, "G_GetPlayerVehicle: owner entity pointer is invalid");
+        return nullptr;
+    }
+#endif
     v5 = p_ownerNum->ent();
     if (!v5->scr_vehicle)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_vehicle.cpp", 3988, 0, "%s", "vehEnt->scr_vehicle");
