@@ -2089,7 +2089,11 @@ void __cdecl Com_Frame_Try_Block_Function()
             com_frameTime = Sys_Milliseconds();
             if (com_frameTime - com_lastFrameTime[lastFrameIndex] < 0)
                 com_lastFrameTime[lastFrameIndex] = com_frameTime;
-            if (com_frameTime - com_lastFrameTime[lastFrameIndex] > 0)
+            // Apply the same minimum-frame-time test used by the dedicated
+            // loop. Testing only for a positive delta bypasses com_maxfps:
+            // the code below then advances the frame clock by minMsec without
+            // ever waiting for that interval to elapse.
+            if (com_frameTime - com_lastFrameTime[lastFrameIndex] >= minMsec)
                 break;
             NET_Sleep(1);
         }
