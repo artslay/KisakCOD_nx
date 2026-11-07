@@ -6312,38 +6312,70 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             // Coalesce adjacent atlas tiles so a row/column of changed model
             // lighting samples becomes one buffer-to-image copy, not one copy
             // command per individual 4x4x4 patch.
-            std::vector<_D3DBOX> mergedBoxes;
-            mergedBoxes.reserve(lockDirtyBoxes.size());
-            for (const _D3DBOX &inputBox : lockDirtyBoxes)
-            {
-                _D3DBOX box = inputBox;
-                bool merged = true;
-                while (merged)
+            // Model-lighting tiles are 4x4x4 and can number in the thousands.
+            // Sort once and coalesce horizontal runs, then identical vertical
+            // spans. This stays O(n log n) instead of repeatedly scanning and
+            // erasing the growing vector for every patch.
+            std::vector<_D3DBOX> sortedBoxes = lockDirtyBoxes;
+            std::sort(
+                sortedBoxes.begin(), sortedBoxes.end(),
+                [](const _D3DBOX &a, const _D3DBOX &b)
                 {
-                    merged = false;
-                    for (size_t i = 0; i < mergedBoxes.size(); ++i)
-                    {
-                        const _D3DBOX &other = mergedBoxes[i];
-                        const bool sameDepth =
-                            box.Front == other.Front && box.Back == other.Back;
-                        const bool horizontal =
-                            sameDepth && box.Top == other.Top &&
-                            box.Bottom == other.Bottom &&
-                            box.Left <= other.Right && other.Left <= box.Right;
-                        const bool vertical =
-                            sameDepth && box.Left == other.Left &&
-                            box.Right == other.Right &&
-                            box.Top <= other.Bottom && other.Top <= box.Bottom;
-                        if (!horizontal && !vertical)
-                            continue;
+                    if (a.Front != b.Front) return a.Front < b.Front;
+                    if (a.Back != b.Back) return a.Back < b.Back;
+                    if (a.Top != b.Top) return a.Top < b.Top;
+                    if (a.Bottom != b.Bottom) return a.Bottom < b.Bottom;
+                    if (a.Left != b.Left) return a.Left < b.Left;
+                    return a.Right < b.Right;
+                });
 
-                        box.Left = std::min(box.Left, other.Left);
-                        box.Top = std::min(box.Top, other.Top);
-                        box.Right = std::max(box.Right, other.Right);
-                        box.Bottom = std::max(box.Bottom, other.Bottom);
-                        mergedBoxes.erase(mergedBoxes.begin() + i);
-                        merged = true;
-                        break;
+            std::vector<_D3DBOX> horizontalBoxes;
+            horizontalBoxes.reserve(sortedBoxes.size());
+            for (const _D3DBOX &box : sortedBoxes)
+            {
+                if (!horizontalBoxes.empty())
+                {
+                    _D3DBOX &previous = horizontalBoxes.back();
+                    if (previous.Front == box.Front &&
+                        previous.Back == box.Back &&
+                        previous.Top == box.Top &&
+                        previous.Bottom == box.Bottom &&
+                        box.Left <= previous.Right)
+                    {
+                        previous.Right = std::max(previous.Right, box.Right);
+                        continue;
+                    }
+                }
+                horizontalBoxes.push_back(box);
+            }
+
+            std::sort(
+                horizontalBoxes.begin(), horizontalBoxes.end(),
+                [](const _D3DBOX &a, const _D3DBOX &b)
+                {
+                    if (a.Front != b.Front) return a.Front < b.Front;
+                    if (a.Back != b.Back) return a.Back < b.Back;
+                    if (a.Left != b.Left) return a.Left < b.Left;
+                    if (a.Right != b.Right) return a.Right < b.Right;
+                    if (a.Top != b.Top) return a.Top < b.Top;
+                    return a.Bottom < b.Bottom;
+                });
+
+            std::vector<_D3DBOX> mergedBoxes;
+            mergedBoxes.reserve(horizontalBoxes.size());
+            for (const _D3DBOX &box : horizontalBoxes)
+            {
+                if (!mergedBoxes.empty())
+                {
+                    _D3DBOX &previous = mergedBoxes.back();
+                    if (previous.Front == box.Front &&
+                        previous.Back == box.Back &&
+                        previous.Left == box.Left &&
+                        previous.Right == box.Right &&
+                        box.Top <= previous.Bottom)
+                    {
+                        previous.Bottom = std::max(previous.Bottom, box.Bottom);
+                        continue;
                     }
                 }
                 mergedBoxes.push_back(box);
