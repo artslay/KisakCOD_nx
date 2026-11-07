@@ -1206,6 +1206,15 @@ void __cdecl Actor_InitMove(actor_s *self)
 
 bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !level.gentities
+        || entnum < 0 || entnum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "Actor_IsDodgeEntity: invalid actor or hit entity number");
+        return false;
+    }
+#endif
+
     gentity_s *gentities; // r11
     gentity_s *ent; // r11
     bool result; // r3
@@ -2659,6 +2668,15 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 
 void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr)
+        || self->moveHistoryIndex < 0 || self->moveHistoryIndex >= ARRAY_COUNT(self->moveHistory))
+    {
+        Com_Error(ERR_DROP, "Actor_AddStationaryMoveHistory: invalid actor or movement history index");
+        return;
+    }
+#endif
+
 #ifdef __SWITCH__
     if (!Switch_ActorPointerToIndex(self, nullptr))
     {
@@ -5692,6 +5710,16 @@ void __cdecl Actor_Think(gentity_s *self)
 
 int __cdecl Actor_PhysicsAndDodge(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || self->ent->actor != self || !self->Path.wPathLen
+        || self->Path.wPathLen > ARRAY_COUNT(self->Path.pts))
+    {
+        Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: invalid actor, entity, or path");
+        return 0;
+    }
+#endif
+
     gentity_s *ent; // r11
     unsigned __int16 groundEntNum; // r22
     int bHasGroundPlane; // r21
@@ -5743,6 +5771,13 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
         return result;
     }
     iHitEntnum = self->Physics.iHitEntnum;
+#ifdef __SWITCH__
+    if (iHitEntnum != ENTITYNUM_NONE && (iHitEntnum < 0 || iHitEntnum >= MAX_GENTITIES))
+    {
+        Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: physics hit entity number is out of range");
+        return 0;
+    }
+#endif
     if (iHitEntnum == ENTITYNUM_NONE)
     {
         result = 1;
@@ -5794,6 +5829,14 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
             self->Physics.vOrigin[2] = v19->r.currentOrigin[2];
             if (!Actor_Physics(&self->Physics))
                 goto LABEL_5;
+#ifdef __SWITCH__
+            if (self->Physics.iHitEntnum != ENTITYNUM_NONE
+                && (self->Physics.iHitEntnum < 0 || self->Physics.iHitEntnum >= MAX_GENTITIES))
+            {
+                Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: updated hit entity number is out of range");
+                return 0;
+            }
+#endif
             if (!self->Physics.bStuck)
             {
                 if (Actor_IsDodgeEntity(self, self->Physics.iHitEntnum))
@@ -5819,6 +5862,14 @@ int __cdecl Actor_PhysicsAndDodge(actor_s *self)
     self->ent->flags |= v12;
     if (self->Physics.iHitEntnum != ENTITYNUM_NONE)
     {
+#ifdef __SWITCH__
+        if (self->Physics.iHitEntnum < 0 || self->Physics.iHitEntnum >= MAX_GENTITIES
+            || iHitEntnum < 0 || iHitEntnum >= MAX_GENTITIES)
+        {
+            Com_Error(ERR_DROP, "Actor_PhysicsAndDodge: hit entity number changed to an invalid value");
+            return 0;
+        }
+#endif
         if (!v21)
         {
             v21 = Path_FailedLookahead(&self->Path);
@@ -6591,6 +6642,17 @@ LABEL_46:
 
 void __cdecl Actor_UpdateOriginAndAngles(actor_s *self)
 {
+#ifdef __SWITCH__
+    if (!Switch_ActorPointerToIndex(self, nullptr) || !Switch_EntityPointerValid(self->ent)
+        || self->ent->actor != self || !Switch_SentientPointerToIndex(self->sentient, nullptr)
+        || self->ent->sentient != self->sentient || self->sentient->ent != self->ent
+        || self->Physics.iHitEntnum < 0 || self->Physics.iHitEntnum >= MAX_GENTITIES)
+    {
+        Com_Error(ERR_DROP, "Actor_UpdateOriginAndAngles: invalid actor links or hit entity number");
+        return;
+    }
+#endif
+
     gentity_s *ent; // r28
 
     iassert(self);
