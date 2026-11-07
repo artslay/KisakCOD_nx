@@ -932,6 +932,13 @@ void __cdecl Actor_Pain(
     actor->damageDir[2] = vDir[2];
     HitLocationString = G_GetHitLocationString((hitLocation_t)hitLoc);
     Scr_SetString(&actor->damageHitLoc, HitLocationString);
+#ifdef __SWITCH__
+    if (pAttacker && !Switch_EntityPointerValid(pAttacker))
+    {
+        Com_Error(ERR_DROP, "Actor_Pain: attacker entity pointer is outside g_entities");
+        return;
+    }
+#endif
     if (pAttacker)
     {
         WeaponDef = BG_GetWeaponDef(weaponIdx);
