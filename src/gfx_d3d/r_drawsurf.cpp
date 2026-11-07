@@ -554,23 +554,7 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 
             drawSurf->fields.objectId = cloudIndex;
             drawSurf->fields.surfType = SF_PARTICLE_CLOUD;
-#ifdef __SWITCH__
-            if (traceCloudDrawSurf)
-            {
-                char trace[288];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][FX CLOUD SURF QUEUED] n=%u region=%d regionCount=%d regionMax=%d object=%u surfType=%u materialIndex=%u\n",
-                    switchCloudDrawSurfTrace,
-                    region,
-                    scene.drawSurfCount[region],
-                    scene.maxDrawSurfCount[region],
-                    static_cast<unsigned>(drawSurf->fields.objectId),
-                    static_cast<unsigned>(drawSurf->fields.surfType),
-                    static_cast<unsigned>(drawSurf->fields.materialSortedIndex));
-                Switch_LogWrite(trace);
-            }
-#endif
+
             //packed_high = HIDWORD(drawSurf->packed);
             //*&drawSurf->packed = cloudIndex | *&drawSurf->packed & 0xFFFF0000; // objectID
             //HIDWORD(drawSurf->packed) = packed_high;
@@ -587,38 +571,13 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
         }
         else
         {
-#ifdef __SWITCH__
-            if (traceCloudDrawSurf)
-            {
-                char trace[224];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][FX CLOUD SURF FAIL] n=%u reason=drawsurf_capacity region=%d regionCount=%d regionMax=%d\n",
-                    switchCloudDrawSurfTrace,
-                    region,
-                    scene.drawSurfCount[region],
-                    scene.maxDrawSurfCount[region]);
-                Switch_LogWrite(trace);
-            }
-#endif
+
             return 0;
         }
     }
     else
     {
-#ifdef __SWITCH__
-        if (traceCloudDrawSurf)
-        {
-            char trace[224];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][FX CLOUD SURF REJECT] n=%u reason=no_emissive_technique material=%.112s techType=%u\n",
-                switchCloudDrawSurfTrace,
-                material->info.name ? material->info.name : "<null>",
-                static_cast<unsigned>(gfxDrawMethod.emissiveTechType));
-            Switch_LogWrite(trace);
-        }
-#endif
+
         R_WarnOncePerFrame(R_WARN_NONEMISSIVE_FX_MATERIAL, material->info.name);
         return 0;
     }
