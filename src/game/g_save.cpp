@@ -1269,6 +1269,7 @@ void __cdecl WriteActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
             "WriteActorPotentialCoverNodes: count out of range (%d, max %d)",
             pActor->iPotentialCoverNodeCount,
             static_cast<int>(ARRAY_COUNT(pActor->pPotentialCoverNode)));
+        return;
 
     v4 = 0;
     if (pActor->iPotentialCoverNodeCount > 0)
