@@ -673,15 +673,19 @@ static bool Switch_SavePointerToIndex(
 void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, unsigned __int8 *original)
 {
     EntHandle *v3; // r28
+#ifndef __SWITCH__
     unsigned int v4; // r31
+#endif
     unsigned int v5; // r3
     int v6; // r31
+#ifndef __SWITCH__
     unsigned int v7; // r31
     unsigned int v8; // r31
     unsigned int v9; // r31
     unsigned int v10; // r31
     unsigned int v11; // r31
     unsigned int v12; // r31
+#endif
     unsigned __int8 *v13; // r11
     int v14; // r11
     int v15; // r31
