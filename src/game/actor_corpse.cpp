@@ -19,6 +19,41 @@
 float playerEyePos[3];
 
 #ifdef __SWITCH__
+static bool Switch_ActorCorpseEntityPointerValid(const gentity_s *ent)
+{
+    if (!ent || !level.gentities || level.num_entities < 0 || level.num_entities > MAX_GENTITIES)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.gentities);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ent);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(gentity_s) * level.num_entities;
+    return offset < arrayBytes && offset % sizeof(gentity_s) == 0;
+}
+
+static bool Switch_ActorCorpsePointerToIndex(const actor_s *actor, uint32_t *index)
+{
+    if (!actor || !level.actors)
+        return false;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(level.actors);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(actor);
+    if (address < base)
+        return false;
+
+    const uintptr_t offset = address - base;
+    const uintptr_t arrayBytes = sizeof(actor_s) * MAX_ACTORS;
+    if (offset >= arrayBytes || offset % sizeof(actor_s) != 0)
+        return false;
+
+    if (index)
+        *index = static_cast<uint32_t>(offset / sizeof(actor_s));
+    return true;
+}
+
 static bool Switch_ValidateCorpseEntityNumber(int entnum, const char *function)
 {
     if (!level.gentities || entnum < 0 || entnum >= level.num_entities || entnum >= MAX_GENTITIES)
