@@ -2220,7 +2220,7 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     SwitchSavePhase("frame/save/main_state/dvars");
 #endif
     Dvar_SaveDvars(SaveMemory_GetMemoryFile(save), 0x1000u);
-    SaveMemory_SaveWrite(g_hudelems, 44032, save);
+    SaveMemory_SaveWrite(g_hudelems, sizeof(g_hudelems), save);
     //ProfMem_End(v11);
     //ProfMem_Begin("misc", v13);
     SaveMemory_SaveWrite(&level.fFogOpaqueDist, 4, save);
@@ -2902,7 +2902,7 @@ bool __cdecl G_LoadMainState(SaveGame *save)
     iassert(save);
 
     Dvar_LoadDvars(SaveMemory_GetMemoryFile(save));
-    SaveMemory_LoadRead(g_hudelems, /*44032*/ sizeof(game_hudelem_s) * 256, save); // KISAKTODO: not the right array size
+    SaveMemory_LoadRead(g_hudelems, sizeof(g_hudelems), save);
     SaveMemory_LoadRead(&level.fFogOpaqueDist, 4, save);
     SaveMemory_LoadRead(&level.fFogOpaqueDistSqrd, 4, save);
     SaveMemory_LoadRead(&level.bDrawCompassFriendlies, 4, save);
