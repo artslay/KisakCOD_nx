@@ -91,8 +91,8 @@ int __cdecl StringToFilter(char *s, ipFilter_s *f)
             break;
         ++s;
     }
-    f->mask = *(uint32_t *)m;
-    f->compare = *(uint32_t *)b;
+    memcpy(&f->mask, m, sizeof(f->mask));
+    memcpy(&f->compare, b, sizeof(f->compare));
     return 1;
 }
 
