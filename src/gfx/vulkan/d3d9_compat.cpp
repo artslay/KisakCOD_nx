@@ -1341,15 +1341,43 @@ VkSamplerAddressMode AddressMode(uint32_t value)
 VkFormatFeatureFlags SwitchGetOptimalFormatFeatures(
     VulkanBackend *backend, VkFormat format)
 {
-    // Format properties are immutable for a physical device; cache them so
-    // checking filter support does not add a driver query to every draw.
-    static std::mutex cacheMutex;
-    static std::unordered_map<uint32_t, VkFormatFeatureFlags> featureCache;
+    // Format properties are immutable for a physical device. Core Vulkan
+    // formats are queried from the hot sampler path, so use an atomic cache
+    // instead of taking a mutex for every texture bound by every draw.
+    constexpr uint64_t cachedValueValid = uint64_t(1) << 32;
+    static std::array<std::atomic<uint64_t>, 256> coreFormatFeatureCache{};
     const uint32_t key = static_cast<uint32_t>(format);
+    if (key < coreFormatFeatureCache.size())
+    {
+        std::atomic<uint64_t> &cacheEntry = coreFormatFeatureCache[key];
+        const uint64_t cached = cacheEntry.load(std::memory_order_acquire);
+        if (cached & cachedValueValid)
+            return static_cast<VkFormatFeatureFlags>(cached);
+
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(
+            backend->PhysicalDevice(), format, &properties);
+        const VkFormatFeatureFlags features = properties.optimalTilingFeatures;
+        const uint64_t cacheValue =
+            cachedValueValid | static_cast<uint64_t>(features);
+        uint64_t expected = 0;
+        if (!cacheEntry.compare_exchange_strong(
+                expected, cacheValue,
+                std::memory_order_acq_rel, std::memory_order_acquire))
+        {
+            return static_cast<VkFormatFeatureFlags>(expected);
+        }
+        return features;
+    }
+
+    // Keep the original synchronized fallback for extension formats outside
+    // the compact core-format range.
+    static std::mutex cacheMutex;
+    static std::unordered_map<uint32_t, VkFormatFeatureFlags> extensionFeatureCache;
     {
         std::lock_guard<std::mutex> lock(cacheMutex);
-        const auto found = featureCache.find(key);
-        if (found != featureCache.end())
+        const auto found = extensionFeatureCache.find(key);
+        if (found != extensionFeatureCache.end())
             return found->second;
     }
 
@@ -1359,7 +1387,7 @@ VkFormatFeatureFlags SwitchGetOptimalFormatFeatures(
     const VkFormatFeatureFlags features = properties.optimalTilingFeatures;
     {
         std::lock_guard<std::mutex> lock(cacheMutex);
-        const auto inserted = featureCache.emplace(key, features);
+        const auto inserted = extensionFeatureCache.emplace(key, features);
         return inserted.first->second;
     }
 }
