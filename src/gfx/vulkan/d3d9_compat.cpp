@@ -8195,7 +8195,6 @@ bool IDirect3DDevice9::BindUniformSet(
 
     // Each in-flight frame slot owns a separate descriptor-set cache. The
     // slot's fence has completed before its cursor is rewound or its sets updated.
-    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
     const uint32_t frameSlot = m_backend->CurrentFrameSlot();
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
@@ -11257,8 +11256,13 @@ void IDirect3DDevice9::BindPipelineIfChanged(VkPipeline pipeline)
 bool IDirect3DDevice9::BindDescriptorSets()
 {
     g_switchFrameStage = "frame/render/vulkan/descriptors/entry";
-    if (!m_vertexShader || !m_pixelShader)
+    if (!m_backend || !m_vertexShader || !m_pixelShader)
         return false;
+
+    // Bind both shader stages' sampler and uniform sets under one lock.
+    // Descriptor-pool lifetime remains protected from concurrent shutdown,
+    // without reacquiring the same mutex four times for every draw.
+    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
 
     g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
     if (!BindSamplerSet(
