@@ -965,11 +965,11 @@ struct SwitchEnsurePipelineTraceScope
 {
     ~SwitchEnsurePipelineTraceScope()
     {
-        // Don't leave "cache_lookup" or a shader-module snapshot installed after
-        // a successful return. The exception handler can then distinguish a
-        // fault inside this function from a later failure in the game loop.
+        // Fast pipeline-cache hits never create a shader-module snapshot.
+        // Avoid clearing the already-empty module trace on every ordinary draw.
         g_switchFrameStage = "frame/render/vulkan/pipeline/return";
-        ClearSwitchVkModuleTrace();
+        if (g_switchVkModuleTracePhase != 0)
+            ClearSwitchVkModuleTrace();
     }
 };
 
@@ -2640,6 +2640,10 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
+    // Switch process environment is fixed at launch. Cache probe selectors
+    // so the per-draw pipeline fast path never calls getenv/strtoull.
+    static const uint64_t cachedS0UvTargetSerial = []() -> uint64_t
+    {
     // Shader-rewrite probes must be explicitly enabled; stale per-probe env
     // variables from an earlier test must never alter normal scene rendering.
     const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
@@ -2667,6 +2671,9 @@ uint64_t SwitchPsS0UvTestTargetSerial()
         serial >= UINT64_MAX - 2u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
+
+    }();
+    return cachedS0UvTargetSerial;
 }
 
 bool SwitchPsS0UvTestTargetMatches(
@@ -2696,6 +2703,10 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
+    // Switch process environment is fixed at launch. Cache probe selectors
+    // so the per-draw pipeline fast path never calls getenv/strtoull.
+    static const uint64_t cachedColorDebugTargetSerial = []() -> uint64_t
+    {
     // Require an independent opt-in before consulting the probe-specific selector.
     // This prevents stale KISAK_VK_DEBUG_PS_COLOR_SERIAL values from patching
     // shaders in ordinary play sessions.
@@ -2718,6 +2729,9 @@ uint64_t SwitchPsColorDebugTargetSerial()
     if (end == value || !end || *end != '\0' || serial == 0u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
+
+    }();
+    return cachedColorDebugTargetSerial;
 }
 
 bool SwitchPsColorDebugTargetMatches(
@@ -9223,11 +9237,9 @@ bool IDirect3DDevice9::BindSamplerSet(
 bool IDirect3DDevice9::EnsurePipeline()
 {
     SwitchEnsurePipelineTraceScope traceScope;
-    ClearSwitchVkModuleTrace();
-    RecordSwitchVkPipelineTrace(
-        1u, this, &m_pipelines, m_pipelines.size(), 0,
-        m_backend ? m_backend->Device() : VK_NULL_HANDLE,
-        m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
+    // Mark the pipeline trace inactive until a Vulkan pipeline operation is
+    // reached. Module-trace state is cleared by the preceding scope destructor.
+    g_switchVkPipelineTracePhase = 0;
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
 
 #endif
@@ -11278,11 +11290,14 @@ bool IDirect3DDevice9::PrepareDraw()
 #ifdef __SWITCH__
     {
         static std::atomic<uint32_t> prepareDrawEntryTraceCount{0};
-        const uint32_t sequence =
-            prepareDrawEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (sequence < 24u)
+        // Stop touching the atomic counter once the one-shot trace is complete.
+        if (prepareDrawEntryTraceCount.load(std::memory_order_relaxed) < 24u)
         {
-            char trace[352];
+            const uint32_t sequence =
+                prepareDrawEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (sequence < 24u)
+            {
+                char trace[352];
             std::snprintf(
                 trace, sizeof(trace),
                 "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\n",
@@ -11292,7 +11307,8 @@ bool IDirect3DDevice9::PrepareDraw()
                 static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
                 static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
                 m_pipelineDirty ? 1u : 0u);
-            Switch_LogWrite(trace);
+                Switch_LogWrite(trace);
+            }
         }
     }
 #endif
