@@ -255,8 +255,7 @@ void Switch_RecordFrameCpuEnd()
         maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendSwapWait)]),
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
         averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
-        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
-        );
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]));
     char message[2048];
     std::snprintf(
         message, sizeof(message),
