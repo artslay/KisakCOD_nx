@@ -1896,6 +1896,50 @@ bool __cdecl FS_RenameChecked(char *from, char *fromDir, char *to, char *toDir)
 
     if (std::rename(a, b) != 0)
     {
+        const int initialRenameError = errno;
+
+        // The Switch SD-card filesystem can reject rename-over-existing with
+        // EEXIST. Preserve the current save while replacing it: move the old
+        // file to a sibling backup, install the completed temporary save, and
+        // restore the old file if installing the new one fails.
+        if (initialRenameError == EEXIST)
+        {
+            char backup[320];
+            const int backupLength =
+                std::snprintf(backup, sizeof(backup), "%s.kisak-backup", b);
+
+            if (backupLength >= 0 &&
+                static_cast<size_t>(backupLength) < sizeof(backup))
+            {
+                errno = 0;
+                if (std::remove(backup) == 0 || errno == ENOENT)
+                {
+                    if (std::rename(b, backup) == 0)
+                    {
+                        if (std::rename(a, b) == 0)
+                        {
+                            // The new save is now committed. A failure to
+                            // remove the backup must not invalidate it.
+                            (void)std::remove(backup);
+                            return true;
+                        }
+
+                        const int installError = errno;
+                        if (std::rename(backup, b) == 0)
+                            errno = installError;
+                    }
+                }
+            }
+            else
+            {
+                errno = ENAMETOOLONG;
+            }
+        }
+        else
+        {
+            errno = initialRenameError;
+        }
+
         char trace[640];
         std::snprintf(
             trace,
