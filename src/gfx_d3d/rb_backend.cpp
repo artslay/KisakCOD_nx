@@ -922,8 +922,13 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
         listArgs.firstDrawSurfIndex += processedDrawSurfCount;
     }
     g_viewStats->drawSurfCount += info->drawSurfCount;
+#ifdef __SWITCH__
+    const auto switchDrawSurfTessEndStart = std::chrono::steady_clock::now();
+#endif
     R_TessEnd(context, prepassContext);
 #ifdef __SWITCH__
+    Switch_RecordBackendTimingElapsed(
+        SwitchBackendTimingStage::DrawSurfTessEnd, switchDrawSurfTessEndStart);
     Switch_SetRenderAuditContext(nullptr,nullptr,nullptr,nullptr,UINT32_MAX,UINT32_MAX,UINT32_MAX);
 #endif
     context.state->origMaterial = 0;
@@ -962,7 +967,16 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
     drawSurfCount = listArgs->info->drawSurfCount - listArgs->firstDrawSurfIndex;
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
-    if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
+#ifdef __SWITCH__
+    const auto switchMaterialSetupStart = std::chrono::steady_clock::now();
+#endif
+    const bool materialReady =
+        R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf) != 0;
+#ifdef __SWITCH__
+    Switch_RecordBackendTimingElapsed(
+        SwitchBackendTimingStage::DrawSurfMaterialSetup, switchMaterialSetupStart);
+#endif
+    if (!materialReady)
     {
 #ifdef __SWITCH__
         const Material *candidate=listArgs->context.state->material;
@@ -1084,15 +1098,29 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
     subListCount = 0;
     for (passIndex = 0; passIndex < listArgs->context.state->technique->passCount; ++passIndex)
     {
+#ifdef __SWITCH__
+        const auto switchPassSetupStart = std::chrono::steady_clock::now();
+#endif
         R_UpdateMaterialTime(listArgs->context.source, 0.0);
         R_SetupPass(listArgs->context, passIndex);
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::DrawSurfPassSetup, switchPassSetupStart);
+#endif
         if (passIndex || !prepassContext.state)
         {
             passPrepassContext.state = 0;
         }
         else
         {
+#ifdef __SWITCH__
+            const auto switchPrepassSetupStart = std::chrono::steady_clock::now();
+#endif
             R_SetupPass(prepassContext, 0);
+#ifdef __SWITCH__
+            Switch_RecordBackendTimingElapsed(
+                SwitchBackendTimingStage::DrawSurfPassSetup, switchPrepassSetupStart);
+#endif
             passPrepassContext.state = prepassContext.state;
         }
 #ifdef __SWITCH__
@@ -1107,7 +1135,14 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
             drawSurf.fields.surfType,drawSurf.fields.objectId);
 #endif
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
+#ifdef __SWITCH__
+        const auto switchGeometryStart = std::chrono::steady_clock::now();
+#endif
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::DrawSurfGeometry, switchGeometryStart);
+#endif
     }
     if (isPixelCostEnabled)
         R_PixelCost_EndSurface(listArgs->context);

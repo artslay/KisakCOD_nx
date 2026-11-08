@@ -560,6 +560,10 @@ enum class SwitchBackendTimingStage : uint32_t
     DistortionResolve,
     EmissiveSurfaces,
     EndScene,
+    DrawSurfMaterialSetup,
+    DrawSurfPassSetup,
+    DrawSurfGeometry,
+    DrawSurfTessEnd,
     Count
 };
 
