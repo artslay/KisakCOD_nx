@@ -3048,9 +3048,6 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
 
         RB_PatchStaticModelCache();
 
-        RB_PatchModelLighting(backEndData->modelLightingPatchList, backEndData->modelLightingPatchCount);
-
-
         iassert(dx.device);
         iassert(!dx.inScene);
 
@@ -3080,6 +3077,13 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
             }
         } while (alwaysfails);
 
+        // Begin the Vulkan frame before patching model lighting. UnlockBox
+        // can now record the coalesced 3D atlas regions into this frame's
+        // staging ring instead of creating and synchronously waiting for a
+        // separate ImmediateSubmit for every region.
+        RB_PatchModelLighting(
+            backEndData->modelLightingPatchList,
+            backEndData->modelLightingPatchCount);
 
         RB_UploadShaderStep();
 
