@@ -7785,80 +7785,95 @@ HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *shader)
 template <size_t N>
 HRESULT SetFloatConstants(
     std::array<std::array<float,4>,N> &dst,
-    uint32_t dest, const float *data, uint32_t count)
+    uint32_t dest, const float *data, uint32_t count, bool &changed)
 {
     if (!data || dest > N || count > N - dest)
         return E_FAIL;
-    std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
+    const size_t bytes = static_cast<size_t>(count) * sizeof(dst[0]);
+    changed = bytes != 0 && std::memcmp(&dst[dest], data, bytes) != 0;
+    if (changed)
+        std::memcpy(&dst[dest], data, bytes);
     return S_OK;
 }
 
 template <size_t N>
 HRESULT SetIntConstants(
     std::array<std::array<int32_t,4>,N> &dst,
-    uint32_t dest, const int32_t *data, uint32_t count)
+    uint32_t dest, const int32_t *data, uint32_t count, bool &changed)
 {
     if (!data || dest > N || count > N - dest)
         return E_FAIL;
-    std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
+    const size_t bytes = static_cast<size_t>(count) * sizeof(dst[0]);
+    changed = bytes != 0 && std::memcmp(&dst[dest], data, bytes) != 0;
+    if (changed)
+        std::memcpy(&dst[dest], data, bytes);
     return S_OK;
 }
 
 template <size_t N>
 HRESULT SetBoolConstants(
     std::array<int32_t,N> &dst,
-    uint32_t dest, const int32_t *data, uint32_t count)
+    uint32_t dest, const int32_t *data, uint32_t count, bool &changed)
 {
     if (!data || dest > N || count > N - dest)
         return E_FAIL;
-    std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
+    const size_t bytes = static_cast<size_t>(count) * sizeof(dst[0]);
+    changed = bytes != 0 && std::memcmp(&dst[dest], data, bytes) != 0;
+    if (changed)
+        std::memcpy(&dst[dest], data, bytes);
     return S_OK;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantF(uint32_t d, const float *p, uint32_t c)
 {
-    const HRESULT result = SetFloatConstants(m_vsFloat, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetFloatConstants(m_vsFloat, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_vsUniformRevision;
     return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantF(uint32_t d, const float *p, uint32_t c)
 {
-    const HRESULT result = SetFloatConstants(m_psFloat, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetFloatConstants(m_psFloat, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_psUniformRevision;
     return result;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantI(uint32_t d, const int32_t *p, uint32_t c)
 {
-    const HRESULT result = SetIntConstants(m_vsInt, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetIntConstants(m_vsInt, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_vsUniformRevision;
     return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantI(uint32_t d, const int32_t *p, uint32_t c)
 {
-    const HRESULT result = SetIntConstants(m_psInt, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetIntConstants(m_psInt, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_psUniformRevision;
     return result;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantB(uint32_t d, const int32_t *p, uint32_t c)
 {
-    const HRESULT result = SetBoolConstants(m_vsBool, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetBoolConstants(m_vsBool, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_vsUniformRevision;
     return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantB(uint32_t d, const int32_t *p, uint32_t c)
 {
-    const HRESULT result = SetBoolConstants(m_psBool, d, p, c);
-    if (result == S_OK && c)
+    bool changed = false;
+    const HRESULT result = SetBoolConstants(m_psBool, d, p, c, changed);
+    if (result == S_OK && changed)
         ++m_psUniformRevision;
     return result;
 }
