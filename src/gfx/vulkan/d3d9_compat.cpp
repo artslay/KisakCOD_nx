@@ -8821,7 +8821,6 @@ bool IDirect3DDevice9::BindSamplerSet(
 
     // Each in-flight frame slot owns a separate descriptor-set cache. The
     // slot's fence has completed before its cursor is rewound or its sets updated.
-    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
     const uint32_t frameSlot = m_backend->CurrentFrameSlot();
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
