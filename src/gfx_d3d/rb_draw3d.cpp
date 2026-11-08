@@ -19,7 +19,18 @@
 #include <universal/profile.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <chrono>
+#include <gfx/vulkan/vulkan_backend.h>
 extern void Switch_LogWrite(const char *msg);
+
+static inline void Switch_RecordDraw3DStage(
+    SwitchBackendTimingStage stage,
+    std::chrono::steady_clock::time_point start)
+{
+    const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    Switch_RecordBackendTiming(stage, static_cast<uint64_t>(elapsedNs));
+}
 #endif
 #include "rb_postfx.h"
 #include "rb_spotshadow.h"
@@ -418,7 +429,14 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     {
         if (Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
             RB_SunShadowMaps(data, viewInfo);
+#ifdef __SWITCH__
+        const auto switchSpotStart = std::chrono::steady_clock::now();
+#endif
         RB_SpotShadowMaps(data, viewInfo);
+#ifdef __SWITCH__
+        Switch_RecordDraw3DStage(
+            SwitchBackendTimingStage::SpotShadowMaps, switchSpotStart);
+#endif
     }
     needsDepthPrepass = r_depthPrepass->current.enabled;
     whichToClearForScene = 7;
@@ -444,9 +462,25 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_ClearScreen(gfxCmdBufState.prim.device, whichToClearForSetup, colorWhite, 1.0, 0, 0);
         memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
         R_InitContext(data, &cmdBuf);
+#ifdef __SWITCH__
+        const auto switchSetupDepthStart = std::chrono::steady_clock::now();
+#endif
         R_DepthPrepass(setupRenderTargetId, viewInfo, &cmdBuf);
+#ifdef __SWITCH__
+        Switch_RecordDraw3DStage(
+            SwitchBackendTimingStage::SetupDepthPrepass, switchSetupDepthStart);
+#endif
         if (dynamicShadowType == SHADOW_COOKIE)
+        {
+#ifdef __SWITCH__
+            const auto switchCookiesStart = std::chrono::steady_clock::now();
+#endif
             RB_DrawShadowCookies(viewInfo);
+#ifdef __SWITCH__
+            Switch_RecordDraw3DStage(
+                SwitchBackendTimingStage::ShadowCookies, switchCookiesStart);
+#endif
+        }
         if (dx.multiSampleType == D3DMULTISAMPLE_NONE)
         {
             whichToClearForScene = 1;
@@ -464,12 +498,33 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     if (needsDepthPrepass)
     {
         R_InitContext(data, &cmdBuf);
+#ifdef __SWITCH__
+        const auto switchSceneDepthStart = std::chrono::steady_clock::now();
+#endif
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+#ifdef __SWITCH__
+        Switch_RecordDraw3DStage(
+            SwitchBackendTimingStage::SceneDepthPrepass, switchSceneDepthStart);
+#endif
     }
     R_InitContext(data, &cmdBuf);
+#ifdef __SWITCH__
+    const auto switchLitStart = std::chrono::steady_clock::now();
+#endif
     R_DrawLit(viewInfo, &cmdBuf, 0);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::LitSurfaces, switchLitStart);
+#endif
     R_InitContext(data, &cmdBuf);
+#ifdef __SWITCH__
+    const auto switchDecalStart = std::chrono::steady_clock::now();
+#endif
     R_DrawDecal(viewInfo, &cmdBuf, 0);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::DecalSurfaces, switchDecalStart);
+#endif
     KISAK_NULLSUB();
     KISAK_NULLSUB();
     iassert(viewInfo->isRenderingFullScreen == isRenderingFullScreen);
@@ -481,22 +536,55 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
     R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
     R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->sceneViewport);
+#ifdef __SWITCH__
+    const auto switchSunStart = std::chrono::steady_clock::now();
+#endif
     RB_DrawSun(viewInfo->localClientNum);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::SunGeometry, switchSunStart);
+#endif
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
+#ifdef __SWITCH__
+    const auto switchLightsStart = std::chrono::steady_clock::now();
+#endif
     R_DrawLights(viewInfo, &cmdBuf);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::PointLights, switchLightsStart);
+#endif
     if (rg.distortion)
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
+#ifdef __SWITCH__
+        const auto switchResolveStart = std::chrono::steady_clock::now();
+#endif
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image);
+#ifdef __SWITCH__
+        Switch_RecordDraw3DStage(
+            SwitchBackendTimingStage::DistortionResolve, switchResolveStart);
+#endif
     }
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
+#ifdef __SWITCH__
+    const auto switchEmissiveStart = std::chrono::steady_clock::now();
+#endif
     R_DrawEmissive(viewInfo, &cmdBuf);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::EmissiveSurfaces, switchEmissiveStart);
+    const auto switchEndSceneStart = std::chrono::steady_clock::now();
+#endif
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
+#ifdef __SWITCH__
+    Switch_RecordDraw3DStage(
+        SwitchBackendTimingStage::EndScene, switchEndSceneStart);
+#endif
 }
 
 void  R_DrawLights(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)

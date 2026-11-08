@@ -547,6 +547,19 @@ enum class SwitchBackendTimingStage : uint32_t
     BackendAdaptiveGpuSync,
     BackendSwapWait,
     VulkanEndFrame,
+    SunShadowCascade0,
+    SunShadowCascade1,
+    SpotShadowMaps,
+    SetupDepthPrepass,
+    ShadowCookies,
+    SceneDepthPrepass,
+    LitSurfaces,
+    DecalSurfaces,
+    SunGeometry,
+    PointLights,
+    DistortionResolve,
+    EmissiveSurfaces,
+    EndScene,
     Count
 };
 

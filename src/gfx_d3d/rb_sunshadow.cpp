@@ -12,6 +12,10 @@
 #include "rb_postfx.h"
 #include <universal/profile.h>
 #include "r_state.h"
+#ifdef __SWITCH__
+#include <chrono>
+#include <gfx/vulkan/vulkan_backend.h>
+#endif
 
 GfxPointVertex g_overlayPoints[36];
 
@@ -35,7 +39,19 @@ void __cdecl RB_SunShadowMaps(const GfxBackEndData *data, const GfxViewInfo *vie
         for (int partitionIndex = 0; partitionIndex < 2; ++partitionIndex)
         {
             ZoneTextF("Sun Shadow Map %d", partitionIndex);
+#ifdef __SWITCH__
+            const auto switchShadowStart = std::chrono::steady_clock::now();
+#endif
             R_DrawSunShadowMap(viewInfo, partitionIndex, &cmdBuf);
+#ifdef __SWITCH__
+            const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - switchShadowStart).count();
+            Switch_RecordBackendTiming(
+                partitionIndex == 0
+                    ? SwitchBackendTimingStage::SunShadowCascade0
+                    : SwitchBackendTimingStage::SunShadowCascade1,
+                static_cast<uint64_t>(elapsedNs));
+#endif
         }
     }
 }
