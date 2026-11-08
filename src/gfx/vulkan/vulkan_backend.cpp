@@ -115,6 +115,8 @@ struct SwitchFrameTimingStats
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateWaitByReason;
     SwitchFrameTimingCounter queueIdle;
     SwitchFrameTimingCounter frameCpu;
+    std::array<SwitchFrameTimingCounter,
+        static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStages;
     std::atomic<uint64_t> modelLightingRegions{0};
     std::atomic<uint64_t> modelLightingBytes{0};
     std::atomic<uint64_t> modelLightingFullBytes{0};
@@ -166,6 +168,12 @@ void Switch_RecordFrameCpuEnd()
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonMaxNs{};
     uint64_t idleCalls = 0, idleNs = 0, idleMaxNs = 0;
     uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStageCalls{};
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStageNs{};
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStageMaxNs{};
     const uint64_t modelLightingRegions =
         g_switchFrameTimingStats.modelLightingRegions.exchange(0, std::memory_order_acq_rel);
     const uint64_t modelLightingBytes =
@@ -201,6 +209,11 @@ void Switch_RecordFrameCpuEnd()
         &idleCalls, &idleNs, &idleMaxNs);
     g_switchFrameTimingStats.frameCpu.Reset(
         &cpuCalls, &cpuNs, &cpuMaxNs);
+    for (size_t i = 0; i < g_switchFrameTimingStats.backendStages.size(); ++i)
+    {
+        g_switchFrameTimingStats.backendStages[i].Reset(
+            &backendStageCalls[i], &backendStageNs[i], &backendStageMaxNs[i]);
+    }
 
     auto averageMs = [](uint64_t totalNs, uint64_t calls) -> double
     {
@@ -212,11 +225,43 @@ void Switch_RecordFrameCpuEnd()
         return static_cast<double>(maxNs) / 1000000.0;
     };
 
-    char message[1536];
+    char backendStageText[768];
+    std::snprintf(
+        backendStageText, sizeof(backendStageText),
+        "backend{begin=%llu:%.2f/%.2f,draw3d=%llu:%.2f/%.2f,execute=%llu:%.2f/%.2f,common=%llu:%.2f/%.2f,cmdloop=%llu:%.2f/%.2f,endscene=%llu:%.2f/%.2f,syncwait=%llu:%.2f/%.2f,swapwait=%llu:%.2f/%.2f,vk_end=%llu:%.2f/%.2f}",
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendBeginFrame)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendBeginFrame)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendBeginFrame)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendBeginFrame)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3D)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3D)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3D)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3D)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendExecute)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendExecute)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendExecute)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendExecute)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3DCommon)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3DCommon)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3DCommon)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendDraw3DCommon)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendCommandLoop)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendCommandLoop)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendCommandLoop)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendCommandLoop)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendEndScene)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendEndScene)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendEndScene)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendEndScene)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendAdaptiveGpuSync)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendAdaptiveGpuSync)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendAdaptiveGpuSync)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendAdaptiveGpuSync)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendSwapWait)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::BackendSwapWait)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::BackendSwapWait)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::BackendSwapWait)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
+        averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::VulkanEndFrame)]),
+        );
+    char message[2048];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
-        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs), backendStageText,
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
         static_cast<unsigned long long>(fenceCalls),
@@ -376,6 +421,15 @@ VkDescriptorSetLayout CreateUniformSetLayout(VkDevice device, VkShaderStageFlags
         ? result : VK_NULL_HANDLE;
 }
 }
+
+#ifdef __SWITCH__
+void Switch_RecordBackendTiming(SwitchBackendTimingStage stage, uint64_t elapsedNs)
+{
+    const size_t index = static_cast<size_t>(stage);
+    if (index < g_switchFrameTimingStats.backendStages.size())
+        g_switchFrameTimingStats.backendStages[index].Add(elapsedNs);
+}
+#endif
 
 VulkanBackend::VulkanBackend()
 {
@@ -2375,6 +2429,9 @@ static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
 
 bool VulkanBackend::EndFrame()
 {
+#ifdef __SWITCH__
+    const auto switchEndFrameStart = SwitchFrameClock::now();
+#endif
     struct FrameOwnerScope
     {
         VulkanBackend *backend;
@@ -2627,6 +2684,9 @@ bool VulkanBackend::EndFrame()
     {
         m_frameActive = false;
 #ifdef __SWITCH__
+        Switch_RecordBackendTiming(
+            SwitchBackendTimingStage::VulkanEndFrame,
+            SwitchElapsedNs(switchEndFrameStart));
         Switch_RecordFrameCpuEnd();
         Switch_SaltyNxFramePresented(
             m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,
@@ -2643,6 +2703,9 @@ bool VulkanBackend::EndFrame()
 
     m_frameActive = false;
 #ifdef __SWITCH__
+    Switch_RecordBackendTiming(
+        SwitchBackendTimingStage::VulkanEndFrame,
+        SwitchElapsedNs(switchEndFrameStart));
     Switch_RecordFrameCpuEnd();
     Switch_SaltyNxFramePresented(
         m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,

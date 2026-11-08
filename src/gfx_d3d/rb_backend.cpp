@@ -55,6 +55,15 @@ static inline uint64_t KisakRendererClock()
 {
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 }
+
+static inline void Switch_RecordBackendTimingElapsed(
+    SwitchBackendTimingStage stage,
+    std::chrono::steady_clock::time_point start)
+{
+    const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    Switch_RecordBackendTiming(stage, static_cast<uint64_t>(elapsedNs));
+}
 #else
 static inline uint64_t KisakRendererClock()
 {
@@ -3440,7 +3449,16 @@ void __cdecl RB_CallExecuteRenderCommands()
                 "(!tess.indexCount)",
                 tess.indexCount);
         if (backEndData->viewInfoCount)
+        {
+#ifdef __SWITCH__
+            const auto switchCommonStart = std::chrono::steady_clock::now();
+#endif
             RB_Draw3DCommon();
+#ifdef __SWITCH__
+            Switch_RecordBackendTimingElapsed(
+                SwitchBackendTimingStage::BackendDraw3DCommon, switchCommonStart);
+#endif
+        }
         if (tess.indexCount)
             MyAssertHandler(
                 ".\\rb_backend.cpp",
@@ -3458,7 +3476,16 @@ void __cdecl RB_CallExecuteRenderCommands()
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
         RB_InitSceneViewport();
         if (backEndData->cmds)
+        {
+#ifdef __SWITCH__
+            const auto switchCommandLoopStart = std::chrono::steady_clock::now();
+#endif
             RB_ExecuteRenderCommandsLoop(backEndData->cmds);
+#ifdef __SWITCH__
+            Switch_RecordBackendTimingElapsed(
+                SwitchBackendTimingStage::BackendCommandLoop, switchCommandLoopStart);
+#endif
+        }
         if (r_drawPrimHistogram->current.enabled)
             RB_DrawPrimHistogramOverlay();
         if (tess.indexCount)
@@ -3493,7 +3520,14 @@ void __cdecl RB_CallExecuteRenderCommands()
 #ifdef __SWITCH__
             // EndScene must go through the D3D9 compatibility layer so it can
             // queue the active offscreen render target for Vulkan presentation.
+#ifdef __SWITCH__
+            const auto switchEndSceneStart = std::chrono::steady_clock::now();
+#endif
             hr = dx.device->EndScene();
+#ifdef __SWITCH__
+            Switch_RecordBackendTimingElapsed(
+                SwitchBackendTimingStage::BackendEndScene, switchEndSceneStart);
+#endif
 #else
             hr = dx.device->EndScene();
 #endif
@@ -3513,7 +3547,15 @@ void __cdecl RB_CallExecuteRenderCommands()
             if (dx.gpuSync)
             {
                 R_AcquireGpuFenceLock();
+#ifdef __SWITCH__
+                const auto switchAdaptiveSyncStart = std::chrono::steady_clock::now();
+#endif
                 RB_AdaptiveGpuSyncFinal();
+#ifdef __SWITCH__
+                Switch_RecordBackendTimingElapsed(
+                    SwitchBackendTimingStage::BackendAdaptiveGpuSync,
+                    switchAdaptiveSyncStart);
+#endif
                 if (dx.gpuSync == 2)
                     dx.gpuSyncDelay = (unsigned __int64)(30.0 / msecPerRawTimerTick);
                 R_InsertGpuFence();
@@ -3697,9 +3739,26 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
     if (allowRendering)
     {
         KISAK_NULLSUB();
+#ifdef __SWITCH__
+        auto switchStageStart = std::chrono::steady_clock::now();
+#endif
         RB_BeginFrame(data);
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::BackendBeginFrame, switchStageStart);
+        switchStageStart = std::chrono::steady_clock::now();
+#endif
         RB_Draw3D();
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::BackendDraw3D, switchStageStart);
+        switchStageStart = std::chrono::steady_clock::now();
+#endif
         RB_CallExecuteRenderCommands();
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::BackendExecute, switchStageStart);
+#endif
         iassert( backEndData == data );
         drawType = backEndData->drawType;
         backEndData = 0;
@@ -3711,7 +3770,14 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
 #endif
     {
         PROF_SCOPED("WaitRenderSwap");
+#ifdef __SWITCH__
+        const auto switchSwapWaitStart = std::chrono::steady_clock::now();
+#endif
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
+#ifdef __SWITCH__
+        Switch_RecordBackendTimingElapsed(
+            SwitchBackendTimingStage::BackendSwapWait, switchSwapWaitStart);
+#endif
     }
     if (allowRendering)
     {

@@ -535,4 +535,22 @@ private:
     std::string m_lastError;
 };
 
+#ifdef __SWITCH__
+enum class SwitchBackendTimingStage : uint32_t
+{
+    BackendBeginFrame,
+    BackendDraw3D,
+    BackendExecute,
+    BackendDraw3DCommon,
+    BackendCommandLoop,
+    BackendEndScene,
+    BackendAdaptiveGpuSync,
+    BackendSwapWait,
+    VulkanEndFrame,
+    Count
+};
+
+void Switch_RecordBackendTiming(SwitchBackendTimingStage stage, uint64_t elapsedNs);
+#endif
+
 VulkanBackend *GetVulkanBackend();
