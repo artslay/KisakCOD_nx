@@ -7568,6 +7568,11 @@ HRESULT IDirect3DDevice9::SetStreamSource(
         vb->AddRef();
     IDirect3DVertexBuffer9 *old = m_streams[stream].buffer;
     m_streams[stream] = {vb, offset, stride};
+    const uint16_t streamBit = static_cast<uint16_t>(1u << stream);
+    if (vb && stride)
+        m_streamSourceMask |= streamBit;
+    else
+        m_streamSourceMask &= static_cast<uint16_t>(~streamBit);
     if (pipelineInputChanged)
         m_pipelineDirty = true;
     if (old)
@@ -12044,8 +12049,14 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t stream0Offset = 0;
     uint32_t stream0Stride = 0;
     static uint32_t switchDrawBindTraceCount = 0;
-    for (uint32_t stream = 0; stream < 16; ++stream)
+    uint32_t pendingStreamMask = m_streamSourceMask;
+    for (uint32_t stream = 0; pendingStreamMask; ++stream)
     {
+        const uint32_t streamBit = 1u << stream;
+        if (!(pendingStreamMask & streamBit))
+            continue;
+        pendingStreamMask &= ~streamBit;
+
         g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/stream_scan";
         IDirect3DVertexBuffer9 *vertexBuffer = m_streams[stream].buffer;
         const uint32_t stride = m_streams[stream].stride;
@@ -12089,8 +12100,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     std::min<VkDeviceSize>(o, UINT32_MAX));
                 stream0Stride = stride;
             }
-            const uint16_t streamBit = static_cast<uint16_t>(1u << stream);
-            if (!(m_cachedBoundVertexStreamMask & streamBit) ||
+            const uint16_t cacheStreamBit = static_cast<uint16_t>(streamBit);
+            if (!(m_cachedBoundVertexStreamMask & cacheStreamBit) ||
                 m_cachedBoundVertexBuffers[stream] != b ||
                 m_cachedBoundVertexOffsets[stream] != o)
             {
@@ -12098,7 +12109,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 vkCmdBindVertexBuffers(drawCommandBuffer, stream, 1, &b, &o);
                 m_cachedBoundVertexBuffers[stream] = b;
                 m_cachedBoundVertexOffsets[stream] = o;
-                m_cachedBoundVertexStreamMask |= streamBit;
+                m_cachedBoundVertexStreamMask |= cacheStreamBit;
                 g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_return";
             }
             if (Switch_IsVkGpuDrawTraceEnabled() && switchDrawBindTraceCount < 64u)
