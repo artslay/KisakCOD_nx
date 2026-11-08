@@ -2644,33 +2644,33 @@ uint64_t SwitchPsS0UvTestTargetSerial()
     // so the per-draw pipeline fast path never calls getenv/strtoull.
     static const uint64_t cachedS0UvTargetSerial = []() -> uint64_t
     {
-    // Shader-rewrite probes must be explicitly enabled; stale per-probe env
-    // variables from an earlier test must never alter normal scene rendering.
-    const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
-    if (!enable || std::strcmp(enable, "1") != 0)
-        return UINT64_MAX;
+        // Shader-rewrite probes must be explicitly enabled; stale per-probe env
+        // variables from an earlier test must never alter normal scene rendering.
+        const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
+        if (!enable || std::strcmp(enable, "1") != 0)
+            return UINT64_MAX;
 
-    // Optional raw-s0 texture probe. Disabled unless the global diagnostic gate is enabled.
-    // "world" selects 44-byte BSP vertices; a number selects one PS serial;
-    // "all" selects every PS; "off" or "0" disables the probe.
-    const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
-    // Keep the diagnostic narrowly scoped to the floor shader seen in the Switch log.
-    // Explicit "off" still disables the probe; an explicit serial overrides this default.
-    if (!value || !*value)
-        return UINT64_MAX; // Keep the texture-sampling probe opt-in while testing the output path.
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
-        return UINT64_MAX;
-    if (std::strcmp(value, "world") == 0)
-        return UINT64_MAX - 2u;
-    if (std::strcmp(value, "all") == 0)
-        return UINT64_MAX - 1u;
+        // Optional raw-s0 texture probe. Disabled unless the global diagnostic gate is enabled.
+        // "world" selects 44-byte BSP vertices; a number selects one PS serial;
+        // "all" selects every PS; "off" or "0" disables the probe.
+        const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
+        // Keep the diagnostic narrowly scoped to the floor shader seen in the Switch log.
+        // Explicit "off" still disables the probe; an explicit serial overrides this default.
+        if (!value || !*value)
+            return UINT64_MAX; // Keep the texture-sampling probe opt-in while testing the output path.
+        if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+            return UINT64_MAX;
+        if (std::strcmp(value, "world") == 0)
+            return UINT64_MAX - 2u;
+        if (std::strcmp(value, "all") == 0)
+            return UINT64_MAX - 1u;
 
-    char *end = nullptr;
-    const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial == 0u ||
-        serial >= UINT64_MAX - 2u)
-        return UINT64_MAX;
-    return static_cast<uint64_t>(serial);
+        char *end = nullptr;
+        const unsigned long long serial = std::strtoull(value, &end, 0);
+        if (end == value || !end || *end != '\0' || serial == 0u ||
+            serial >= UINT64_MAX - 2u)
+            return UINT64_MAX;
+        return static_cast<uint64_t>(serial);
 
     }();
     return cachedS0UvTargetSerial;
@@ -2707,28 +2707,28 @@ uint64_t SwitchPsColorDebugTargetSerial()
     // so the per-draw pipeline fast path never calls getenv/strtoull.
     static const uint64_t cachedColorDebugTargetSerial = []() -> uint64_t
     {
-    // Require an independent opt-in before consulting the probe-specific selector.
-    // This prevents stale KISAK_VK_DEBUG_PS_COLOR_SERIAL values from patching
-    // shaders in ordinary play sessions.
-    const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
-    if (!enable || std::strcmp(enable, "1") != 0)
-        return UINT64_MAX;
+        // Require an independent opt-in before consulting the probe-specific selector.
+        // This prevents stale KISAK_VK_DEBUG_PS_COLOR_SERIAL values from patching
+        // shaders in ordinary play sessions.
+        const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
+        if (!enable || std::strcmp(enable, "1") != 0)
+            return UINT64_MAX;
 
-    // Keep shader-output diagnostics opt-in. PS 1821 is shared by many
-    // lightmapped surfaces, so changing its output by default corrupts the scene.
-    const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value)
-        return UINT64_MAX; // Preserve the real fragment shader during normal rendering.
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
-        return UINT64_MAX;
-    if (std::strcmp(value, "all") == 0)
-        return 0u;
+        // Keep shader-output diagnostics opt-in. PS 1821 is shared by many
+        // lightmapped surfaces, so changing its output by default corrupts the scene.
+        const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
+        if (!value || !*value)
+            return UINT64_MAX; // Preserve the real fragment shader during normal rendering.
+        if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+            return UINT64_MAX;
+        if (std::strcmp(value, "all") == 0)
+            return 0u;
 
-    char *end = nullptr;
-    const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial == 0u)
-        return UINT64_MAX;
-    return static_cast<uint64_t>(serial);
+        char *end = nullptr;
+        const unsigned long long serial = std::strtoull(value, &end, 0);
+        if (end == value || !end || *end != '\0' || serial == 0u)
+            return UINT64_MAX;
+        return static_cast<uint64_t>(serial);
 
     }();
     return cachedColorDebugTargetSerial;
@@ -11298,15 +11298,15 @@ bool IDirect3DDevice9::PrepareDraw()
             if (sequence < 24u)
             {
                 char trace[352];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\n",
-                sequence, m_backend ? 1u : 0u,
-                m_backend && m_backend->IsFrameActive() ? 1u : 0u,
-                static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
-                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                m_pipelineDirty ? 1u : 0u);
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\n",
+                    sequence, m_backend ? 1u : 0u,
+                    m_backend && m_backend->IsFrameActive() ? 1u : 0u,
+                    static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
+                    static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                    static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                    m_pipelineDirty ? 1u : 0u);
                 Switch_LogWrite(trace);
             }
         }
