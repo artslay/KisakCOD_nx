@@ -298,8 +298,7 @@ void Switch_RecordFrameCpuEnd()
         maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::EmissiveSurfaces)]),
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::EndScene)]),
         averageMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::EndScene)], backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::EndScene)]),
-        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::EndScene)]),
-        );
+        maximumMs(backendStageMaxNs[static_cast<size_t>(SwitchBackendTimingStage::EndScene)]));
     char message[3072];
     std::snprintf(
         message, sizeof(message),
