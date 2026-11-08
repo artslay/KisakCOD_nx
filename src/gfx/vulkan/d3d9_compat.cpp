@@ -7557,11 +7557,19 @@ HRESULT IDirect3DDevice9::SetStreamSource(
         m_streams[stream].stride == stride)
         return S_OK;
 
+    // Vulkan pipeline vertex-input state depends on whether a stream is present
+    // and on its stride, not on the identity of its buffer or its byte offset.
+    // Keep the pipeline fast path valid when geometry merely switches buffers.
+    const bool pipelineInputChanged =
+        (m_streams[stream].buffer != nullptr) != (vb != nullptr) ||
+        m_streams[stream].stride != stride;
+
     if (vb)
         vb->AddRef();
     IDirect3DVertexBuffer9 *old = m_streams[stream].buffer;
     m_streams[stream] = {vb, offset, stride};
-    m_pipelineDirty = true;
+    if (pipelineInputChanged)
+        m_pipelineDirty = true;
     if (old)
         old->Release();
     return S_OK;
