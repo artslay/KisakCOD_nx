@@ -609,6 +609,8 @@ private:
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
     StreamBinding m_streams[16]{};
+    // Iterate only streams that have both a buffer and a non-zero stride.
+    uint16_t m_streamSourceMask=0;
     // DrawPrimitiveUP supplies a transient stream-0 buffer and its own stride;
     // EnsurePipeline must describe that input rather than a stale SetStreamSource.
     bool m_drawPrimitiveUPActive=false;
