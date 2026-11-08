@@ -11,8 +11,10 @@
 #include "r_reflection_probe.h"
 
 #ifdef __SWITCH__
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <gfx/vulkan/vulkan_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern volatile uint32_t g_switchLitSamplerTraceActive;
 #ifdef CINEMA
@@ -820,7 +822,17 @@ void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrim
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("device->DrawIndexedPrimitive( D3DPT_TRIANGLELIST, 0, 0, args->vertexCount, args->baseIndex, triCount )\n");
+#ifdef __SWITCH__
+            const auto switchDrawIndexedStart = std::chrono::steady_clock::now();
+#endif
             hr = device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, args->vertexCount, args->baseIndex, triCount);
+#ifdef __SWITCH__
+            const auto switchDrawIndexedElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - switchDrawIndexedStart).count();
+            Switch_RecordBackendTiming(
+                SwitchBackendTimingStage::DrawIndexedSubmit,
+                static_cast<uint64_t>(switchDrawIndexedElapsed));
+#endif
             if (hr < 0)
             {
 #ifdef __SWITCH__

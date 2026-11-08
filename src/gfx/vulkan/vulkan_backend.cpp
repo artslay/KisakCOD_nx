@@ -306,7 +306,7 @@ void Switch_RecordFrameCpuEnd()
     char drawSurfStageText[512];
     std::snprintf(
         drawSurfStageText, sizeof(drawSurfStageText),
-        "drawsurf{mat=%llu:%.2f,pass=%llu:%.2f,geom=%llu:%.2f,flush=%llu:%.2f}",
+        "drawsurf{mat=%llu:%.2f,pass=%llu:%.2f,geom=%llu:%.2f,tess_end=%llu:%.2f}",
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfMaterialSetup)]),
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfMaterialSetup)]),
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfPassSetup)]),
@@ -315,11 +315,48 @@ void Switch_RecordFrameCpuEnd()
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfGeometry)]),
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTessEnd)]),
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTessEnd)]));
-    char message[3072];
+    char drawSurfTypeText[1024];
+    std::snprintf(
+        drawSurfTypeText, sizeof(drawSurfTypeText),
+        "drawtypes{tri=%llu:%.2f,tri_pre=%llu:%.2f,sm_rigid=%llu:%.2f,sm_pre=%llu:%.2f,sm_cache=%llu:%.2f,sm_skin=%llu:%.2f,bmodel=%llu:%.2f,xm_rigid=%llu:%.2f,xm_rigid_skin=%llu:%.2f,xm_skin=%llu:%.2f,code=%llu:%.2f,mark=%llu:%.2f,cloud=%llu:%.2f}",
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTriangles)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTriangles)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTrianglesPreTess)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfTrianglesPreTess)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelRigid)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelRigid)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelPreTess)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelPreTess)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelCached)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelCached)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelSkinned)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfStaticModelSkinned)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfBModel)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfBModel)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelRigid)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelRigid)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelRigidSkinned)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelRigidSkinned)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelSkinned)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfXModelSkinned)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfCodeMesh)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfCodeMesh)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfMarkMesh)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfMarkMesh)]),
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]));
+    char drawIndexedStageText[96];
+    std::snprintf(
+        drawIndexedStageText, sizeof(drawIndexedStageText),
+        "drawidx=%llu:%.2f",
+        static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawIndexedSubmit)]),
+        averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawIndexedSubmit)]));
+    char message[4096];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
-        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs), backendStageText, draw3dStageText, drawSurfStageText,
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs), backendStageText, draw3dStageText,
+        drawSurfStageText, drawSurfTypeText, drawIndexedStageText,
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
         static_cast<unsigned long long>(fenceCalls),

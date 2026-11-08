@@ -564,6 +564,20 @@ enum class SwitchBackendTimingStage : uint32_t
     DrawSurfPassSetup,
     DrawSurfGeometry,
     DrawSurfTessEnd,
+    DrawSurfTriangles,
+    DrawSurfTrianglesPreTess,
+    DrawSurfStaticModelRigid,
+    DrawSurfStaticModelPreTess,
+    DrawSurfStaticModelCached,
+    DrawSurfStaticModelSkinned,
+    DrawSurfBModel,
+    DrawSurfXModelRigid,
+    DrawSurfXModelRigidSkinned,
+    DrawSurfXModelSkinned,
+    DrawSurfCodeMesh,
+    DrawSurfMarkMesh,
+    DrawSurfParticleCloud,
+    DrawIndexedSubmit,
     Count
 };
 

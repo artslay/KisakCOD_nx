@@ -1140,8 +1140,62 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
 #endif
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
 #ifdef __SWITCH__
-        Switch_RecordBackendTimingElapsed(
-            SwitchBackendTimingStage::DrawSurfGeometry, switchGeometryStart);
+        const auto switchGeometryElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - switchGeometryStart).count();
+        const uint64_t switchGeometryElapsedNs =
+            static_cast<uint64_t>(switchGeometryElapsed);
+        Switch_RecordBackendTiming(
+            SwitchBackendTimingStage::DrawSurfGeometry, switchGeometryElapsedNs);
+        SwitchBackendTimingStage switchSurfaceTypeStage =
+            SwitchBackendTimingStage::DrawSurfTriangles;
+        bool switchHasSurfaceTypeStage = true;
+        switch (drawSurf.fields.surfType)
+        {
+        case SF_TRIANGLES:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTriangles;
+            break;
+        case SF_TRIANGLES_PRETESS:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTrianglesPreTess;
+            break;
+        case SF_STATICMODEL_RIGID:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelRigid;
+            break;
+        case SF_STATICMODEL_PRETESS:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelPreTess;
+            break;
+        case SF_STATICMODEL_CACHED:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelCached;
+            break;
+        case SF_STATICMODEL_SKINNED:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelSkinned;
+            break;
+        case SF_BMODEL:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfBModel;
+            break;
+        case SF_XMODEL_RIGID:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigid;
+            break;
+        case SF_XMODEL_RIGID_SKINNED:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigidSkinned;
+            break;
+        case SF_XMODEL_SKINNED:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelSkinned;
+            break;
+        case SF_CODE_MESH:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfCodeMesh;
+            break;
+        case SF_MARK_MESH:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfMarkMesh;
+            break;
+        case SF_PARTICLE_CLOUD:
+            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfParticleCloud;
+            break;
+        default:
+            switchHasSurfaceTypeStage = false;
+            break;
+        }
+        if (switchHasSurfaceTypeStage)
+            Switch_RecordBackendTiming(switchSurfaceTypeStage, switchGeometryElapsedNs);
 #endif
     }
     if (isPixelCostEnabled)
