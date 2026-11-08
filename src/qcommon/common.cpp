@@ -1615,7 +1615,11 @@ void Com_InitDvars()
     sys_lockThreads = Dvar_RegisterEnum(
         "sys_lockThreads",
         s_lockThreadNames,
+#ifdef __SWITCH__
+        1, // Keep THREAD_LOCK_MINIMAL while adaptive GPU sync is disabled.
+#else
         0,
+#endif
         DVAR_NOFLAG,
         "Prevents specified threads from changing CPUs; improves profiling and may fix some bugs, but can hurt performance");
 

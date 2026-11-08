@@ -572,7 +572,11 @@
      r_gpuSync = Dvar_RegisterEnum(
          "r_gpuSync",
          gpuSyncNames,
+#ifdef __SWITCH__
+         0, // Disable adaptive GPU-fence waiting for the Switch A/B test.
+#else
          1,
+#endif
          DVAR_NOFLAG,
          "GPU synchronization type (used to improve mouse responsiveness)");
      r_multiGpu = Dvar_RegisterBool("r_multiGpu", false, DVAR_ARCHIVE, "Use multiple GPUs");
