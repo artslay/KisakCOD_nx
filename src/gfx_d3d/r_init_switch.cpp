@@ -256,6 +256,11 @@ void R_Init() {
     // exist before R_InitImages()->R_SetPicmip() accesses them.
     R_Register();
 
+    // A newly registered dvar starts with modified=0, so the normal
+    // R_GpuSyncModified() path never copies the adaptive default into dx.
+    // Apply the effective value immediately after both GPU-sync dvars exist.
+    R_UpdateGpuSyncType();
+
     R_InitGlobalStructs();
 
     R_InitDrawMethod();

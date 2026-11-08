@@ -2,6 +2,8 @@
 #include <universal/q_shared.h>
 #include <qcommon/threads.h>
 #include <qcommon/qcommon.h>
+#include <gfx_d3d/rb_drawprofile.h>
+#include <gfx_d3d/r_init.h>
 #include <chrono>
 #include <cstdio>
 #include <condition_variable>
@@ -55,6 +57,7 @@ struct SwitchThreadControl
 static SwitchThreadControl g_threadControl[THREAD_CONTEXT_COUNT];
 static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
 static thread_local const char *g_switchThreadStage = "thread/bootstrap";
+static std::atomic<WinThreadLock> s_threadLock{THREAD_LOCK_NONE};
 
 #ifdef KISAK_SP
 int isDoingDatabaseInit = 0;
@@ -165,6 +168,95 @@ static uint32_t ThreadId()
     return (uint32_t)hasher(std::this_thread::get_id());
 }
 
+static int32_t Switch_GetThreadAffinityCoreIndex(
+    ThreadContext_t context, WinThreadLock threadLock)
+{
+    if (threadLock == THREAD_LOCK_NONE)
+        return -1;
+
+    if (context == THREAD_CONTEXT_MAIN)
+        return 0;
+    if (context == THREAD_CONTEXT_BACKEND)
+        return 1;
+
+    if (threadLock != THREAD_LOCK_ALL)
+        return -1;
+
+    // Keep the original CoD4 THREAD_LOCK_ALL placement. The index addresses
+    // the ordered list of cores allowed to this process, not a hard-coded
+    // physical CPU number.
+    if (context == THREAD_CONTEXT_DATABASE)
+        return 2 - (s_cpuCount < 3u ? 1 : 0);
+    if (context == THREAD_CONTEXT_TRACE_COUNT)
+        return static_cast<int32_t>(s_cpuCount) - 1;
+    if (context == THREAD_CONTEXT_WORKER0 && s_cpuCount >= 3u)
+        return 2;
+    if (context == THREAD_CONTEXT_WORKER1 && s_cpuCount >= 4u)
+        return 3;
+
+    return -1;
+}
+
+static void Switch_SetThreadAffinity(
+    Handle handle, ThreadContext_t context, WinThreadLock threadLock)
+{
+    if (!handle || !s_affinityMaskForProcess)
+        return;
+
+    const int32_t coreIndex =
+        Switch_GetThreadAffinityCoreIndex(context, threadLock);
+    uint32_t affinityMask = s_affinityMaskForProcess;
+    if (coreIndex >= 0 &&
+        static_cast<uint32_t>(coreIndex) < s_cpuCount)
+    {
+        const uint32_t selectedMask =
+            s_affinityMaskForCpu[static_cast<uint32_t>(coreIndex)];
+        if (selectedMask)
+            affinityMask = selectedMask;
+    }
+
+    // libnx uses preferred_core=-1 for an unrestricted process mask.
+    // For a pinned thread, pass the physical CPU ID represented by the
+    // one-bit mask from Switch_InitCpuTopology().
+    int32_t preferredCore = -1;
+    if (affinityMask != s_affinityMaskForProcess)
+    {
+        for (uint32_t coreId = 0; coreId < 4u; ++coreId)
+        {
+            if (affinityMask & (1u << coreId))
+            {
+                preferredCore = static_cast<int32_t>(coreId);
+                break;
+            }
+        }
+    }
+
+    (void)svcSetThreadCoreMask(handle, preferredCore, affinityMask);
+}
+
+static void Switch_ApplyContextThreadAffinity(
+    ThreadContext_t context, WinThreadLock threadLock)
+{
+    Handle handle = 0;
+    if (context == THREAD_CONTEXT_MAIN)
+    {
+        // Win_UpdateThreadLock() runs in Com_Frame on the main thread.
+        if (g_threadContext != THREAD_CONTEXT_MAIN)
+            return;
+        handle = threadGetCurHandle();
+    }
+    else
+    {
+        Thread *nativeThread =
+            g_nativeThreads[context].load(std::memory_order_acquire);
+        if (!nativeThread)
+            return;
+        handle = nativeThread->handle;
+    }
+
+    Switch_SetThreadAffinity(handle, context, threadLock);
+}
+
 // Query the process' allowed core mask before Com_InitDvars() samples
 // Sys_GetCpuCount() to register sys_smp_allowed and the renderer worker dvars.
 static void Switch_InitCpuTopology()
@@ -183,7 +275,18 @@ static void Switch_InitCpuTopology()
     }
 
     s_affinityMaskForProcess = static_cast<uint32_t>(coreMask);
-    s_cpuCount = static_cast<uint32_t>(__builtin_popcountll(coreMask));
+    for (uint32_t coreIndex = 0; coreIndex < 4u; ++coreIndex)
+        s_affinityMaskForCpu[coreIndex] = 0u;
+
+    // Store one-bit masks in logical order while retaining the actual
+    // physical core IDs from the process mask (which need not be contiguous).
+    s_cpuCount = 0u;
+    for (uint32_t coreId = 0; coreId < 4u; ++coreId)
+    {
+        const uint32_t coreMaskBit = 1u << coreId;
+        if (s_affinityMaskForProcess & coreMaskBit)
+            s_affinityMaskForCpu[s_cpuCount++] = coreMaskBit;
+    }
     if (!s_cpuCount)
     {
         Sys_Error(
@@ -227,6 +330,15 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     // Install va_info, per-thread Com_Error state and trace storage using the
     // engine's canonical per-context g_com_error[] buffer.
     Com_InitThreadData(context);
+
+    // std::thread/libnx starts each engine worker with the process-wide mask.
+    // If the engine has already selected a Win32-compatible lock mode, apply
+    // the same role-specific affinity before this thread begins its callback.
+    const WinThreadLock threadLock =
+        s_threadLock.load(std::memory_order_acquire);
+    if (threadLock != THREAD_LOCK_NONE)
+        Switch_SetThreadAffinity(threadGetCurHandle(), context, threadLock);
+
     g_switchThreadStage = "thread/ready";
 }
 
@@ -807,9 +919,46 @@ void *__cdecl Sys_GetValue(int index)
     return g_switchThreadValues[index];
 }
 
-void __cdecl Win_SetThreadLock(WinThreadLock) {}
-WinThreadLock __cdecl Win_GetThreadLock() { return THREAD_LOCK_NONE; }
-void Win_UpdateThreadLock() {}
+void __cdecl Win_SetThreadLock(WinThreadLock threadLock)
+{
+    if (s_cpuCount == 1u ||
+        threadLock == s_threadLock.load(std::memory_order_acquire))
+        return;
+
+    s_threadLock.store(threadLock, std::memory_order_release);
+    for (uint32_t contextIndex = 0;
+         contextIndex < THREAD_CONTEXT_COUNT;
+         ++contextIndex)
+    {
+        Switch_ApplyContextThreadAffinity(
+            static_cast<ThreadContext_t>(contextIndex), threadLock);
+    }
+}
+
+WinThreadLock __cdecl Win_GetThreadLock()
+{
+    return s_threadLock.load(std::memory_order_acquire);
+}
+
+void Win_UpdateThreadLock()
+{
+    if (s_cpuCount == 1u)
+    {
+        s_threadLock.store(THREAD_LOCK_ALL, std::memory_order_release);
+    }
+    else if (RB_IsUsingAnyProfile())
+    {
+        Win_SetThreadLock(THREAD_LOCK_ALL);
+    }
+    else
+    {
+        WinThreadLock threadLock =
+            static_cast<WinThreadLock>(sys_lockThreads->current.integer);
+        if (threadLock == THREAD_LOCK_NONE && R_IsUsingAdaptiveGpuSync())
+            threadLock = THREAD_LOCK_MINIMAL;
+        Win_SetThreadLock(threadLock);
+    }
+}
 
 #ifdef KISAK_SP
 int Sys_WaitStartServer(uint32_t timeout)
