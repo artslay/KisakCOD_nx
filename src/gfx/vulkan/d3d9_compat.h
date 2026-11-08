@@ -680,6 +680,13 @@ private:
     VkCommandBuffer m_cachedCommandBuffer = VK_NULL_HANDLE;
     VkPipeline m_cachedBoundPipeline = VK_NULL_HANDLE;
     std::array<VkDescriptorSet,4> m_cachedBoundDescriptorSets{};
+    // Vulkan vertex/index bindings persist across draw calls and dynamic-rendering
+    // restarts. Cache them per command-buffer recording just like pipeline state.
+    std::array<VkBuffer,16> m_cachedBoundVertexBuffers{};
+    std::array<VkDeviceSize,16> m_cachedBoundVertexOffsets{};
+    uint16_t m_cachedBoundVertexStreamMask = 0;
+    VkBuffer m_cachedBoundIndexBuffer = VK_NULL_HANDLE;
+    bool m_cachedBoundIndexBufferValid = false;
     VkViewport m_cachedViewport{};
     VkRect2D m_cachedScissor{};
     std::array<float,4> m_cachedBlendConstants{};

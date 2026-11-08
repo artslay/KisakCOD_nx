@@ -11150,6 +11150,11 @@ void IDirect3DDevice9::ResetCachedCommandState()
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
     m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
+    m_cachedBoundVertexBuffers.fill(VK_NULL_HANDLE);
+    m_cachedBoundVertexOffsets.fill(0);
+    m_cachedBoundVertexStreamMask = 0;
+    m_cachedBoundIndexBuffer = VK_NULL_HANDLE;
+    m_cachedBoundIndexBufferValid = false;
     m_cachedViewportValid = false;
     m_cachedScissorValid = false;
     m_cachedBlendConstantsValid = false;
@@ -11477,6 +11482,11 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
+    // DrawPrimitiveUP changes Vulkan binding 0 outside the indexed-draw path.
+    // Keep the cache synchronized so a following indexed draw can safely reuse it.
+    m_cachedBoundVertexBuffers[0] = vertexInfo.buffer;
+    m_cachedBoundVertexOffsets[0] = offset;
+    m_cachedBoundVertexStreamMask |= 1u;
     if (Switch_IsVkGpuDrawTraceEnabled())
     {
     g_switchLastDrawKind.store(1, std::memory_order_relaxed);
@@ -12056,9 +12066,18 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     std::min<VkDeviceSize>(o, UINT32_MAX));
                 stream0Stride = stride;
             }
-            g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_call";
-            vkCmdBindVertexBuffers(drawCommandBuffer, stream, 1, &b, &o);
-            g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_return";
+            const uint16_t streamBit = static_cast<uint16_t>(1u << stream);
+            if (!(m_cachedBoundVertexStreamMask & streamBit) ||
+                m_cachedBoundVertexBuffers[stream] != b ||
+                m_cachedBoundVertexOffsets[stream] != o)
+            {
+                g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_call";
+                vkCmdBindVertexBuffers(drawCommandBuffer, stream, 1, &b, &o);
+                m_cachedBoundVertexBuffers[stream] = b;
+                m_cachedBoundVertexOffsets[stream] = o;
+                m_cachedBoundVertexStreamMask |= streamBit;
+                g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_return";
+            }
             if (Switch_IsVkGpuDrawTraceEnabled() && switchDrawBindTraceCount < 64u)
             {
                 char msg[224];
@@ -12095,8 +12114,14 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         Switch_LogWrite(msg);
         ++switchDrawBindTraceCount;
     }
-    vkCmdBindIndexBuffer(
-        drawCommandBuffer, drawIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    if (!m_cachedBoundIndexBufferValid ||
+        m_cachedBoundIndexBuffer != drawIndexBuffer)
+    {
+        vkCmdBindIndexBuffer(
+            drawCommandBuffer, drawIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        m_cachedBoundIndexBuffer = drawIndexBuffer;
+        m_cachedBoundIndexBufferValid = true;
+    }
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_return";
 
     if (Switch_IsVkGpuDrawTraceEnabled())
