@@ -69,38 +69,11 @@ Font_s *__cdecl R_RegisterFont(const char *name, int imageTrack)
 
 Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
 {
-    Font_s *font = DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
-#ifdef __SWITCH__
-    // Serialized Font_s material pointers can be non-null 32-bit zone aliases,
-    // not usable native ARM64 Material pointers. Therefore a null-only fallback
-    // is insufficient: the alias can look non-null yet still refer to no font
-    // material. Rebind both handles from the live asset pool on every lookup.
-    if (font)
-    {
-        const bool devFont =
-            fontName &&
-            (!I_stricmp(fontName, "fonts/bigdevfont") ||
-             !I_stricmp(fontName, "fonts/smalldevfont"));
-
-        const char *materialName =
-            devFont ? "fonts/devfonts" : "fonts/gamefonts_pc";
-        const char *glowMaterialName =
-            devFont ? "fonts/devfonts_glow" : "fonts/gamefonts_pc_glow";
-
-        Material *material =
-            DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, materialName).material;
-        Material *glowMaterial =
-            DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, glowMaterialName).material;
-
-        // Clear unresolved serialized aliases rather than leaving an invalid
-        // handle for Material_FromHandle() to dereference later.
-        font->material = material;
-        font->glowMaterial = glowMaterial;
-
-    }
-
-#endif
-    return font;
+    // The Switch IW3 zone loader resolves Font_s::material and
+    // Font_s::glowMaterial through Loader_Material before linking the native
+    // Font_s into the DB. Preserve those per-asset dependencies; do not replace
+    // them with a guessed shared material name.
+    return DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
 }
 
 Font_s *__cdecl R_LoadFont(const char *fontName, int imageTrack)
