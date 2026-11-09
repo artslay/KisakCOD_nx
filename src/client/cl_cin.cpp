@@ -201,49 +201,26 @@ void __cdecl CL_PlayUnskippableCinematic_f()
 void __cdecl SCR_DrawCinematic(int32_t localClientNum)
 {
 #ifdef __SWITCH__
-    // A scripted in-game movie can be queued while the map-loading movie is
-    // still running. Do not replace the loading movie early: the original
-    // engine only reaches the queued playback after the current movie ends.
-    if (R_Cinematic_IsNextReady() &&
-        (!SCR_IsMapLoadingCinematicActive() || R_Cinematic_IsFinished()))
-    {
-        const bool handingOffToFadeOverlay =
-            SCR_IsMapLoadingCinematicActive() &&
-            R_Cinematic_IsFinished() &&
-            CL_CinematicHasFadeSuffix(cinematicGlob.nextCinematicName);
-        if (handingOffToFadeOverlay)
-        {
-            // _fade is the transition into the mission, not another loading
-            // movie. Release the loading latch now so UI_PlayerStart can make
-            // gameplay visible beneath the fade while the clip keeps playing.
-            switchMapLoadingCinematicFinished = true;
-            switchMapLoadingCinematicActive = false;
-            Switch_LogWrite("[KisakCOD][CIN LOAD] handing off to queued fade overlay\n");
-        }
-        else if (SCR_IsMapLoadingCinematicActive())
-        {
-            Switch_LogWrite("[KisakCOD][CIN LOAD] starting queued movie after loading movie EOF\n");
-        }
-        R_Cinematic_StartNextPlayback();
-        CL_EnforceFadeCinematicSkipRule();
-    }
+    // The stock transition is owned by UI_PlayerStart while a map-loading
+    // cinematic is active. That function may promote a queued _fade as soon
+    // as auto-continue is reached; do not let this loading-screen draw path
+    // advance the queue ahead of the UI handoff.
+    if (R_Cinematic_IsNextReady() && !SCR_IsMapLoadingCinematicActive())
 #else
     if (R_Cinematic_IsNextReady())
+#endif
     {
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
     }
-#endif
 #ifdef __SWITCH__
-    // The active-game renderer can promote a queued world clip before the
-    // client loading-tail path reaches this function. Clear the loading latch
-    // here as well, after either path has had a chance to promote the queue.
-    if (SCR_IsMapLoadingCinematicActive() &&
-        R_Cinematic_IsWorldMaterialPlayback())
-    {
+    // Keep the finished state available to UI_Refresh/UI_PlayerStart. The
+    // stock UI handoff decides whether to start the queued clip or stop the
+    // loading movie; stopping it here would clear IsFinished before that
+    // decision can run.
+    if (R_Cinematic_IsFinished() && SCR_IsMapLoadingCinematicActive())
         switchMapLoadingCinematicFinished = true;
-        switchMapLoadingCinematicActive = false;
-    }
+    else
 #endif
     if (R_Cinematic_IsFinished())
         SCR_StopCinematic(localClientNum);
