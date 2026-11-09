@@ -18,6 +18,7 @@
 #include <gfx_d3d/r_cinematic.h>
 
 extern bool SCR_SkipActiveGameCinematic(int32_t localClientNum);
+extern void CL_EnforceFadeCinematicSkipRule(void);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
 extern void UI_PlayerStart();
@@ -807,6 +808,9 @@ void Switch_GamepadFrame()
     // release generates one key-up, even if the UI key catcher is still set.
     if (cinematicActive)
     {
+        // Refresh the same current/queued cinematic policy used by keyboard
+        // and active-game skip paths before deciding whether to synthesize ESC.
+        CL_EnforceFadeCinematicSkipRule();
         // Logos retain their normal Escape behavior. Cinematics obey the
         // original engine's cin_skippable flag; "unskippablecinematic" must
         // play to completion even when B/Plus is pressed.
