@@ -1611,9 +1611,9 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
     PhysPreset *v2; // eax
     int32_t v4; // eax
     int32_t v5; // eax
-    int32_t v6; // eax
-    int32_t v7; // eax
-    int32_t v8; // eax
+    size_t v6;
+    size_t v7;
+    size_t v8;
     int32_t v9; // eax
     int32_t v10; // eax
     int32_t v11; // eax
@@ -1763,16 +1763,9 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
         ++name;
     } while (v13);
     memPool += strlen(effect->name) + 1u;
-    effect->totalSize = static_cast<int32_t>(memPool - reinterpret_cast<uint8_t *>(effect));
-    if (static_cast<size_t>(memPool - reinterpret_cast<uint8_t *>(effect)) > totalBytesNeeded)
+    const size_t usedBytes = static_cast<size_t>(memPool - reinterpret_cast<uint8_t *>(effect));
+    if (usedBytes > totalBytesNeeded || usedBytes > static_cast<size_t>(INT32_MAX))
         Com_Error(ERR_DROP, "FX effect '%s' exceeded its native allocation", editorEffect->name);
-    if (memPool - reinterpret_cast<uint8_t *>(effect) != effect->totalSize)
-        MyAssertHandler(
-            ".\\EffectsCore\\fx_convert.cpp",
-            1536,
-            1,
-            "memPool - reinterpret_cast< byte * >( effect ) == effect->totalSize\n\t%i, %i",
-            memPool - (uint8_t *)effect,
-            effect->totalSize);
+    effect->totalSize = static_cast<int32_t>(usedBytes);
     return effect;
 }
