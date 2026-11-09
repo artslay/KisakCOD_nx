@@ -369,9 +369,16 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
 // are protected before the playback target can be stopped.
 bool SCR_SkipActiveGameCinematic(int32_t localClientNum)
 {
-    // The render path normally promotes a queued movie from CG_DrawFadeInCinematic.
-    // If input arrives before the first draw of that queue, promote it here so
-    // the same fade-name check and stop lifecycle applies to the actual movie.
+    // Do not let input promote or interrupt an authored fade. It may still be
+    // queued behind the loading movie, so check the entire chain before
+    // touching the renderer target. UI_PlayerStart owns that handoff.
+    CL_EnforceFadeCinematicSkipRule();
+    if (CL_IsFadeTransitionInCinematicChain())
+        return false;
+
+    // For an ordinary queued cinematic, input may arrive before CGame has
+    // promoted it. Promote it here, then apply the same skip policy to the
+    // actual target before stopping anything.
     if (!R_Cinematic_IsStarted() &&
         !R_Cinematic_IsPending() &&
         R_Cinematic_IsNextReady())
