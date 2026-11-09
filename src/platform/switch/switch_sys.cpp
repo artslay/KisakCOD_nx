@@ -4359,6 +4359,34 @@ extern "C" [[noreturn]] void abort(void)
     Switch_LogFatalBreak("abort()", 0u, "C/C++ runtime abort");
 }
 
+// Newlib assertions otherwise print to stderr and then abort, losing the
+// expression and source location from the persistent crash report.
+extern "C" [[noreturn]] void __assert_func(
+    const char *file,
+    int line,
+    const char *func,
+    const char *failedexpr)
+{
+    char detail[1024];
+    std::snprintf(
+        detail,
+        sizeof(detail),
+        "assertion expression=%s file=%s line=%d function=%s",
+        failedexpr ? failedexpr : "?",
+        file ? file : "?",
+        line,
+        func ? func : "?");
+    Switch_LogFatalBreak("newlib __assert_func", 0u, detail);
+}
+
+extern "C" [[noreturn]] void __assert(
+    const char *file,
+    int line,
+    const char *failedexpr)
+{
+    __assert_func(file, line, nullptr, failedexpr);
+}
+
 void __cdecl Sys_OutOfMemErrorInternal(const char *filename, int line)
 {
     Sys_Error("Out of memory: %s:%d", filename ? filename : "?", line);
