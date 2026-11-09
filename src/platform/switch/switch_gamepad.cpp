@@ -788,7 +788,15 @@ void Switch_GamepadFrame()
         connectionState == CA_LOADING &&
         Pressed(cinematicSkipButtons))
     {
-        SCR_StopCinematic(0);
+        // Use the same skip gate as other cinematic input. The old direct
+        // SCR_StopCinematic call bypassed cin_skippable and could interrupt a
+        // queued/active *_fade during the loading-to-game handoff.
+        if (!SCR_SkipActiveGameCinematic(0))
+        {
+            g_cinematicSkipKeyDown = false;
+            Switch_LogWrite("[KisakCOD][CIN SKIP] map-loading cinematic is unskippable\n");
+            return;
+        }
         g_cinematicSkipKeyDown = false;
         Switch_LogWrite("[KisakCOD][CIN SKIP] map-loading cinematic skipped\n");
         return;
