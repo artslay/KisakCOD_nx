@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "r_material.h"
+#include "r_drawsurf.h"
 #include "r_init.h"
 #include <database/database.h>
 #include "r_bsp.h"
@@ -160,6 +161,32 @@ Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
     return nullptr;
 }
 
+// Match the original CoD4 prepass classification. This value is not safe to
+// inherit from the serialized drawSurf: Material_SortInternal rebuilds it from
+// the material's depth-prepass technique and state flags before any draw uses it.
+static uint32_t Switch_DrawSurfStandardPrepassSortKey(const Material *material)
+{
+    const MaterialTechniqueSet *techSet = material->techniqueSet;
+    iassert(techSet);
+
+    const MaterialTechnique *prepassTech =
+        techSet->techniques[TECHNIQUE_DEPTH_PREPASS];
+    if (prepassTech)
+    {
+        if ((material->stateFlags & 4u) != 0)
+            return MTL_PREPASS_NONE;
+
+        return (prepassTech->flags & 4u) == 0
+            ? MTL_PREPASS_ALPHA
+            : MTL_PREPASS_STANDARD;
+    }
+
+    if (techSet->techniques[TECHNIQUE_BUILD_FLOAT_Z])
+        return MTL_PREPASS_FLOATZ;
+
+    return MTL_PREPASS_NONE;
+}
+
 void __cdecl Material_Sort()
 {
     if (IsFastFileLoad())
@@ -194,7 +221,12 @@ void __cdecl Material_Sort()
         if (!material)
             continue;
 
+        // The fastfile's serialized drawSurf is not the final runtime key.
+        // Rebuild it exactly as Material_SortInternal does in the original engine.
+        material->info.drawSurf.packed = 0;
         material->info.drawSurf.fields.primarySortKey = material->info.sortKey;
+        material->info.drawSurf.fields.prepass =
+            Switch_DrawSurfStandardPrepassSortKey(material);
         material->info.drawSurf.fields.customIndex =
             (material->info.gameFlags & 0x40) != 0;
         material->info.drawSurf.fields.materialSortedIndex = i;
