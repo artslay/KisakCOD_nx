@@ -37,9 +37,9 @@ FxMarksSystem fx_marksSystemPool[1];
 
 void __cdecl TRACK_fx_system()
 {
-    track_static_alloc_internal(fx_systemPool, sizeof(fx_systemPool), "fx_systemPool", alignof(FxSystem));
-    track_static_alloc_internal(fx_systemBufferPool, sizeof(fx_systemBufferPool), "fx_systemBufferPool", alignof(FxSystemBuffers));
-    track_static_alloc_internal(fx_marksSystemPool, sizeof(fx_marksSystemPool), "fx_marksSystemPool", alignof(FxMarksSystem));
+    track_static_alloc_internal(fx_systemPool, sizeof(fx_systemPool), "fx_systemPool", 8);
+    track_static_alloc_internal(fx_systemBufferPool, sizeof(fx_systemBufferPool), "fx_systemBufferPool", 8);
+    track_static_alloc_internal(fx_marksSystemPool, sizeof(fx_marksSystemPool), "fx_marksSystemPool", 8);
 }
 
 XModel *__cdecl FX_RegisterModel(const char *modelName)
