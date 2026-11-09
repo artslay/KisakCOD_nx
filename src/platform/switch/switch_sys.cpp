@@ -1,5 +1,6 @@
 #ifdef __SWITCH__
 #include <switch.h>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +15,7 @@
 #include <cstring>
 #include <cctype>
 #include <cstdarg>
+#include <exception>
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
@@ -23,7 +25,15 @@ static const auto g_sysStart = std::chrono::steady_clock::now();
 static std::recursive_mutex g_sysCritical[32];
 
 static int g_switchLogFd = -1;
+static int g_switchCrashLogFd = -1;
 static const char *const kSwitchLogPath = "sdmc:/switch/KisakCOD/kisakcod.log";
+static const char *const kSwitchPreviousLogPath = "sdmc:/switch/KisakCOD/kisakcod.previous.log";
+static const char *const kSwitchCrashLogPath = "sdmc:/switch/KisakCOD/kisakcod_crash.log";
+static const char *const kSwitchPreviousCrashLogPath = "sdmc:/switch/KisakCOD/kisakcod_crash.previous.log";
+static constexpr unsigned long long kSwitchLogRotateBytes = 16ull * 1024ull * 1024ull;
+static constexpr unsigned long long kSwitchCrashLogRotateBytes = 4ull * 1024ull * 1024ull;
+static std::atomic_flag g_switchDeferredDiagLock = ATOMIC_FLAG_INIT;
+static std::atomic_flag g_switchCrashReportStarted = ATOMIC_FLAG_INIT;
 static bool g_switchScreenLog = false;
 
 // Snapshot the NAK RawVec realloc currently executing. These are only written
@@ -51,30 +61,45 @@ static thread_local volatile uintptr_t g_switchNakCallocRequestedBytes = 0u;
 static char g_switchDeferredDiag[1024 * 1024];
 static size_t g_switchDeferredDiagUsed = 0;
 
-static void Switch_LogFlushDeferred()
+static void Switch_LogCrashLine(const char *line);
+
+static void Switch_LogWriteAll(int fd, const char *data, size_t len)
 {
-    if (!g_switchDeferredDiagUsed)
+    if (fd < 0 || !data)
         return;
 
-    const size_t len = g_switchDeferredDiagUsed;
-    (void)::write(STDOUT_FILENO, g_switchDeferredDiag, len);
-
-    if (g_switchLogFd >= 0)
+    size_t written = 0;
+    while (written < len)
     {
-        size_t written = 0;
-        while (written < len)
-        {
-            const ssize_t n = ::write(
-                g_switchLogFd,
-                g_switchDeferredDiag + written,
-                len - written);
-            if (n <= 0)
-                break;
-            written += static_cast<size_t>(n);
-        }
+        const ssize_t n = ::write(fd, data + written, len - written);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        written += static_cast<size_t>(n);
+    }
+}
+
+static void Switch_LogFlushDeferred()
+{
+    // This also runs from the exception stack. Never wait on a lock that could
+    // have been interrupted on the faulting thread.
+    if (g_switchDeferredDiagLock.test_and_set(std::memory_order_acquire))
+    {
+        Switch_LogCrashLine(
+            "[KisakCOD][CRASH] deferred diagnostic buffer busy; skipped flush\n");
+        return;
     }
 
-    g_switchDeferredDiagUsed = 0;
+    const size_t len = g_switchDeferredDiagUsed;
+    if (len != 0)
+    {
+        Switch_LogWriteAll(STDOUT_FILENO, g_switchDeferredDiag, len);
+        Switch_LogWriteAll(g_switchLogFd, g_switchDeferredDiag, len);
+        g_switchDeferredDiagUsed = 0;
+    }
+
+    g_switchDeferredDiagLock.clear(std::memory_order_release);
 }
 
 void Switch_LogWrite(const char *msg);
@@ -91,6 +116,8 @@ extern char __code_start[];
 extern "C" {
 alignas(16) uint8_t __nx_exception_stack[0x4000];
 uint64_t __nx_exception_stack_size = sizeof(__nx_exception_stack);
+// Keep libnx's exception callback enabled even while a debugger is attached.
+uint32_t __nx_exception_ignoredebug = 1;
 }
 
 extern "C" {
@@ -161,29 +188,78 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
 
 static void Switch_LogCrashLine(const char *line)
 {
-    // Crash reporting must not pass through normal diagnostic filtering or
-    // the deferred Switch-diagnostic queue. Write the captured report directly
-    // to stdout and the already-open log descriptor from the exception handler.
+    // Bypass normal filtering and stdio. The crash journal is append-only
+    // across launches, independently of the per-session engine log.
     if (!line || !*line)
         return;
 
     const size_t len = std::strlen(line);
-    (void)::write(STDOUT_FILENO, line, len);
+    Switch_LogWriteAll(STDOUT_FILENO, line, len);
+    Switch_LogWriteAll(g_switchLogFd, line, len);
+    Switch_LogWriteAll(g_switchCrashLogFd, line, len);
+}
 
+static void Switch_LogCrashSync()
+{
     if (g_switchLogFd >= 0)
+        (void)::fsync(g_switchLogFd);
+    if (g_switchCrashLogFd >= 0)
+        (void)::fsync(g_switchCrashLogFd);
+}
+
+static void Switch_LogCrashReport(const char *source, const char *detail)
+{
+    const bool firstReport =
+        !g_switchCrashReportStarted.test_and_set(std::memory_order_acq_rel);
+
+    char line[1024];
+    Switch_LogCrashLine("========================================\n");
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] source=%s report=%s\n",
+        source ? source : "unknown",
+        firstReport ? "primary" : "additional");
+    Switch_LogCrashLine(line);
+
+    if (detail && *detail)
     {
-        size_t written = 0;
-        while (written < len)
-        {
-            const ssize_t n = ::write(
-                g_switchLogFd,
-                line + written,
-                len - written);
-            if (n <= 0)
-                break;
-            written += static_cast<size_t>(n);
-        }
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][CRASH] detail=%s\n",
+            detail);
+        Switch_LogCrashLine(line);
     }
+}
+
+[[noreturn]] static void Switch_LogFatalBreak(
+    const char *source,
+    uint32_t result,
+    const char *detail)
+{
+    Switch_LogCrashReport(source, detail);
+
+    char line[160];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] result=0x%08x\n",
+        result);
+    Switch_LogCrashLine(line);
+    Switch_LogCrashSync();
+
+    // Match libnx's standard panic termination after persisting the report.
+    svcBreak(BreakReason_Panic, reinterpret_cast<uintptr_t>(&result), sizeof(result));
+    __builtin_unreachable();
+}
+
+static void Switch_TerminateHandler() noexcept
+{
+    Switch_LogFatalBreak(
+        "std::terminate",
+        0u,
+        "unhandled C++ exception or explicit std::terminate");
 }
 
 #if defined(KISAK_SWITCH_HEAP_TRACE)
@@ -2463,21 +2539,21 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
     if (!ctx)
     {
-        Switch_LogCrashLine("[KisakCOD][CRASH] exception context is null\n");
+        Switch_LogCrashReport("libnx user exception", "exception context is null");
+        Switch_LogCrashSync();
+        appletRequestExitToSelf();
         return;
     }
 
     char line[1024];
 
-    // Flush deferred DB diagnostics before writing the crash report so the
-    // fastfile trace remains in chronological order in the log.
+    // Flush deferred Switch diagnostics before writing the register snapshot.
     Switch_LogFlushDeferred();
+    Switch_LogCrashReport("libnx user exception", nullptr);
 
     std::snprintf(
         line,
         sizeof(line),
-        "========================================\n"
-        "[KisakCOD][CRASH] libnx user exception\n"
         "[KisakCOD][CRASH] error_desc=0x%08x\n"
         "[KisakCOD][CRASH] pc=0x%016llx lr=0x%016llx\n"
         "[KisakCOD][CRASH] module_base=0x%016llx pc_offset=0x%016llx lr_offset=0x%016llx\n"
@@ -2495,7 +2571,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         ctx->pstate,
         ctx->esr,
         (ctx->esr >> 26) & 0x3f);
-    Switch_LogCrashLine(line);
+
 
     // Emit the active NAK realloc request and the fault-time register snapshot
     // before deeper diagnostics. x0-x5 are raw registers: memcpy may already
@@ -3533,8 +3609,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 
     Switch_LogCrashLine("[KisakCOD][CRASH] ========================================\n");
 
-    if (g_switchLogFd >= 0)
-        (void)::fsync(g_switchLogFd);
+    Switch_LogCrashSync();
 
     appletRequestExitToSelf();
 }
@@ -3903,6 +3978,11 @@ void Switch_LogWrite(const char *msg)
     // Preserve actual Switch anomalies in the bounded crash-context buffer.
     if (isSwitchDiag)
     {
+        // Serialize diagnostic producers. The crash handler only try-locks and
+        // therefore cannot deadlock if it interrupted one of these writes.
+        while (g_switchDeferredDiagLock.test_and_set(std::memory_order_acquire))
+            std::this_thread::yield();
+
         const size_t capacity = sizeof(g_switchDeferredDiag);
         const char *deferredMsg = msg;
         size_t deferredLen = len;
@@ -3931,6 +4011,7 @@ void Switch_LogWrite(const char *msg)
             {
                 g_switchDeferredDiagUsed = 0;
             }
+            g_switchDeferredDiagLock.clear(std::memory_order_release);
             return;
         }
 
@@ -3970,6 +4051,7 @@ void Switch_LogWrite(const char *msg)
             msg,
             deferredLen);
         g_switchDeferredDiagUsed += deferredLen;
+        g_switchDeferredDiagLock.clear(std::memory_order_release);
         return;
     }
 
@@ -4044,33 +4126,75 @@ void Switch_LogWriteError(const char *msg)
     }
 }
 
+static void Switch_LogRotateIfNeeded(
+    const char *path,
+    const char *previousPath,
+    unsigned long long rotateBytes)
+{
+    struct stat info{};
+    if (::stat(path, &info) != 0 || info.st_size < 0 ||
+        static_cast<unsigned long long>(info.st_size) < rotateBytes)
+        return;
+
+    if (::unlink(previousPath) != 0 && errno != ENOENT)
+        return;
+    (void)::rename(path, previousPath);
+}
+
 void Switch_LogInit()
 {
     g_switchScreenLog = false;
 
-    if (g_switchLogFd >= 0)
-        return;
+    if (g_switchLogFd < 0)
+    {
+        Switch_LogRotateIfNeeded(
+            kSwitchLogPath,
+            kSwitchPreviousLogPath,
+            kSwitchLogRotateBytes);
+        g_switchLogFd = ::open(
+            kSwitchLogPath,
+            O_WRONLY | O_CREAT | O_APPEND,
+            0666);
+    }
 
-    g_switchLogFd = ::open(
-        kSwitchLogPath,
-        O_WRONLY | O_CREAT | O_TRUNC | O_APPEND,
-        0666);
+    if (g_switchCrashLogFd < 0)
+    {
+        Switch_LogRotateIfNeeded(
+            kSwitchCrashLogPath,
+            kSwitchPreviousCrashLogPath,
+            kSwitchCrashLogRotateBytes);
+        g_switchCrashLogFd = ::open(
+            kSwitchCrashLogPath,
+            O_WRONLY | O_CREAT | O_APPEND,
+            0666);
+    }
 
     if (g_switchLogFd < 0)
     {
         const char *msg = "[KisakCOD][LOG] Failed to open sdmc log file\n";
-        (void)::write(STDOUT_FILENO, msg, std::strlen(msg));
-        return;
+        Switch_LogWriteAll(STDOUT_FILENO, msg, std::strlen(msg));
+    }
+    if (g_switchCrashLogFd < 0)
+    {
+        const char *msg = "[KisakCOD][LOG] Failed to open persistent crash journal\n";
+        Switch_LogWriteAll(STDOUT_FILENO, msg, std::strlen(msg));
     }
 
     static const char header[] =
-        "========================================\n"
-        "KisakCOD Switch engine log\n"
+        "\n========================================\n"
+        "KisakCOD Switch engine log session\n"
         "Log file: sdmc:/switch/KisakCOD/kisakcod.log\n"
+        "Crash journal: sdmc:/switch/KisakCOD/kisakcod_crash.log\n"
         "========================================\n";
-    Switch_LogWrite(header);
+    Switch_LogWriteAll(g_switchLogFd, header, sizeof(header) - 1u);
 }
 
+extern "C" void userAppInit(void)
+{
+    // libnx calls userAppInit after mounting sdmc and before static constructors.
+    Switch_LogInit();
+    std::set_terminate(Switch_TerminateHandler);
+}
 void Switch_LogRaw(const char *msg)
 {
     Switch_LogWrite(msg);
@@ -4205,17 +4329,31 @@ void __cdecl Sys_Error(const char *error, ...)
     va_start(ap, error);
     std::vsnprintf(message, sizeof(message), error, ap);
     va_end(ap);
-    char fatalLine[4096];
-    std::snprintf(fatalLine, sizeof(fatalLine), "FATAL: %s\n", message);
-    Sys_Print(fatalLine);
-    appletRequestExitToSelf();
-    std::abort();
-}
 
+    // Fatal errors bypass the normal error-only filter and are persisted before
+    // triggering libnx's panic break and exception-context capture.
+    Switch_LogFatalBreak("Sys_Error", 0u, message);
+}
 void __cdecl Sys_Quit()
 {
     appletRequestExitToSelf();
     std::exit(0);
+}
+
+// libnx exposes this as an overridable weak panic function. Persist its
+// Result before invoking the standard kernel panic break.
+extern "C" [[noreturn]] void diagAbortWithResult(Result res)
+{
+    Switch_LogFatalBreak(
+        "libnx diagAbortWithResult",
+        static_cast<uint32_t>(res),
+        nullptr);
+}
+
+// Route C/C++ runtime aborts through the same durable crash-report path.
+extern "C" [[noreturn]] void abort(void)
+{
+    Switch_LogFatalBreak("abort()", 0u, "C/C++ runtime abort");
 }
 
 void __cdecl Sys_OutOfMemErrorInternal(const char *filename, int line)
