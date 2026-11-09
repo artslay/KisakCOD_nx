@@ -16,6 +16,7 @@
 #include <cgame/cg_newdraw.h>
 #include <game/savememory.h>
 #include <gfx_d3d/r_init.h>
+#include <gfx_d3d/r_font.h>
 #include <universal/profile.h>
 #include <client/cl_scrn.h>
 #include <client/cl_input.h>
@@ -550,59 +551,118 @@ void __cdecl UI_DrawTextWithCursor(
 Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale)
 {
     float scalea; // [esp+10h] [ebp+10h]
+    Font_s **fontHandle = nullptr;
+#ifdef __SWITCH__
+    const char *fontAssetName = nullptr;
+#endif
 
     switch (fontEnum)
     {
     case 2:
-        return sharedUiInfo.assets.bigFont;
-    case 3:
-        return sharedUiInfo.assets.smallFont;
-    case 5:
-        return sharedUiInfo.assets.consoleFont;
-    case 6:
+        fontHandle = &sharedUiInfo.assets.bigFont;
 #ifdef __SWITCH__
-        // UI_AssetCache may run before every game fastfile and font material is
-        // resident. Re-resolve the stock objective font at the point of use so
-        // R_RegisterFont_FastFile can bind its current material/glow handles.
-        // Do not substitute another font if the authored asset is unavailable.
-        sharedUiInfo.assets.objectiveFont =
-            CL_RegisterFont("fonts/objectivefont", IMAGE_TRACK_MISC);
+        fontAssetName = "fonts/bigfont";
 #endif
-        return sharedUiInfo.assets.objectiveFont;
-    }
-    scalea = scrPlace->scaleVirtualToReal[1] * scale;
-    if (fontEnum == 4)
-    {
-        if (ui_smallFont->current.value < (double)scalea)
+        break;
+    case 3:
+        fontHandle = &sharedUiInfo.assets.smallFont;
+#ifdef __SWITCH__
+        fontAssetName = "fonts/smallfont";
+#endif
+        break;
+    case 5:
+        fontHandle = &sharedUiInfo.assets.consoleFont;
+#ifdef __SWITCH__
+        fontAssetName = "fonts/consolefont";
+#endif
+        break;
+    case 6:
+        fontHandle = &sharedUiInfo.assets.objectiveFont;
+#ifdef __SWITCH__
+        fontAssetName = "fonts/objectivefont";
+#endif
+        break;
+    default:
+        scalea = scrPlace->scaleVirtualToReal[1] * scale;
+        if (fontEnum == 4)
         {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
+            if (ui_smallFont->current.value < (double)scalea)
+            {
+                if (ui_bigFont->current.value > (double)scalea)
+                {
+                    fontHandle = &sharedUiInfo.assets.textFont;
+#ifdef __SWITCH__
+                    fontAssetName = "fonts/normalfont";
+#endif
+                }
+                else
+                {
+                    fontHandle = &sharedUiInfo.assets.boldFont;
+#ifdef __SWITCH__
+                    fontAssetName = "fonts/boldfont";
+#endif
+                }
+            }
             else
-                return sharedUiInfo.assets.boldFont;
+            {
+                fontHandle = &sharedUiInfo.assets.smallFont;
+#ifdef __SWITCH__
+                fontAssetName = "fonts/smallfont";
+#endif
+            }
+        }
+        else if (ui_smallFont->current.value < (double)scalea)
+        {
+            if (ui_extraBigFont->current.value > (double)scalea)
+            {
+                if (ui_bigFont->current.value > (double)scalea)
+                {
+                    fontHandle = &sharedUiInfo.assets.textFont;
+#ifdef __SWITCH__
+                    fontAssetName = "fonts/normalfont";
+#endif
+                }
+                else
+                {
+                    fontHandle = &sharedUiInfo.assets.bigFont;
+#ifdef __SWITCH__
+                    fontAssetName = "fonts/bigfont";
+#endif
+                }
+            }
+            else
+            {
+                fontHandle = &sharedUiInfo.assets.extraBigFont;
+#ifdef __SWITCH__
+                fontAssetName = "fonts/extrabigfont";
+#endif
+            }
         }
         else
         {
-            return sharedUiInfo.assets.smallFont;
+            fontHandle = &sharedUiInfo.assets.smallFont;
+#ifdef __SWITCH__
+            fontAssetName = "fonts/smallfont";
+#endif
         }
+        break;
     }
-    else if (ui_smallFont->current.value < (double)scalea)
+
+#ifdef __SWITCH__
+    // CL_RegisterFont() selects R_RegisterFont_LoadObj outside an active
+    // fastfile load and therefore returns the cached IWD font rather than the
+    // live zone asset. Resolve the authored font directly from the current DB
+    // asset pool and let R_RegisterFont_FastFile rebind its ARM64 material
+    // handles. Keep the existing IWD font until that exact zone asset exists.
+    if (fontAssetName &&
+        !DB_IsXAssetDefault(ASSET_TYPE_FONT, fontAssetName))
     {
-        if (ui_extraBigFont->current.value > (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.bigFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.extraBigFont;
-        }
+        Font_s *liveFont = R_RegisterFont_FastFile(fontAssetName);
+        if (liveFont)
+            *fontHandle = liveFont;
     }
-    else
-    {
-        return sharedUiInfo.assets.smallFont;
-    }
+#endif
+    return *fontHandle;
 }
 
 void UI_UpdateSaveUI()
