@@ -651,9 +651,9 @@ Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, 
 #ifdef __SWITCH__
     // CL_RegisterFont() selects R_RegisterFont_LoadObj outside an active
     // fastfile load and therefore returns the cached IWD font rather than the
-    // live zone asset. Resolve the authored font directly from the current DB
-    // asset pool and let R_RegisterFont_FastFile rebind its ARM64 material
-    // handles. Keep the existing IWD font until that exact zone asset exists.
+    // live zone asset. Resolve the authored Font_s directly from the DB once
+    // the zone loader has linked its material dependencies into native pointers.
+    // Keep the existing IWD font until that exact zone asset exists.
     if (fontAssetName &&
         !DB_IsXAssetDefault(ASSET_TYPE_FONT, fontAssetName))
     {
