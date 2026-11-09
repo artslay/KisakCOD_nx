@@ -3099,6 +3099,11 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
         execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
         return;
     }
+
+    // The overlay mode is device-global, while viewMode is cached per command
+    // source. Another source may have requested 3D since this source last
+    // entered 2D; reassert the 2D device state before submitting glyph quads.
+    R_Set2D(&gfxCmdBufSourceState);
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/enter";
     {
         
