@@ -31,6 +31,7 @@ extern void CL_EnforceFadeCinematicSkipRule(void);
 #ifdef __SWITCH__
 extern bool SCR_IsCurrentCinematicFadeTransition(void);
 extern void Switch_LogWrite(const char *msg);
+extern int __cdecl Dvar_GetInt(const char *dvarName);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
 extern thread_local const char *g_switchFrameStage;
@@ -435,6 +436,35 @@ void __cdecl UI_DrawText(
     v13 = y + 0.5;
     v11 = floor(v13);
     y = v11;
+#ifdef __SWITCH__
+    // Record text only while the real pause dvar is active. This captures
+    // both ordinary menu labels (pausedMsg) and CGame owner-draw text using
+    // the same stock UI_DrawText entry point before a render command is queued.
+    static uint32_t switchPauseUiTextTraceCount = 0;
+    if (switchPauseUiTextTraceCount < 64u && Dvar_GetInt("cl_paused") != 0)
+    {
+        char trace[640];
+        const char *safeText = text ? text : "<null>";
+        const char *safeFontName =
+            font && font->fontName ? font->fontName : "<null>";
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][PAUSE TEXT PIPE] stage=submit n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p pos=%.1f,%.1f scale=%.4f,%.4f alpha=%.3f style=%d maxChars=%d\\n",
+            switchPauseUiTextTraceCount,
+            safeText,
+            safeFontName,
+            static_cast<void *>(font),
+            font ? font->pixelHeight : 0,
+            font ? font->glyphCount : 0,
+            font ? static_cast<void *>(font->glyphs) : nullptr,
+            font ? static_cast<void *>(font->material) : nullptr,
+            x, y, xScale, yScale,
+            color ? color[3] : -1.0f,
+            style, maxChars);
+        Switch_LogWrite(trace);
+        ++switchPauseUiTextTraceCount;
+    }
+#endif
     CL_DrawTextPhysical(text, maxChars, font, x, v11, xScale, yScale, color, style);
 }
 
