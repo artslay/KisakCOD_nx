@@ -66,7 +66,12 @@ static const char *CL_GetEffectiveCinematicName()
 
 static bool CL_IsCurrentCinematicFadeTransition()
 {
-    return CL_CinematicHasFadeSuffix(CL_GetEffectiveCinematicName());
+    // Protect the whole handoff chain. While an ordinary loading movie is
+    // still current, the authored *_fade may already be queued as next; a skip
+    // at that point would stop the current movie and UI_PlayerStart could then
+    // stop the newly-promoted fade before it reaches gameplay.
+    return CL_CinematicHasFadeSuffix(CL_GetEffectiveCinematicName()) ||
+        CL_CinematicHasFadeSuffix(cinematicGlob.nextCinematicName);
 }
 
 bool SCR_IsCurrentCinematicFadeTransition()
@@ -82,7 +87,9 @@ void CL_EnforceFadeCinematicSkipRule(void)
     if (!effectiveName[0])
         return;
 
-    const bool fadeTransition = CL_CinematicHasFadeSuffix(effectiveName);
+    const bool fadeTransition =
+        CL_CinematicHasFadeSuffix(effectiveName) ||
+        CL_CinematicHasFadeSuffix(cinematicGlob.nextCinematicName);
     const bool explicitlyUnskippable =
         g_explicitUnskippableCinematic[0] &&
         I_stricmp(effectiveName, g_explicitUnskippableCinematic) == 0;
