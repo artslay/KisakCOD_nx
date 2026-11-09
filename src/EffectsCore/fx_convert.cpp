@@ -1,8 +1,30 @@
 #include <universal/q_shared.h>
 #include "fx_system.h"
+
+#include <cstddef>
+#include <cstdint>
 #include <xanim/xmodel.h>
 #include <gfx_d3d/r_material.h>
 #include <universal/com_math.h>
+
+// Runtime FX definitions contain native pointers. Keep embedded arrays aligned
+// for the target ABI instead of assuming the original 32-bit layout.
+template<typename T>
+static size_t FX_AlignedBytesForCount(size_t count)
+{
+    return count ? (alignof(T) - 1u) + sizeof(T) * count : 0u;
+}
+
+template<typename T>
+static T *FX_AllocAlignedFromPool(uint8_t **memPool, size_t count)
+{
+    const uintptr_t address = reinterpret_cast<uintptr_t>(*memPool);
+    const uintptr_t mask = static_cast<uintptr_t>(alignof(T) - 1u);
+    const uintptr_t alignedAddress = (address + mask) & ~mask;
+    T *result = reinterpret_cast<T *>(alignedAddress);
+    *memPool = reinterpret_cast<uint8_t *>(alignedAddress + sizeof(T) * count);
+    return result;
+}
 
 bool __cdecl FX_ElemUsesMaterial(const FxEditorElemDef *edElemDef)
 {
@@ -541,32 +563,31 @@ int32_t __cdecl FX_DecideVisualSampleCount(
         return 0;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForElemDef(
+size_t __cdecl FX_AdditionalBytesNeededForElemDef(
     uint8_t elemType,
     int32_t velStateSampleCount,
     int32_t visStateSampleCount,
     int32_t visualCount)
 {
-    int32_t bytesNeeded; // [esp+0h] [ebp-4h]
-
-    bytesNeeded = 96 * velStateSampleCount + 48 * visStateSampleCount;
-    if (elemType == 9)
-    {
-        bytesNeeded += 8 * visualCount;
-    }
+    size_t bytesNeeded = FX_AlignedBytesForCount<FxElemVelStateSample>(velStateSampleCount)
+        + FX_AlignedBytesForCount<FxElemVisStateSample>(visStateSampleCount);
+    if (elemType == 9 && visualCount > 0)
+        bytesNeeded += FX_AlignedBytesForCount<FxElemMarkVisuals>(visualCount);
     else if (visualCount > 1)
-    {
-        bytesNeeded += 4 * visualCount;
-    }
+        bytesNeeded += FX_AlignedBytesForCount<FxElemVisuals>(visualCount);
     return bytesNeeded;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForGeomTrail(const FxEditorElemDef *elemDef)
+size_t __cdecl FX_AdditionalBytesNeededForGeomTrail(const FxEditorElemDef *elemDef)
 {
     if (elemDef->elemType == 3)
-        return 22 * elemDef->trailDef.indCount + 28;
-    else
-        return 0;
+    {
+        const size_t indexCount = static_cast<size_t>(elemDef->trailDef.indCount);
+        return FX_AlignedBytesForCount<FxTrailDef>(1u)
+            + FX_AlignedBytesForCount<FxTrailVertex>(indexCount)
+            + FX_AlignedBytesForCount<uint16_t>(indexCount);
+    }
+    return 0;
 }
 
 int32_t __cdecl FX_FindEmission(const FxEffectDef *emission, const FxEditorEffectDef *editorEffect)
@@ -594,17 +615,17 @@ void __cdecl FX_ConvertEffectDefRef(FxEffectDefRef *ref, const FxEffectDef *effe
     ref->handle = effectDef;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForEmission(const FxEffectDef *emission)
+size_t __cdecl FX_AdditionalBytesNeededForEmission(const FxEffectDef *emission)
 {
     int32_t v2; // [esp+0h] [ebp-1Ch]
     const FxElemDef *elemDef; // [esp+8h] [ebp-14h]
-    int32_t bytesNeeded; // [esp+Ch] [ebp-10h]
+    size_t bytesNeeded;
     int32_t elemDefStop; // [esp+14h] [ebp-8h]
     int32_t elemDefIndex; // [esp+18h] [ebp-4h]
 
     if (!emission)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 1239, 0, "%s", "emission");
-    bytesNeeded = 252 * emission->elemDefCountOneShot;
+    bytesNeeded = sizeof(FxElemDef) * static_cast<size_t>(emission->elemDefCountOneShot);
     elemDefStop = emission->elemDefCountOneShot + emission->elemDefCountLooping;
     for (elemDefIndex = emission->elemDefCountLooping; elemDefIndex != elemDefStop; ++elemDefIndex)
     {
@@ -729,26 +750,26 @@ void __cdecl FX_ReserveElemDefMemory(FxElemDef *elemDef, uint8_t **memPool)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 705, 0, "%s", "*memPool");
     if (!elemDef->velIntervalCount)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 707, 0, "%s", "elemDef->velIntervalCount");
-    elemDef->velSamples = (FxElemVelStateSample *)*memPool;
-    *memPool += 96 * elemDef->velIntervalCount + 96;
+    elemDef->velSamples = FX_AllocAlignedFromPool<FxElemVelStateSample>(
+        memPool, static_cast<size_t>(elemDef->velIntervalCount) + 1u);
     if (elemDef->visStateIntervalCount)
     {
-        elemDef->visSamples = (FxElemVisStateSample *)*memPool;
-        *memPool += 48 * elemDef->visStateIntervalCount + 48;
+        elemDef->visSamples = FX_AllocAlignedFromPool<FxElemVisStateSample>(
+            memPool, static_cast<size_t>(elemDef->visStateIntervalCount) + 1u);
     }
     else
     {
-        elemDef->visSamples = 0;
+        elemDef->visSamples = nullptr;
     }
-    if (elemDef->elemType == 9)
+    if (elemDef->elemType == 9 && elemDef->visualCount)
     {
-        elemDef->visuals.markArray = (FxElemMarkVisuals *)*memPool;
-        *memPool += 8 * elemDef->visualCount;
+        elemDef->visuals.markArray = FX_AllocAlignedFromPool<FxElemMarkVisuals>(
+            memPool, elemDef->visualCount);
     }
     else if (elemDef->visualCount > 1u)
     {
-        elemDef->visuals.markArray = (FxElemMarkVisuals *)*memPool;
-        *memPool += 4 * elemDef->visualCount;
+        elemDef->visuals.array = FX_AllocAlignedFromPool<FxElemVisuals>(
+            memPool, elemDef->visualCount);
     }
 }
 
@@ -1081,12 +1102,12 @@ void __cdecl FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edE
 
 void __cdecl FX_CopyMarkVisuals(const FxEditorElemDef *edElemDef, FxElemMarkVisuals *markVisualsArray)
 {
-    memcpy(markVisualsArray, &edElemDef->markVisuals, 8 * edElemDef->visualCount);
+    memcpy(markVisualsArray, &edElemDef->markVisuals, sizeof(FxElemMarkVisuals) * edElemDef->visualCount);
 }
 
 void __cdecl FX_CopyVisuals(const FxEditorElemDef *edElemDef, FxElemVisuals *visualsArray)
 {
-    memcpy(visualsArray, &edElemDef->markVisuals, 4 * edElemDef->visualCount);
+    memcpy(visualsArray, &edElemDef->visuals, sizeof(FxElemVisuals) * edElemDef->visualCount);
 }
 
 void __cdecl FX_ConvertTrail_CalcNormForSegment(const float *vert0, const float *vert1, float *outNormal)
@@ -1145,9 +1166,8 @@ void __cdecl FX_ConvertTrail_CompileVertices(
     indCount = trailDef->indCount;
     if ((indCount & 1) != 0)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 865, 0, "%s", "(indCount & 1) == 0");
-    vertBytes = 20 * indCount;
-    outVertPtrBegin = (FxTrailVertex *)*mempool;
-    *mempool += 20 * indCount;
+    vertBytes = static_cast<int32_t>(sizeof(FxTrailVertex) * static_cast<size_t>(indCount));
+    outVertPtrBegin = FX_AllocAlignedFromPool<FxTrailVertex>(mempool, static_cast<size_t>(indCount));
     outVertPtrEnd = &outVertPtrBegin[indCount];
     outVertPtrIter = outVertPtrBegin;
     indPtrEnd = &trailDef->inds[indCount];
@@ -1198,9 +1218,8 @@ void __cdecl FX_ConvertTrail_CompileVertices(
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 911, 0, "%s", "outVertPtrIter == outVertPtrEnd");
     emittedVertPtrBegin = outVertPtrBegin;
     emittedVertPtrEnd = outVertPtrBegin;
-    indBytes = 2 * indCount;
-    emittedIndPtrBegin = (uint16_t *)*mempool;
-    *mempool += 2 * indCount;
+    indBytes = static_cast<int32_t>(sizeof(uint16_t) * static_cast<size_t>(indCount));
+    emittedIndPtrBegin = FX_AllocAlignedFromPool<uint16_t>(mempool, static_cast<size_t>(indCount));
     emittedIndPtrEnd = emittedIndPtrBegin;
     for (outVertPtrIter = outVertPtrBegin; outVertPtrIter != outVertPtrEnd; ++outVertPtrIter)
     {
@@ -1261,8 +1280,7 @@ void __cdecl FX_ConvertTrail(FxTrailDef **outTrailDef, const FxEditorElemDef *ed
 {
     if (edElemDef->elemType == 3)
     {
-        *outTrailDef = (FxTrailDef *)*mempool;
-        *mempool += 28;
+        *outTrailDef = FX_AllocAlignedFromPool<FxTrailDef>(mempool, 1u);
         FX_ConvertTrail_CompileVertices(edElemDef, *outTrailDef, mempool);
         if (edElemDef->trailSplitDist <= 0)
             MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 968, 0, "%s", "edElemDef->trailSplitDist > 0");
