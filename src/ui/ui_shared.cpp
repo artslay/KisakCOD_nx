@@ -2663,6 +2663,89 @@ static bool Switch_UI_IsConfirmationMenuName(const char *name)
         Switch_UI_ContainsCaseInsensitive(name, "dialog");
 }
 
+static bool Switch_UI_IsSaveQuitConfirmationMenuName(const char *name)
+{
+    return Switch_UI_ContainsCaseInsensitive(name, "savequit") ||
+        Switch_UI_ContainsCaseInsensitive(name, "save_quit") ||
+        Switch_UI_ContainsCaseInsensitive(name, "saveandquit") ||
+        Switch_UI_ContainsCaseInsensitive(name, "save_and_quit") ||
+        Switch_UI_ContainsCaseInsensitive(name, "quit_to_menu") ||
+        Switch_UI_ContainsCaseInsensitive(name, "return_to_menu") ||
+        Switch_UI_ContainsCaseInsensitive(name, "leavegame") ||
+        Switch_UI_ContainsCaseInsensitive(name, "leave_game");
+}
+
+static bool Switch_UI_ItemHasActionScript(const itemDef_s *item)
+{
+    return item &&
+        ((item->action && !Switch_UI_BadPointer(item->action) && item->action[0]) ||
+         (item->onAccept && !Switch_UI_BadPointer(item->onAccept) && item->onAccept[0]));
+}
+
+static bool Switch_UI_ItemLabelMatchesPauseConfirmation(
+    const itemDef_s *item,
+    bool restart)
+{
+    if (!item)
+        return false;
+
+    const char *rawText =
+        item->text && !Switch_UI_BadPointer(item->text) ? item->text : nullptr;
+    const char *translatedText = rawText ? UI_SafeTranslateString(rawText) : nullptr;
+    const char *itemName =
+        item->window.name && !Switch_UI_BadPointer(item->window.name)
+            ? item->window.name : nullptr;
+
+    if (restart)
+    {
+        return Switch_UI_ContainsCaseInsensitive(itemName, "restart") ||
+            Switch_UI_ContainsCaseInsensitive(rawText, "restart") ||
+            Switch_UI_ContainsCaseInsensitive(translatedText, "restart") ||
+            Switch_UI_ContainsCaseInsensitive(rawText, "перезапуск") ||
+            Switch_UI_ContainsCaseInsensitive(translatedText, "перезапуск") ||
+            Switch_UI_ContainsCaseInsensitive(rawText, "перезапустить") ||
+            Switch_UI_ContainsCaseInsensitive(translatedText, "перезапустить");
+    }
+
+    return Switch_UI_ContainsCaseInsensitive(itemName, "savequit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save and quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save & quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save_and_quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "save and quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "save & quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и выйти") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и вернуться в меню");
+}
+
+// Most stock confirmation buttons call Restart/Leave directly. The Save and
+// Quit popup may instead own a save-specific alias (for example forcesave)
+// while keeping the same authored label. Recognize that button only inside an
+// explicitly named save/quit popup; its actual action script remains untouched.
+static bool Switch_UI_ItemMatchesPauseConfirmationAction(
+    const itemDef_s *item,
+    const char *menuName,
+    bool restart)
+{
+    if (!item || !Switch_UI_ItemHasActionScript(item))
+        return false;
+
+    const char *wantedCommand = restart ? "Restart" : "Leave";
+    if (Switch_UI_ScriptHasCommand(item->action, wantedCommand) ||
+        Switch_UI_ScriptHasCommand(item->onAccept, wantedCommand))
+    {
+        return true;
+    }
+
+    if (restart)
+    {
+        return Switch_UI_ContainsCaseInsensitive(menuName, "restart") &&
+            Switch_UI_ItemLabelMatchesPauseConfirmation(item, true);
+    }
+
+    return Switch_UI_IsSaveQuitConfirmationMenuName(menuName) &&
+        Switch_UI_ItemLabelMatchesPauseConfirmation(item, false);
+}
+
 static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restart)
 {
     if (!dc)
@@ -2715,14 +2798,14 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
             itemDef_s *candidate = menu->items[itemIndex];
             if (!candidate || Switch_UI_BadPointer(candidate))
                 continue;
-            if ((candidate->action && Switch_UI_BadPointer(candidate->action)) ||
-                (candidate->onAccept && Switch_UI_BadPointer(candidate->onAccept)))
+            if (Switch_UI_BadPointer(candidate->action) ||
+                Switch_UI_BadPointer(candidate->onAccept))
             {
                 continue;
             }
 
-            if (Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
-                Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand))
+            if (Switch_UI_ItemMatchesPauseConfirmationAction(
+                    candidate, menu->window.name, restart))
             {
                 hasConfirmAction = true;
                 break;
@@ -2777,8 +2860,8 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
         itemDef_s *candidate = menu->items[itemIndex];
         if (!candidate || Switch_UI_BadPointer(candidate))
             continue;
-        if ((candidate->action && Switch_UI_BadPointer(candidate->action)) ||
-            (candidate->onAccept && Switch_UI_BadPointer(candidate->onAccept)))
+        if (Switch_UI_BadPointer(candidate->action) ||
+            Switch_UI_BadPointer(candidate->onAccept))
         {
             continue;
         }
@@ -2790,8 +2873,8 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
         {
             continue;
         }
-        if ((Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
-             Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand)) &&
+        if (Switch_UI_ItemMatchesPauseConfirmationAction(
+                candidate, menu->window.name, restart) &&
             Item_IsVisible(dc->localClientNum, candidate))
         {
             return true;
