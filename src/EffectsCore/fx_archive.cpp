@@ -86,7 +86,7 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
 #else
     MemFile_ReadData(memFile, 291968, reinterpret_cast<uint8_t *>(systemBuffers));
 #endif
-    FX_FixupEffectDefHandles(restoredSystem, &table);
+    FX_FixupEffectDefHandles(restoredSystem, &table, archiveVersion < 2u);
     // Consume the legacy 32-bit system address to keep the save stream layout.
     MemFile_ReadData(memFile, 4, (uint8_t *)&savedSystemAddress);
 #ifdef __SWITCH__
@@ -154,7 +154,7 @@ void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uintptr_t key, c
     table->entries[table->count++].effectDef = effectDef;
 }
 
-void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
+void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table, bool legacyPointerKeys)
 {
     const FxEffectDef *effectDef; // [esp+Ch] [ebp-10h]
     FxEffect *effect; // [esp+10h] [ebp-Ch]
@@ -167,7 +167,9 @@ void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
     for (activeIndex = system->firstActiveEffect; activeIndex != system->firstNewEffect; ++activeIndex)
     {
         effect = FX_EffectFromHandle(system, system->allEffectHandles[activeIndex & 0x3FF]);
-        effectDef = FX_FindEffectDefInTable(table, reinterpret_cast<uintptr_t>(effect->def));
+        const uintptr_t effectDefKey = reinterpret_cast<uintptr_t>(effect->def);
+        effectDef = FX_FindEffectDefInTable(
+            table, legacyPointerKeys ? static_cast<uint32_t>(effectDefKey) : effectDefKey);
         if (!effectDef)
             MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 139, 0, "%s", "effectDef");
         effect->def = effectDef;
