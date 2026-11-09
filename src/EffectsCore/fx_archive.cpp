@@ -25,9 +25,12 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     systemBuffers = FX_GetSystemBuffers(clientIndex);
     if (!systemBuffers)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
-    const bool nativeArchive = FX_RestoreEffectDefTable(memFile, &table);
-#ifndef __SWITCH__
-    (void)nativeArchive;
+    const uint32_t archiveVersion = FX_RestoreEffectDefTable(memFile, &table);
+#ifdef __SWITCH__
+    const bool nativeArchive = archiveVersion >= 1u;
+#else
+    (void)archiveVersion;
+    const bool nativeArchive = false;
 #endif
     FxSystem *restoredSystem = static_cast<FxSystem *>(p);
 #ifdef __SWITCH__
@@ -100,29 +103,40 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     restoredSystem->isArchiving = false;
 }
 
-bool __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
+uint32_t __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
 {
-    uint32_t key;
+    uintptr_t key;
     const FxEffectDef *effectDef;
     const char *effectDefName;
 
     table->count = 0;
     effectDefName = MemFile_ReadCString(memFile);
-    const bool nativeArchive = !I_strcmp(effectDefName, "__KISAK_FX_NATIVE64_V1__");
-    if (nativeArchive)
+    uint32_t archiveVersion = 0;
+    if (!I_strcmp(effectDefName, "__KISAK_FX_NATIVE64_V2__"))
+        archiveVersion = 2;
+    else if (!I_strcmp(effectDefName, "__KISAK_FX_NATIVE64_V1__"))
+        archiveVersion = 1;
+    if (archiveVersion)
         effectDefName = MemFile_ReadCString(memFile);
 
     while (*effectDefName)
     {
-        MemFile_ReadData(memFile, sizeof(key), reinterpret_cast<uint8_t *>(&key));
+        if (archiveVersion >= 2u)
+            MemFile_ReadData(memFile, sizeof(key), reinterpret_cast<uint8_t *>(&key));
+        else
+        {
+            uint32_t legacyKey;
+            MemFile_ReadData(memFile, sizeof(legacyKey), reinterpret_cast<uint8_t *>(&legacyKey));
+            key = legacyKey;
+        }
         effectDef = FX_Register(effectDefName);
         FX_AddEffectDefTableEntry(table, key, effectDef);
         effectDefName = MemFile_ReadCString(memFile);
     }
-    return nativeArchive;
+    return archiveVersion;
 }
 
-void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, const FxEffectDef *effectDef)
+void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uintptr_t key, const FxEffectDef *effectDef)
 {
     if (!table)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 47, 0, "%s", "table");
@@ -153,7 +167,7 @@ void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
     for (activeIndex = system->firstActiveEffect; activeIndex != system->firstNewEffect; ++activeIndex)
     {
         effect = FX_EffectFromHandle(system, system->allEffectHandles[activeIndex & 0x3FF]);
-        effectDef = FX_FindEffectDefInTable(table, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(effect->def)));
+        effectDef = FX_FindEffectDefInTable(table, reinterpret_cast<uintptr_t>(effect->def));
         if (!effectDef)
             MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 139, 0, "%s", "effectDef");
         effect->def = effectDef;
@@ -187,7 +201,7 @@ FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle)
         + FxEffect::HANDLE_SCALE * handle);
 }
 
-const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table, uint32_t key)
+const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table, uintptr_t key)
 {
     int32_t index; // [esp+0h] [ebp-4h]
 
@@ -285,7 +299,7 @@ void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
 void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 {
 #ifdef __SWITCH__
-    MemFile_WriteCString(memFile, "__KISAK_FX_NATIVE64_V1__");
+    MemFile_WriteCString(memFile, "__KISAK_FX_NATIVE64_V2__");
 #endif
     if (IsFastFileLoad())
         FX_SaveEffectDefTable_FastFile(memFile);
@@ -296,7 +310,7 @@ void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 
 void __cdecl FX_SaveEffectDefTableEntry_FileLoadObj(const FxEffectDef* effectDef, MemoryFile* data)
 {
-    const uint32_t key = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(effectDef));
+    const uintptr_t key = reinterpret_cast<uintptr_t>(effectDef);
 
     MemFile_WriteCString(data, const_cast<char *>(effectDef->name));
     MemFile_WriteData(data, sizeof(key), &key);
