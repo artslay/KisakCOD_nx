@@ -3434,7 +3434,7 @@ void CG_ModPrvEnumerateModels_FastFile()
     if (g_mdlprv.system.modelCount)
     {
         v0 = Hunk_UserCreate(0x20000, "CG_ModPrvEnumerateModels", 0, 0, 0);
-        g_mdlprv.system.modelNames = (const char **)Hunk_UserAlloc(v0, 4 * (g_mdlprv.system.modelCount + 2), 4);
+        g_mdlprv.system.modelNames = (const char **)Hunk_UserAlloc(v0, sizeof(const char *) * (g_mdlprv.system.modelCount + 2), alignof(const char *));
         *g_mdlprv.system.modelNames = (const char *)v0;
         ++g_mdlprv.system.modelNames;
         v1[1] = 3;
@@ -3472,7 +3472,7 @@ void CG_ModPrvEnumerateAnimations_FastFile()
     if (g_mdlprv.system.animCount)
     {
         v0 = Hunk_UserCreate(0x20000, "CG_ModPrvEnumerateAnimations", 0, 0, 0);
-        g_mdlprv.system.animNames = (const char **)Hunk_UserAlloc(v0, 4 * (g_mdlprv.system.animCount + 2), 4);
+        g_mdlprv.system.animNames = (const char **)Hunk_UserAlloc(v0, sizeof(const char *) * (g_mdlprv.system.animCount + 2), alignof(const char *));
         *g_mdlprv.system.animNames = (const char *)v0;
         ++g_mdlprv.system.animNames;
         v1[1] = 2;
