@@ -25,18 +25,29 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     systemBuffers = FX_GetSystemBuffers(clientIndex);
     if (!systemBuffers)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
-    FX_RestoreEffectDefTable(memFile, &table);
-    // FxSystem contains native-width pointers on Switch; archiving the old
-    // 32-bit byte count would truncate its tail (including restart state).
+    const bool nativeArchive = FX_RestoreEffectDefTable(memFile, &table);
+    FxSystem *restoredSystem = static_cast<FxSystem *>(p);
+#ifdef __SWITCH__
     static_assert(sizeof(FxSystem) <= 0x7FFFFFFFu, "FxSystem archive size must fit MemFile");
     static_assert(sizeof(FxSystemBuffers) <= 0x7FFFFFFFu, "FX buffer archive size must fit MemFile");
-    MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystem)), static_cast<uint8_t *>(p));
-#ifdef __SWITCH__
-    // The saved FxSystem byte count is retained from the 32-bit engine, but
-    // native pointer fields move members such as isArchiving and iteratorCount
-    // on AArch64. Check the restored fields by member, not by legacy offsets.
+    // Old Switch saves used native pointers but retained the original fixed
+    // 32-bit byte counts. Keep reading those saves while new saves use sizeof.
+    static_assert(offsetof(FxSystem, iteratorCount) + sizeof(int32_t) <= 2656,
+        "legacy FX archive must contain iteratorCount");
+    static_assert(offsetof(FxSystem, isArchiving) + sizeof(bool) <= 2656,
+        "legacy FX archive must contain isArchiving");
+    if (nativeArchive)
+    {
+        MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystem)), reinterpret_cast<uint8_t *>(restoredSystem));
+    }
+    else
+    {
+        memset(restoredSystem, 0, sizeof(*restoredSystem));
+        MemFile_ReadData(memFile, 2656, reinterpret_cast<uint8_t *>(restoredSystem));
+    }
+#else
+    MemFile_ReadData(memFile, 2656, reinterpret_cast<uint8_t *>(restoredSystem));
 #endif
-    FxSystem *restoredSystem = static_cast<FxSystem *>(p);
     if (!restoredSystem->isArchiving || restoredSystem->iteratorCount)
         Com_Error(ERR_DROP, "Invalid save file");
 #ifdef __SWITCH__
@@ -56,7 +67,19 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
         Com_Error(ERR_DROP, "Invalid FX visibility buffer offsets in save file");
 #endif
     FX_LinkSystemBuffers(restoredSystem, systemBuffers);
-    MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystemBuffers)), reinterpret_cast<uint8_t *>(systemBuffers));
+#ifdef __SWITCH__
+    if (nativeArchive)
+    {
+        MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystemBuffers)), reinterpret_cast<uint8_t *>(systemBuffers));
+    }
+    else
+    {
+        memset(systemBuffers, 0, sizeof(*systemBuffers));
+        MemFile_ReadData(memFile, 291968, reinterpret_cast<uint8_t *>(systemBuffers));
+    }
+#else
+    MemFile_ReadData(memFile, 291968, reinterpret_cast<uint8_t *>(systemBuffers));
+#endif
     FX_FixupEffectDefHandles(restoredSystem, &table);
     // Consume the legacy 32-bit system address to keep the save stream layout.
     MemFile_ReadData(memFile, 4, (uint8_t *)&savedSystemAddress);
@@ -74,24 +97,26 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     restoredSystem->isArchiving = false;
 }
 
-void __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
+bool __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
 {
-    uint32_t p; // [esp+0h] [ebp-10h] BYREF
-    const FxEffectDef *effectDef; // [esp+4h] [ebp-Ch]
-    uint32_t key; // [esp+8h] [ebp-8h]
-    const char *effectDefName; // [esp+Ch] [ebp-4h]
+    uint32_t key;
+    const FxEffectDef *effectDef;
+    const char *effectDefName;
 
     table->count = 0;
-    while (1)
-    {
+    effectDefName = MemFile_ReadCString(memFile);
+    const bool nativeArchive = !I_strcmp(effectDefName, "__KISAK_FX_NATIVE64_V1__");
+    if (nativeArchive)
         effectDefName = MemFile_ReadCString(memFile);
-        if (!*effectDefName)
-            break;
-        MemFile_ReadData(memFile, 4, (uint8_t *)&p);
-        key = p;
-        effectDef = FX_Register((char *)effectDefName);
+
+    while (*effectDefName)
+    {
+        MemFile_ReadData(memFile, sizeof(key), reinterpret_cast<uint8_t *>(&key));
+        effectDef = FX_Register(effectDefName);
         FX_AddEffectDefTableEntry(table, key, effectDef);
+        effectDefName = MemFile_ReadCString(memFile);
     }
+    return nativeArchive;
 }
 
 void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, const FxEffectDef *effectDef)
@@ -256,6 +281,7 @@ void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
 
 void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 {
+    MemFile_WriteCString(memFile, "__KISAK_FX_NATIVE64_V1__");
     if (IsFastFileLoad())
         FX_SaveEffectDefTable_FastFile(memFile);
     else
