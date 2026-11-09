@@ -658,7 +658,9 @@ LABEL_15:;
     // which otherwise lets Bink audio play while no video draw command is queued.
     // Capture that case at function entry to avoid duplicate draws if UI_Refresh
     // changes menu state during this frame.
-    if (clientUIActives[0].connectionState == CA_LOADING ||
+    if ((clientUIActives[0].connectionState == CA_LOADING &&
+         (!switchMapLoadingCinematicNeedsTailDraw ||
+          SCR_IsMapLoadingCinematicActive())) ||
         switchFullscreenCinematicNeedsTailDraw ||
         (switchMapLoadingCinematicNeedsTailDraw &&
          SCR_IsMapLoadingCinematicActive()))
