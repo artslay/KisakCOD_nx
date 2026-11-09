@@ -15,17 +15,21 @@ extern void Switch_LogWrite(const char *msg);
 #include <stringed/stringed_hooks.h>
 #include "cg_servercmds.h"
 
+#ifdef __SWITCH__
+// Pause-menu text/list elements share CG_FadeObjectives with the scoreboard
+// backdrop. Force visibility only for the foreground elements: the backdrop
+// fills the entire screen and must retain the original scoreboard fade rules.
+static float CG_FadePauseMenuElements(const cg_s *cgameGlob)
+{
+    if (cg_paused->current.integer && cg_drawpaused->current.enabled)
+        return 1.0f;
+    return CG_FadeObjectives(cgameGlob);
+}
+#endif
+
 float __cdecl CG_FadeObjectives(const cg_s *cgameGlob)
 {
     float *fadeColor; // r3
-
-#ifdef __SWITCH__
-    // The pause menu uses the same owner-draw objective elements as the score
-    // overlay. Their owner-draw path is explicitly enabled while paused, so
-    // keep the corresponding objective content fully visible as well.
-    if (cg_paused->current.integer && cg_drawpaused->current.enabled)
-        return 1.0f;
-#endif
 
     if (!CG_IsHudHidden())
     {
@@ -80,7 +84,7 @@ void __cdecl CG_DrawObjectiveHeader(
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    fadeAlpha = CG_FadeObjectives(cgArray);
+    fadeAlpha = CG_FadePauseMenuElements(cgArray);
 #ifdef __SWITCH__
     if (cg_paused->current.integer && cg_drawpaused->current.enabled)
     {
@@ -314,7 +318,7 @@ void __cdecl CG_DrawObjectiveList(
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    fadeAlpha = CG_FadeObjectives(cgArray);
+    fadeAlpha = CG_FadePauseMenuElements(cgArray);
     if (fadeAlpha != 0.0)
     {
 		activeColor[0] = 0.60000002f;
@@ -475,7 +479,7 @@ void __cdecl CG_DrawPausedMenuLine(
 
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
-    fadeAlpha = CG_FadeObjectives(cgArray);
+    fadeAlpha = CG_FadePauseMenuElements(cgArray);
 
     if (fadeAlpha != 0.0)
     {
