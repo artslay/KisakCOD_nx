@@ -1314,6 +1314,25 @@ FxEffect *__cdecl CG_StartFx(int localClientNum, centity_s *cent, int startAtTim
     v7 = cgsArray[0].fxs[scale];
     if (!v7)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_ents.cpp", 946, 0, "%s", "fxDef");
+#ifdef __SWITCH__
+    static bool switchLoggedStartedFx[100]{};
+    if (!switchLoggedStartedFx[scale])
+    {
+        switchLoggedStartedFx[scale] = true;
+        char trace[448];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX EFFECT INVENTORY] stage=start id=%d name=%.96s oneShot=%u looping=%u emission=%u startTime=%d origin=(%.2f,%.2f,%.2f)\\n",
+            scale,
+            v7->name ? v7->name : "<null>",
+            static_cast<unsigned>(v7->elemDefCountOneShot),
+            static_cast<unsigned>(v7->elemDefCountLooping),
+            static_cast<unsigned>(v7->elemDefCountEmission),
+            startAtTime,
+            cent->pose.origin[0], cent->pose.origin[1], cent->pose.origin[2]);
+        Switch_LogWrite(trace);
+    }
+#endif
     return FX_SpawnOrientedEffect(localClientNum, v7, startAtTime, cent->pose.origin, v9, 0x87Fu);
 }
 
@@ -1361,6 +1380,39 @@ void __cdecl CG_LoopFx(int localClientNum, centity_s *cent)
         period = cent->nextState.lerp.u.loopFx.period;
         if (period <= 0)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_ents.cpp", 981, 0, "%s", "period > 0");
+#ifdef __SWITCH__
+        {
+            const int fxId = cent->nextState.un1.scale;
+            static bool switchLoggedLoopFx[100]{};
+            if (fxId > 0 && fxId < 100 && !switchLoggedLoopFx[fxId])
+            {
+                switchLoggedLoopFx[fxId] = true;
+                const float dx = cent->pose.origin[0] - cgArray[0].predictedPlayerState.origin[0];
+                const float dy = cent->pose.origin[1] - cgArray[0].predictedPlayerState.origin[1];
+                const float dz = cent->pose.origin[2] - cgArray[0].predictedPlayerState.origin[2];
+                const float distanceSq = dx * dx + dy * dy + dz * dz;
+                const float cullDist = cent->nextState.lerp.u.turret.gunAngles[0];
+                const bool inRange = cullDist == 0.0f || distanceSq < cullDist * cullDist;
+                const FxEffectDef *fxDef = cgsArray[0].fxs[fxId];
+                char trace[448];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX EFFECT INVENTORY] stage=loop id=%d name=%.96s inRange=%u cullDist=%.2f distance=%.2f period=%d ent=%u origin=(%.2f,%.2f,%.2f) player=(%.2f,%.2f,%.2f)\\n",
+                    fxId,
+                    fxDef && fxDef->name ? fxDef->name : "<null>",
+                    inRange ? 1u : 0u,
+                    cullDist,
+                    sqrtf(distanceSq),
+                    cent->nextState.lerp.u.loopFx.period,
+                    static_cast<unsigned>(cent->nextState.number),
+                    cent->pose.origin[0], cent->pose.origin[1], cent->pose.origin[2],
+                    cgArray[0].predictedPlayerState.origin[0],
+                    cgArray[0].predictedPlayerState.origin[1],
+                    cgArray[0].predictedPlayerState.origin[2]);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
         if (!cent->pose.fx.effect)
         {
             started = CG_StartFx(localClientNum, cent, cgArray[0].time);
