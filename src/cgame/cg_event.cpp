@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <universal/com_math.h>
 #include <universal/surfaceflags.h>
 #include "cg_local.h"
 #include "cg_public.h"
@@ -462,7 +463,7 @@ void __cdecl CG_EntityEvent(int32_t localClientNum, centity_s *cent, int32_t eve
                 return;
 #ifdef KISAK_SP
             case EV_BULLET_TRACER: // 0x29
-                if (cent->nextState.eventParm || (cg_tracerChance->current.value * 32768.0f > (float)rand()))
+                if (cent->nextState.eventParm || (cg_tracerChance->current.value > random()))
                 {
                     CG_SpawnTracer(localClientNum, cent->nextState.lerp.pos.trBase, cent->nextState.lerp.u.turret.gunAngles);
                 }
