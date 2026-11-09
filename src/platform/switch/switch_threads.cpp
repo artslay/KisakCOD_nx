@@ -341,6 +341,16 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     // engine's canonical per-context g_com_error[] buffer.
     Com_InitThreadData(context);
 
+    // The database thread must receive its engine-relative priority before
+    // its callback starts. Do this on the new thread itself: the creator cannot
+    // safely read g_nativeThreads[context] immediately after std::thread
+    // construction because this initialization may not have run yet.
+    if (context == THREAD_CONTEXT_DATABASE)
+    {
+        const uint32_t databasePriority = s_cpuCount > 1u ? 0x3Au : 0x3Cu;
+        (void)svcSetThreadPriority(threadGetCurHandle(), databasePriority);
+    }
+
     // std::thread/libnx starts each engine worker with the process-wide mask.
     // If the engine has already selected a Win32-compatible lock mode, apply
     // the same role-specific affinity before this thread begins its callback.
@@ -515,25 +525,6 @@ char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(uint32_t))
     Sys_CreateThread(function, THREAD_CONTEXT_DATABASE);
     if (!threadHandle[THREAD_CONTEXT_DATABASE])
         return 0;
-
-    // The Switch pthread layer creates std::threads at libnx's normal
-    // 0x3B priority. Preserve the engine's relative database-thread priority:
-    // one level above normal with multiple CPUs, one below on a single CPU.
-    Thread *databaseThread =
-        g_nativeThreads[THREAD_CONTEXT_DATABASE].load(std::memory_order_acquire);
-    iassert(databaseThread);
-    const uint32_t databasePriority = s_cpuCount > 1 ? 0x3Au : 0x3Cu;
-    const Result priorityResult =
-        svcSetThreadPriority(databaseThread->handle, databasePriority);
-    if (priorityResult != 0)
-    {
-        char error[160];
-        std::snprintf(
-            error, sizeof(error),
-            "[KisakCOD][THREAD] database priority update failed result=0x%08x priority=%u\\n",
-            priorityResult, databasePriority);
-        Switch_LogWrite(error);
-    }
 
     Sys_ResumeThread(THREAD_CONTEXT_DATABASE);
     return 1;
