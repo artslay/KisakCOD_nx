@@ -206,13 +206,11 @@ void __cdecl R_InitRenderTargets()
 void R_InitRenderTargets_PC()
 {
     _D3DFORMAT backBufferFormat; // [esp+0h] [ebp-4h]
-#ifdef __SWITCH__
-    // DOF and other post effects need only a low-resolution intermediate;
-    // keep the final composite at the full scene resolution.
-    constexpr int postEffectPicmip = 3;
-#else
+// Match the original CoD4 post-effect intermediate resolution (1/4).
+    // The previous Switch-only 1/8 target made the DOF/death blur visibly
+    // blocky after the full-screen upsample; the filter chain already scales
+    // its radius from the actual intermediate dimensions.
     constexpr int postEffectPicmip = 2;
-#endif
 
     backBufferFormat = R_InitFrameBufferRenderTarget();
     if (!g_allocateMinimalResources)
