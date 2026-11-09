@@ -2198,7 +2198,7 @@ void __cdecl DrawText2D(
         char trace[768];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][PAUSE TEXT PIPE] stage=backend n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p materialName='%s' techSet=%p tech='%s' unlit=%u fogable=%u pos=%.1f,%.1f scale=%.4f,%.4f flags=0x%x alpha=%.3f\\n",
+            "[KisakCOD][PAUSE TEXT PIPE] stage=backend n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p materialName='%s' techSet=%p tech='%s' unlit=%u fogable=%u pos=%.1f,%.1f scale=%.4f,%.4f flags=0x%x alpha=%.3f\n",
             switchPauseBackendTextTraceCount,
             safeText,
             safeFontName,
