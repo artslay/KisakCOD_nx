@@ -1357,6 +1357,13 @@ void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, flo
 
 void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
+#ifdef __SWITCH__
+    // cinematicingame clips feed the cinematic code images sampled by world
+    // materials. Keep the fullscreen quad exclusively for screen cinematics,
+    // regardless of which client path attempted to submit it.
+    if (R_Cinematic_IsWorldMaterialPlayback())
+        return;
+#endif
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
     if (cinematicGlob.activeImageFrame == CINEMATIC_INVALID_IMAGE_FRAME &&
