@@ -660,7 +660,8 @@ LABEL_15:;
     // changes menu state during this frame.
     if (clientUIActives[0].connectionState == CA_LOADING ||
         switchFullscreenCinematicNeedsTailDraw ||
-        switchMapLoadingCinematicNeedsTailDraw)
+        (switchMapLoadingCinematicNeedsTailDraw &&
+         SCR_IsMapLoadingCinematicActive()))
     {
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
