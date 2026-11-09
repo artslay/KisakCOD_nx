@@ -1,5 +1,8 @@
 #include <universal/q_shared.h>
 #include "fx_system.h"
+
+#include <cstddef>
+#include <cstdint>
 #include <universal/com_files.h>
 #include <universal/q_parse.h>
 #include <gfx_d3d/r_model.h>
@@ -1078,8 +1081,26 @@ bool __cdecl FX_LoadEditorEffect(const char *name, FxEditorEffectDef *edEffectDe
 
 void* FX_AllocMem(uint32_t size)
 {
+#ifdef __SWITCH__
+    // FxEffectDef/FxElemDef contain native 64-bit pointers on AArch64.
+    return Hunk_AllocAlign(size, 8, "FX_Alloc", 8);
+#else
     return Hunk_AllocAlign(size, 4, "FX_Alloc", 8);
+#endif
 }
+
+#ifdef __SWITCH__
+template<typename T>
+static T FX_RelocateOwnedFxPointer(T pointer, uintptr_t oldBase, uintptr_t oldEnd, uint8_t *newBase)
+{
+    if (!pointer)
+        return pointer;
+    const uintptr_t address = reinterpret_cast<uintptr_t>(pointer);
+    if (address < oldBase || address >= oldEnd)
+        return pointer; // A referenced asset may live outside this converted block.
+    return reinterpret_cast<T>(newBase + (address - oldBase));
+}
+#endif
 
 PhysPreset *__cdecl FX_RegisterPhysPreset(const char *name)
 {
@@ -1090,17 +1111,6 @@ PhysPreset *__cdecl FX_RegisterPhysPreset(const char *name)
 
 const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
 {
-    char v2; // [esp+3h] [ebp-55h]
-    _BYTE *v3; // [esp+8h] [ebp-50h]
-    const char *v4; // [esp+Ch] [ebp-4Ch]
-    const char *v5; // [esp+2Ch] [ebp-2Ch]
-    _DWORD *v6; // [esp+30h] [ebp-28h]
-    _DWORD *v7; // [esp+34h] [ebp-24h]
-    uint32_t baseBytesNeeded; // [esp+40h] [ebp-18h]
-    byte *effectDef; // [esp+48h] [ebp-10h]
-    int relocationDistance; // [esp+4Ch] [ebp-Ch]
-    int elemIndex; // [esp+54h] [ebp-4h]
-
     if (!fx_load.defaultEffect)
     {
         if (!I_stricmp(name, "misc/missing_fx"))
@@ -1118,18 +1128,114 @@ const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
                 "%s",
                 "!I_strcmp( fx_load.defaultEffect->name, FX_DEFAULT_EFFECT_NAME )");
     }
+
+#ifdef __SWITCH__
+    const FxEffectDef *sourceDef = fx_load.defaultEffect;
+    const uint8_t *oldBase = reinterpret_cast<const uint8_t *>(sourceDef);
+    const uintptr_t oldBaseAddress = reinterpret_cast<uintptr_t>(oldBase);
+    const size_t oldSize = static_cast<size_t>(sourceDef->totalSize);
+    const uintptr_t oldEndAddress = oldBaseAddress + oldSize;
+    const uintptr_t oldNameAddress = reinterpret_cast<uintptr_t>(sourceDef->name);
+    if (!sourceDef->name || sourceDef->totalSize <= 0 || oldEndAddress < oldBaseAddress
+        || oldNameAddress < oldBaseAddress || oldNameAddress >= oldEndAddress)
+    {
+        Com_Error(ERR_DROP, "Invalid default FX allocation");
+        return nullptr;
+    }
+
+    const size_t prefixBytes = static_cast<size_t>(oldNameAddress - oldBaseAddress);
+    const size_t oldNameCapacity = oldSize - prefixBytes;
+    const char *oldNameEnd = static_cast<const char *>(memchr(sourceDef->name, '\\0', oldNameCapacity));
+    if (!oldNameEnd)
+    {
+        Com_Error(ERR_DROP, "Invalid default FX name");
+        return nullptr;
+    }
+
+    const size_t newSize = prefixBytes + strlen(name) + 1u;
+    if (newSize > UINT32_MAX || newSize > static_cast<size_t>(INT32_MAX))
+    {
+        Com_Error(ERR_DROP, "Replacement FX name is too long");
+        return nullptr;
+    }
+
+    uint8_t *newBase = static_cast<uint8_t *>(FX_AllocMem(static_cast<uint32_t>(newSize)));
+    if (!newBase)
+        return nullptr;
+    memcpy(newBase, oldBase, prefixBytes);
+
+    FxEffectDef *newDef = reinterpret_cast<FxEffectDef *>(newBase);
+    newDef->name = reinterpret_cast<const char *>(newBase + prefixBytes);
+    memcpy(const_cast<char *>(newDef->name), name, strlen(name) + 1u);
+    newDef->totalSize = static_cast<int32_t>(newSize);
+
+    const FxElemDef *oldElemDefs = sourceDef->elemDefs;
+    newDef->elemDefs = FX_RelocateOwnedFxPointer(
+        oldElemDefs, oldBaseAddress, oldEndAddress, newBase);
+    const int64_t elemCount64 = static_cast<int64_t>(sourceDef->elemDefCountLooping)
+        + sourceDef->elemDefCountOneShot + sourceDef->elemDefCountEmission;
+    if (elemCount64 < 0 || static_cast<uint64_t>(elemCount64) > oldSize / sizeof(FxElemDef))
+    {
+        Com_Error(ERR_DROP, "Invalid default FX element count");
+        return nullptr;
+    }
+
+    if (oldElemDefs)
+    {
+        FxElemDef *newElemDefs = const_cast<FxElemDef *>(newDef->elemDefs);
+        for (int32_t elemIndex = 0; elemIndex < static_cast<int32_t>(elemCount64); ++elemIndex)
+        {
+            const FxElemDef *oldElem = &oldElemDefs[elemIndex];
+            FxElemDef *newElem = &newElemDefs[elemIndex];
+            newElem->velSamples = FX_RelocateOwnedFxPointer(
+                oldElem->velSamples, oldBaseAddress, oldEndAddress, newBase);
+            newElem->visSamples = FX_RelocateOwnedFxPointer(
+                oldElem->visSamples, oldBaseAddress, oldEndAddress, newBase);
+
+            if (oldElem->elemType == FX_ELEM_TYPE_DECAL && oldElem->visualCount)
+            {
+                newElem->visuals.markArray = FX_RelocateOwnedFxPointer(
+                    oldElem->visuals.markArray, oldBaseAddress, oldEndAddress, newBase);
+            }
+            else if (oldElem->visualCount > 1)
+            {
+                newElem->visuals.array = FX_RelocateOwnedFxPointer(
+                    oldElem->visuals.array, oldBaseAddress, oldEndAddress, newBase);
+            }
+
+            FxTrailDef *oldTrail = oldElem->trailDef;
+            newElem->trailDef = FX_RelocateOwnedFxPointer(
+                oldTrail, oldBaseAddress, oldEndAddress, newBase);
+            if (oldTrail && reinterpret_cast<uintptr_t>(oldTrail) >= oldBaseAddress
+                && reinterpret_cast<uintptr_t>(oldTrail) < oldEndAddress)
+            {
+                FxTrailDef *newTrail = newElem->trailDef;
+                newTrail->verts = FX_RelocateOwnedFxPointer(
+                    oldTrail->verts, oldBaseAddress, oldEndAddress, newBase);
+                newTrail->inds = FX_RelocateOwnedFxPointer(
+                    oldTrail->inds, oldBaseAddress, oldEndAddress, newBase);
+            }
+        }
+    }
+    return newDef;
+#else
+    char v2;
+    _BYTE *v3;
+    const char *v4;
+    const char *v5;
+    _DWORD *v6;
+    _DWORD *v7;
+    uint32_t baseBytesNeeded;
+    byte *effectDef;
+    int relocationDistance;
+    int elemIndex;
+
     v5 = &fx_load.defaultEffect->name[strlen(fx_load.defaultEffect->name) + 1];
     baseBytesNeeded = fx_load.defaultEffect->totalSize - (v5 - fx_load.defaultEffect->name);
     effectDef = (byte *)FX_AllocMem(fx_load.defaultEffect->totalSize - (v5 - (fx_load.defaultEffect->name + 1)) + strlen(name));
     memcpy(effectDef, (uint8_t *)fx_load.defaultEffect, baseBytesNeeded);
-#ifdef __SWITCH__
-    FxEffectDef *switchEffectDef = reinterpret_cast<FxEffectDef *>(effectDef);
-    switchEffectDef->name = reinterpret_cast<const char *>(&effectDef[baseBytesNeeded]);
-    v3 = reinterpret_cast<_BYTE *>(const_cast<char *>(switchEffectDef->name));
-#else
     *(_DWORD *)effectDef = (_DWORD)&effectDef[baseBytesNeeded];
     v3 = *(_BYTE **)effectDef;
-#endif
     v4 = name;
     do
     {
@@ -1146,6 +1252,7 @@ const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
         *v6 += relocationDistance;
     }
     return (const FxEffectDef *)effectDef;
+#endif
 }
 
 const FxEffectDef *__cdecl FX_Load(const char *name)
