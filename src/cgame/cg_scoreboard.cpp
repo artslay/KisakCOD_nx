@@ -15,17 +15,17 @@ extern void Switch_LogWrite(const char *msg);
 #include <stringed/stringed_hooks.h>
 #include "cg_servercmds.h"
 
-#ifdef __SWITCH__
 // Pause-menu text/list elements share CG_FadeObjectives with the scoreboard
 // backdrop. Force visibility only for the foreground elements: the backdrop
 // fills the entire screen and must retain the original scoreboard fade rules.
 static float CG_FadePauseMenuElements(const cg_s *cgameGlob)
 {
+#ifdef __SWITCH__
     if (cg_paused->current.integer && cg_drawpaused->current.enabled)
         return 1.0f;
+#endif
     return CG_FadeObjectives(cgameGlob);
 }
-#endif
 
 float __cdecl CG_FadeObjectives(const cg_s *cgameGlob)
 {
