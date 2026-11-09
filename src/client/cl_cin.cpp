@@ -226,7 +226,6 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         }
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
-#ifdef __SWITCH__
         // A cinematicingame clip is displayed by its world material, not by
         // the loading-screen fullscreen path. Once it is promoted, the load
         // movie has completed: release the loading tail-draw latch so this
@@ -237,7 +236,6 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
             switchMapLoadingCinematicFinished = true;
             switchMapLoadingCinematicActive = false;
         }
-#endif
     }
 #else
     if (R_Cinematic_IsNextReady())
