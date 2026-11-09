@@ -1897,13 +1897,11 @@ void __cdecl UI_Refresh()
                 R_Cinematic_IsStarted() ||
                 R_Cinematic_IsPending() ||
                 R_Cinematic_IsNextReady();
-            const bool activeFadeOverlay =
-                cinematicStillActive && SCR_IsCurrentCinematicFadeTransition();
             const bool loadingMovieFinished =
                 SCR_IsMapLoadingCinematicActive() && cinematicFinished;
 
             const bool mayConsumeLoadingLatch =
-                !cinematicStillActive || activeFadeOverlay || loadingMovieFinished;
+                !cinematicStillActive || loadingMovieFinished;
             const bool completedLoadingCinematic =
                 mayConsumeLoadingLatch
                     ? SCR_ConsumeMapLoadingCinematicFinished()
@@ -1918,7 +1916,6 @@ void __cdecl UI_Refresh()
             if (pregameFinished ||
                 loadingMovieFinished ||
                 completedLoadingCinematic ||
-                activeFadeOverlay ||
                 (!pregameVisible && !cinematicStillActive))
             {
                 Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\n");
