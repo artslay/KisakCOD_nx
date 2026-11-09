@@ -834,12 +834,22 @@ void __cdecl CG_DrawFadeInCinematic(int localClientNum)
     char v2; // r31
 
     v2 = 0;
+#ifdef __SWITCH__
+    // While the map-loading cinematic owns the screen, queue promotion and
+    // completion belong to UI_PlayerStart, just as in the stock pregame path.
+    if (R_Cinematic_IsNextReady() && !SCR_IsMapLoadingCinematicActive())
+#else
     if (R_Cinematic_IsNextReady())
+#endif
     {
         R_Cinematic_StartNextPlayback();
         v2 = 1;
     }
+#ifdef __SWITCH__
+    if (R_Cinematic_IsFinished() && !SCR_IsMapLoadingCinematicActive())
+#else
     if (R_Cinematic_IsFinished())
+#endif
         R_Cinematic_StopPlayback();
     if (R_Cinematic_IsStarted() || R_Cinematic_IsPending())
         v2 = 1;
