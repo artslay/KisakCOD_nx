@@ -2571,7 +2571,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         ctx->pstate,
         ctx->esr,
         (ctx->esr >> 26) & 0x3f);
-
+    Switch_LogCrashLine(line);
 
     // Emit the active NAK realloc request and the fault-time register snapshot
     // before deeper diagnostics. x0-x5 are raw registers: memcpy may already
@@ -4144,6 +4144,9 @@ static void Switch_LogRotateIfNeeded(
 void Switch_LogInit()
 {
     g_switchScreenLog = false;
+
+    if (g_switchLogFd >= 0 && g_switchCrashLogFd >= 0)
+        return;
 
     if (g_switchLogFd < 0)
     {
