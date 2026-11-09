@@ -1628,6 +1628,42 @@ void __cdecl FX_SpawnElem(
         }
     }
 #endif
+#ifdef __SWITCH__
+    if (elemDef->elemType <= FX_ELEM_TYPE_TAIL)
+    {
+        static volatile uint32_t switchFxSpriteSpawnTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchFxSpriteSpawnTraceCount, 1u);
+        if (traceIndex < 48u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX SPRITE ACTIVE] stage=spawn n=%u effect=%.80s elem=%d type=%u culled=%u cullEnabled=%u flags=0x%08x visuals=%u spawnRadius=%.3f spawnRange=(%.3f,%.3f) lifeSpan=(%d,%d) origin=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u\\n",
+                traceIndex,
+                effect->def && effect->def->name ? effect->def->name : "<null>",
+                elemDefIndex,
+                static_cast<unsigned>(elemDef->elemType),
+                elemSpawnCulled ? 1u : 0u,
+                fx_cull_elem_spawn->current.enabled ? 1u : 0u,
+                static_cast<unsigned>(elemDef->flags),
+                static_cast<unsigned>(elemDef->visualCount),
+                elemDef->spawnFrustumCullRadius,
+                elemDef->spawnRange.base,
+                elemDef->spawnRange.amplitude,
+                elemDef->lifeSpanMsec.base,
+                elemDef->lifeSpanMsec.amplitude,
+                effectFrameWhenPlayed->origin[0],
+                effectFrameWhenPlayed->origin[1],
+                effectFrameWhenPlayed->origin[2],
+                system->cameraPrev.origin[0],
+                system->cameraPrev.origin[1],
+                system->cameraPrev.origin[2],
+                static_cast<unsigned>(system->cameraPrev.frustumPlaneCount));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (!elemSpawnCulled)
     {
         msecBegin = elemDef->spawnDelayMsec.base + msecWhenPlayed;
