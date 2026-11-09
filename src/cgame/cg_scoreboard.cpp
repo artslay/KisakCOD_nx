@@ -5,6 +5,7 @@
 #include <universal/q_shared.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <gfx_d3d/r_font.h>
 extern void Switch_LogWrite(const char *msg);
 #endif
 #include "cg_scoreboard.h"
