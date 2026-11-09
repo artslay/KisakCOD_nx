@@ -657,7 +657,10 @@ Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, 
     if (fontAssetName &&
         !DB_IsXAssetDefault(ASSET_TYPE_FONT, fontAssetName))
     {
-        Font_s *liveFont = R_RegisterFont_FastFile(fontAssetName);
+        // Use the DB-linked Font_s directly: the Switch zone loader has
+        // already relocated its material/glow dependencies to native pointers.
+        Font_s *liveFont =
+            DB_FindXAssetHeader(ASSET_TYPE_FONT, fontAssetName).font;
         if (liveFont)
             *fontHandle = liveFont;
     }
