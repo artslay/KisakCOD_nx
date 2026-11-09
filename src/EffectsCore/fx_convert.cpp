@@ -1669,7 +1669,8 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
                             "ERROR: no physics preset specified for the FX model [%s]\n",
                             *(const char **)elemVisual->anonymous);
                     }
-                }           }
+                }
+            }
         }
     }
     for (elemIndex = 0; elemIndex < editorEffect->elemCount; ++elemIndex)
