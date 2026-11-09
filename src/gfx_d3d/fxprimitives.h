@@ -103,6 +103,10 @@ struct FxEffect // sizeof=0x80
     FxSpatialFrame frameNow;
     FxSpatialFrame framePrev;
     float distanceTraveled;
+
+    // Handles store byte offsets divided by four, not array indices. The
+    // stride is derived from sizeof(FxEffect), which changes on 64-bit builds.
+    static constexpr size_t HANDLE_SCALE = 4;
 };
 
 template<typename T>
