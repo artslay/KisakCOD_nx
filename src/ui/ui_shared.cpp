@@ -6953,6 +6953,73 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         !I_stricmp(switchGateMenuName, "options_graphics") ||
         !I_stricmp(switchGateMenuName, "player_profile") ||
         switchIsCompassMenu;
+#ifdef __SWITCH__
+    // Snapshot the authored pause-menu controls before Menu_IsVisible can
+    // reject the menu. This records the real fastfile item gates without
+    // changing item visibility, owner-draw IDs, text, or authored scripts.
+    if (menu->window.name && !I_stricmp(menu->window.name, "pausedmenu"))
+    {
+        const dvar_s *pausedDvar = Dvar_FindVar("cl_paused");
+        static bool switchPauseMenuItemsTraced = false;
+        if (!switchPauseMenuItemsTraced &&
+            pausedDvar && pausedDvar->current.integer != 0)
+        {
+            const dvar_s *drawPausedDvar = Dvar_FindVar("cg_drawpaused");
+            const dvar_s *drawHudDvar = Dvar_FindVar("cg_drawHUD");
+            const dvar_s *scriptHudDvar = Dvar_FindVar("hud_drawHUD");
+            char trace[8192];
+            size_t used = static_cast<size_t>(std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][PAUSE OWNERDRAW] menu=pausedmenu count=%d cl_paused=%d cg_drawpaused=%d cg_drawHUD=%d hud_drawHUD=%d cgameInit=%u mismatch=state_check\n",
+                menu->itemCount,
+                pausedDvar->current.integer,
+                drawPausedDvar ? (drawPausedDvar->current.enabled ? 1 : 0) : -1,
+                drawHudDvar ? (drawHudDvar->current.enabled ? 1 : 0) : -1,
+                scriptHudDvar ? (scriptHudDvar->current.enabled ? 1 : 0) : -1,
+                CL_IsCgameInitialized(dc->localClientNum) ? 1u : 0u));
+            for (int itemIndex = 0;
+                 itemIndex < menu->itemCount && itemIndex < 40 &&
+                 used < sizeof(trace) - 1;
+                 ++itemIndex)
+            {
+                itemDef_s *item = menu->items ? menu->items[itemIndex] : nullptr;
+                if (!item || Switch_UI_BadPointer(item))
+                    continue;
+
+                const char *itemName =
+                    item->window.name && !Switch_UI_BadPointer(item->window.name)
+                        ? item->window.name : "<null>";
+                const char *itemText =
+                    item->text && !Switch_UI_BadPointer(item->text)
+                        ? item->text : "<null>";
+                const bool visible = Item_IsVisible(dc->localClientNum, item) != 0;
+                const int written = std::snprintf(
+                    trace + used, sizeof(trace) - used,
+                    "[KisakCOD][PAUSE OWNERDRAW] item=%d name=%.20s type=%d od=%d odf=%08x dyn=%08x dvar=%08x vexp=%d visible=%u rect=%.1f,%.1f %.1fx%.1f text='%.24s'\n",
+                    itemIndex,
+                    itemName,
+                    item->type,
+                    item->window.ownerDraw,
+                    static_cast<unsigned>(item->window.ownerDrawFlags),
+                    static_cast<unsigned>(item->window.dynamicFlags[dc->localClientNum]),
+                    static_cast<unsigned>(item->dvarFlags),
+                    item->visibleExp.numEntries,
+                    visible ? 1u : 0u,
+                    item->window.rect.x,
+                    item->window.rect.y,
+                    item->window.rect.w,
+                    item->window.rect.h,
+                    itemText);
+                if (written <= 0)
+                    break;
+                used += static_cast<size_t>(written) < sizeof(trace) - used
+                    ? static_cast<size_t>(written) : sizeof(trace) - used - 1;
+            }
+            Switch_LogWrite(trace);
+            switchPauseMenuItemsTraced = true;
+        }
+    }
+#endif
     const bool switchMenuVisible = Menu_IsVisible(dc, menu);
     if (switchRelevantGateMenu)
     {
@@ -7058,71 +7125,6 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 
     Menu_UpdatePosition(dc->localClientNum, menu);
 #ifdef __SWITCH__
-    // Snapshot the authored pause-menu controls once, after the real pause
-    // state is active. This is diagnostic only: it does not change visibility,
-    // item data, owner-draw IDs, or authored menu scripts.
-    if (menu->window.name && !I_stricmp(menu->window.name, "pausedmenu"))
-    {
-        const dvar_s *pausedDvar = Dvar_FindVar("cl_paused");
-        static bool switchPauseMenuItemsTraced = false;
-        if (!switchPauseMenuItemsTraced &&
-            pausedDvar && pausedDvar->current.integer != 0)
-        {
-            const dvar_s *drawPausedDvar = Dvar_FindVar("cg_drawpaused");
-            const dvar_s *drawHudDvar = Dvar_FindVar("cg_drawHUD");
-            const dvar_s *scriptHudDvar = Dvar_FindVar("hud_drawHUD");
-            char trace[8192];
-            size_t used = static_cast<size_t>(std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][PAUSE OWNERDRAW] menu=pausedmenu count=%d cl_paused=%d cg_drawpaused=%d cg_drawHUD=%d hud_drawHUD=%d cgameInit=%u mismatch=state_check\\n",
-                menu->itemCount,
-                pausedDvar->current.integer,
-                drawPausedDvar ? (drawPausedDvar->current.enabled ? 1 : 0) : -1,
-                drawHudDvar ? (drawHudDvar->current.enabled ? 1 : 0) : -1,
-                scriptHudDvar ? (scriptHudDvar->current.enabled ? 1 : 0) : -1,
-                CL_IsCgameInitialized(dc->localClientNum) ? 1u : 0u));
-            for (int itemIndex = 0;
-                 itemIndex < menu->itemCount && itemIndex < 40 &&
-                 used < sizeof(trace) - 1;
-                 ++itemIndex)
-            {
-                itemDef_s *item = menu->items ? menu->items[itemIndex] : nullptr;
-                if (!item || Switch_UI_BadPointer(item))
-                    continue;
-
-                const char *itemName =
-                    item->window.name && !Switch_UI_BadPointer(item->window.name)
-                        ? item->window.name : "<null>";
-                const char *itemText =
-                    item->text && !Switch_UI_BadPointer(item->text)
-                        ? item->text : "<null>";
-                const bool visible = Item_IsVisible(dc->localClientNum, item) != 0;
-                const int written = std::snprintf(
-                    trace + used, sizeof(trace) - used,
-                    "[KisakCOD][PAUSE OWNERDRAW] item=%d name=%.20s type=%d od=%d odf=%08x dyn=%08x dvar=%08x vexp=%d visible=%u rect=%.1f,%.1f %.1fx%.1f text='%.24s'\\n",
-                    itemIndex,
-                    itemName,
-                    item->type,
-                    item->window.ownerDraw,
-                    static_cast<unsigned>(item->window.ownerDrawFlags),
-                    static_cast<unsigned>(item->window.dynamicFlags[dc->localClientNum]),
-                    static_cast<unsigned>(item->dvarFlags),
-                    item->visibleExp.numEntries,
-                    visible ? 1u : 0u,
-                    item->window.rect.x,
-                    item->window.rect.y,
-                    item->window.rect.w,
-                    item->window.rect.h,
-                    itemText);
-                if (written <= 0)
-                    break;
-                used += static_cast<size_t>(written) < sizeof(trace) - used
-                    ? static_cast<size_t>(written) : sizeof(trace) - used - 1;
-            }
-            Switch_LogWrite(trace);
-            switchPauseMenuItemsTraced = true;
-        }
-    }
     // player_profile overlays the animated main-menu backdrop. Its window
     // can paint an opaque white layer on Switch even when fullScreen is false,
     // so omit the profile menu's window/background regardless of that flag.

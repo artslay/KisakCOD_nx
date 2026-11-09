@@ -3298,7 +3298,7 @@ void __cdecl UI_OwnerDraw(
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][PAUSE OWNERDRAW] dispatch id=%d cl_paused=%d cg_drawpaused=%d cg_drawHUD=%d hud_drawHUD=%d cgameInit=%u mismatch=state_check\\n",
+                "[KisakCOD][PAUSE OWNERDRAW] dispatch id=%d cl_paused=%d cg_drawpaused=%d cg_drawHUD=%d hud_drawHUD=%d cgameInit=%u mismatch=state_check\n",
                 ownerDraw,
                 pausedDvar ? pausedDvar->current.integer : -1,
                 drawPausedDvar ? (drawPausedDvar->current.enabled ? 1 : 0) : -1,
