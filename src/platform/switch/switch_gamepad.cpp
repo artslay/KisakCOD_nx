@@ -17,7 +17,6 @@
 #include <ui/ui_shared.h>
 #include <gfx_d3d/r_cinematic.h>
 
-extern void SCR_StopCinematic(int32_t localClientNum);
 extern bool SCR_SkipActiveGameCinematic(int32_t localClientNum);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
