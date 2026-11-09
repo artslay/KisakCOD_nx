@@ -251,6 +251,24 @@ void RB_DrawTessSurface()
         R_SetViewport(&gfxCmdBufState, &viewport);
         R_UpdateViewport(&gfxCmdBufSourceState, &viewport);
     }
+#ifdef __SWITCH__
+    else if (gfxCmdBufSourceState.viewMode == VIEW_MODE_2D)
+    {
+        // A command-buffer source caches viewMode locally, but the Vulkan
+        // viewport is device-global. Another source can change the viewport
+        // while this UI source remains in VIEW_MODE_2D. Reconcile the cached
+        // source viewport at the actual tess draw, not only at R_Set2D().
+        R_GetViewport(&gfxCmdBufSourceState, &viewport);
+        if (viewport.x != gfxCmdBufState.viewport.x ||
+            viewport.y != gfxCmdBufState.viewport.y ||
+            viewport.width != gfxCmdBufState.viewport.width ||
+            viewport.height != gfxCmdBufState.viewport.height)
+        {
+            R_SetViewport(&gfxCmdBufState, &viewport);
+            R_UpdateViewport(&gfxCmdBufSourceState, &viewport);
+        }
+    }
+#endif
 
     args.vertexCount = tess.vertexCount;
     args.triCount = tess.indexCount / 3;
