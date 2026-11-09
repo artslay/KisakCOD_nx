@@ -1179,7 +1179,16 @@ void Sys_SetSaveHistoryDoneEvent()
 }
 #endif
 
-void Sys_EndLoadThreadPriorities() {}
-void Sys_BeginLoadThreadPriorities() {}
+void Sys_EndLoadThreadPriorities()
+{
+    iassert(Sys_IsMainThread());
+    (void)svcSetThreadPriority(threadGetCurHandle(), 0x2Cu);
+}
+
+void Sys_BeginLoadThreadPriorities()
+{
+    iassert(Sys_IsMainThread());
+    (void)svcSetThreadPriority(threadGetCurHandle(), 0x2Du);
+}
 
 #endif
