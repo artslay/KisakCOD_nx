@@ -1981,7 +1981,18 @@ void __cdecl FS_TouchFile_f() {}
 void __cdecl FS_AddCommands() {}
 void __cdecl FS_SetRestrictions() {}
 void __cdecl FS_RemoveCommands() {}
-void __cdecl FS_ShutdownSearchPaths() { fs_searchpaths = nullptr; }
+void __cdecl FS_ShutdownSearchPaths()
+{
+    searchpath_s *search = fs_searchpaths;
+    while (search)
+    {
+        searchpath_s *next = search->next;
+        Z_Free(search->dir, 3);
+        Z_Free(search, 3);
+        search = next;
+    }
+    fs_searchpaths = nullptr;
+}
 void __cdecl FS_Shutdown()
 {
     for (int i = 1; i < 65; ++i)
