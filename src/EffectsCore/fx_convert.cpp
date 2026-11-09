@@ -1652,21 +1652,24 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
                 elemVisual = &edElemDef->visuals[visualIndex];
                 if (elemVisual->anonymous)
                 {
+#ifdef __SWITCH__
+                    XModel *fxModel = reinterpret_cast<XModel *>(const_cast<void *>(elemVisual->anonymous));
+                    if (!fxModel->physPreset)
+                    {
+                        v2 = FX_RegisterPhysPreset("default");
+                        fxModel->physPreset = v2;
+#else
                     if (!*((_DWORD *)elemVisual->anonymous + 53))
                     {
                         v2 = FX_RegisterPhysPreset("default");
-#ifdef __SWITCH__
-                        reinterpret_cast<XModel *>(const_cast<void *>(elemVisual->anonymous))->physPreset = v2;
-#else
                         *((_DWORD *)elemVisual->anonymous + 53) = (_DWORD)v2;
 #endif
                         Com_PrintError(
                             CON_CHANNEL_PHYS,
-                            "ERROR: no physics preset specified for the FX model [%s]\n",
+                            "ERROR: no physics preset specified for the FX model [%s]\\n",
                             *(const char **)elemVisual->anonymous);
                     }
-                }
-            }
+                }           }
         }
     }
     for (elemIndex = 0; elemIndex < editorEffect->elemCount; ++elemIndex)
