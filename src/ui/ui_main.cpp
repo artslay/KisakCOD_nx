@@ -560,6 +560,14 @@ Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, 
     case 5:
         return sharedUiInfo.assets.consoleFont;
     case 6:
+#ifdef __SWITCH__
+        // UI_AssetCache may run before every game fastfile and font material is
+        // resident. Re-resolve the stock objective font at the point of use so
+        // R_RegisterFont_FastFile can bind its current material/glow handles.
+        // Do not substitute another font if the authored asset is unavailable.
+        sharedUiInfo.assets.objectiveFont =
+            CL_RegisterFont("fonts/objectivefont", IMAGE_TRACK_MISC);
+#endif
         return sharedUiInfo.assets.objectiveFont;
     }
     scalea = scrPlace->scaleVirtualToReal[1] * scale;
@@ -3281,35 +3289,6 @@ void __cdecl UI_OwnerDraw(
 {
     rectDef_s rect; // [sp+C0h] [-90h] BYREF
 
-#ifdef __SWITCH__
-    // Distinguish a hidden authored item from an owner-draw implementation
-    // or CGame HUD gate that rejects it. Keep one record per stock pause ID.
-    if (ownerDraw >= 99 && ownerDraw <= 102)
-    {
-        static uint8_t switchPauseOwnerDrawTraceCount[4] = {};
-        const unsigned slot = static_cast<unsigned>(ownerDraw - 99);
-        if (switchPauseOwnerDrawTraceCount[slot] < 1u)
-        {
-            const dvar_s *pausedDvar = Dvar_FindVar("cl_paused");
-            const dvar_s *drawPausedDvar = Dvar_FindVar("cg_drawpaused");
-            const dvar_s *drawHudDvar = Dvar_FindVar("cg_drawHUD");
-            const dvar_s *scriptHudDvar = Dvar_FindVar("hud_drawHUD");
-            const bool cgameInitialized = CL_IsCgameInitialized(localClientNum);
-            char trace[512];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][PAUSE OWNERDRAW] dispatch id=%d cl_paused=%d cg_drawpaused=%d cg_drawHUD=%d hud_drawHUD=%d cgameInit=%u mismatch=state_check\n",
-                ownerDraw,
-                pausedDvar ? pausedDvar->current.integer : -1,
-                drawPausedDvar ? (drawPausedDvar->current.enabled ? 1 : 0) : -1,
-                drawHudDvar ? (drawHudDvar->current.enabled ? 1 : 0) : -1,
-                scriptHudDvar ? (scriptHudDvar->current.enabled ? 1 : 0) : -1,
-                cgameInitialized ? 1u : 0u);
-            Switch_LogWrite(trace);
-            ++switchPauseOwnerDrawTraceCount[slot];
-        }
-    }
-#endif
 
     if (CL_IsCgameInitialized(localClientNum))
     {
