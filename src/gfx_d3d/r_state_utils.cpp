@@ -176,7 +176,8 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
         gfxCmdBufState.prim.device->SetSwitchUnlitMode(true);
 #endif
     GfxViewport viewport;
-    if (source->viewMode != VIEW_MODE_2D)
+    const bool entering2D = source->viewMode != VIEW_MODE_2D;
+    if (entering2D)
     {
         source->viewMode = VIEW_MODE_2D;
         source->viewportIsDirty = 1;
@@ -197,7 +198,7 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
     R_SetViewport(&gfxCmdBufState, &viewport);
     R_UpdateViewport(source, &viewport);
 #else
-    if (source->viewMode == VIEW_MODE_2D)
+    if (entering2D)
     {
         R_GetViewport(source, &viewport);
         R_CmdBufSet2D(source, &viewport);
