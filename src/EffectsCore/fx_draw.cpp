@@ -592,7 +592,7 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
     uint32_t frustumPlaneCount; // [esp+18h] [ebp-4h]
 
     result = 0;
-    frustumPlaneCount = draw->camera->frustumPlaneCount;
+    frustumPlaneCount = draw->camera ? draw->camera->frustumPlaneCount : 0u;
     v2 = 0.0f;
     if (fx_cull_elem_draw->current.enabled)
     {
@@ -610,12 +610,10 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
             __sync_fetch_and_add(&switchFxSpriteDrawCullTraceCount, 1u);
         if (traceIndex < 48u)
         {
-            const FxElemVisuals visuals =
-                FX_GetElemVisuals(draw->elemDef, draw->randomSeed);
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX SPRITE ACTIVE] stage=draw n=%u effect=%.80s elem=%u type=%u culled=%u cullEnabled=%u material=%p visualCount=%u radius=%.3f size=(%.3f,%.3f) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u elapsed=%.1f life=%.1f\\n",
+                "[KisakCOD][FX SPRITE ACTIVE] stage=draw n=%u effect=%.80s elem=%u type=%u culled=%u cullEnabled=%u visualCount=%u radius=%.3f size=(%.3f,%.3f) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u elapsed=%.1f life=%.1f\n",
                 traceIndex,
                 draw->effect && draw->effect->def && draw->effect->def->name
                     ? draw->effect->def->name : "<null>",
@@ -623,7 +621,6 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
                 static_cast<unsigned>(draw->elemDef->elemType),
                 result ? 1u : 0u,
                 fx_cull_elem_draw->current.enabled ? 1u : 0u,
-                static_cast<void *>(visuals.material),
                 static_cast<unsigned>(draw->elemDef->visualCount),
                 v2,
                 draw->visState.size[0],
