@@ -1666,7 +1666,7 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
 #endif
                         Com_PrintError(
                             CON_CHANNEL_PHYS,
-                            "ERROR: no physics preset specified for the FX model [%s]\\n",
+                            "ERROR: no physics preset specified for the FX model [%s]\n",
                             *(const char **)elemVisual->anonymous);
                     }
                 }           }
