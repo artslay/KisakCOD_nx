@@ -449,7 +449,7 @@ void __cdecl UI_DrawText(
             font && font->fontName ? font->fontName : "<null>";
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][PAUSE TEXT PIPE] stage=submit n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p pos=%.1f,%.1f scale=%.4f,%.4f alpha=%.3f style=%d maxChars=%d\\n",
+            "[KisakCOD][PAUSE TEXT PIPE] stage=submit n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p pos=%.1f,%.1f scale=%.4f,%.4f alpha=%.3f style=%d maxChars=%d\n",
             switchPauseUiTextTraceCount,
             safeText,
             safeFontName,
