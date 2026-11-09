@@ -169,12 +169,13 @@ void __cdecl R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatr
 void __cdecl R_Set2D(GfxCmdBufSourceState *source)
 {
 #ifdef __SWITCH__
-    // SetSwitchUnlitMode is device-global, unlike source->viewMode. Do not
-    // gate it on this particular source's cached mode: another command-buffer
-    // source may have changed the global mode since this source last ran.
+    // Vulkan viewport, shader uniforms, and the UNLIT depth override are
+    // device-global, while viewMode and the derived matrices are source-local.
+    // Reassert the device mode even when this source already caches 2D.
     if (gfxCmdBufState.prim.device)
         gfxCmdBufState.prim.device->SetSwitchUnlitMode(true);
 #endif
+    GfxViewport viewport;
     if (source->viewMode != VIEW_MODE_2D)
     {
         source->viewMode = VIEW_MODE_2D;
@@ -183,21 +184,25 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
         source->eyeOffset[1] = 0.0;
         source->eyeOffset[2] = 0.0;
         source->eyeOffset[3] = 1.0;
+    }
 
-        GfxViewport viewport;
+#ifdef __SWITCH__
+    // A different command-buffer source can overwrite the device's VS
+    // constants and viewport while this source still caches VIEW_MODE_2D.
+    // Rebuild the 2D matrices on every explicit R_Set2D request: this bumps
+    // matrixVersions so the shared GfxCmdBufState constant cache uploads the
+    // orthographic projection again before the next UI draw.
+    R_GetViewport(source, &viewport);
+    R_CmdBufSet2D(source, &viewport);
+    R_SetViewport(&gfxCmdBufState, &viewport);
+    R_UpdateViewport(source, &viewport);
+#else
+    if (source->viewMode == VIEW_MODE_2D)
+    {
         R_GetViewport(source, &viewport);
         R_CmdBufSet2D(source, &viewport);
-#ifdef __SWITCH__
-        // The scene and framebuffer targets share the same color surface on
-        // Switch. A logical switch between them therefore does not call
-        // IDirect3DDevice9::SetRenderTarget and cannot restore the device-side
-        // viewport. Explicitly apply the viewport used by the 2D projection so
-        // full-screen DOF, cinematics and HUD/menu quads cover the intended
-        // target instead of inheriting the previous 3D view's viewport.
-        R_SetViewport(&gfxCmdBufState, &viewport);
-        R_UpdateViewport(source, &viewport);
-#endif
     }
+#endif
 }
 
 void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
