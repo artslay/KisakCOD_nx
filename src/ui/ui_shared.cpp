@@ -6953,6 +6953,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         !I_stricmp(switchGateMenuName, "options_graphics") ||
         !I_stricmp(switchGateMenuName, "player_profile") ||
         switchIsCompassMenu;
+#endif
 #ifdef __SWITCH__
     const bool switchMenuVisible = Menu_IsVisible(dc, menu);
     if (switchRelevantGateMenu)
