@@ -226,22 +226,23 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         }
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
-        // A cinematicingame clip is displayed by its world material, not by
-        // the loading-screen fullscreen path. Once it is promoted, the load
-        // movie has completed: release the loading tail-draw latch so this
-        // world clip cannot be submitted over the entire camera every frame.
-        if (SCR_IsMapLoadingCinematicActive() &&
-            R_Cinematic_IsWorldMaterialPlayback())
-        {
-            switchMapLoadingCinematicFinished = true;
-            switchMapLoadingCinematicActive = false;
-        }
     }
 #else
     if (R_Cinematic_IsNextReady())
     {
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
+    }
+#endif
+#ifdef __SWITCH__
+    // The active-game renderer can promote a queued world clip before the
+    // client loading-tail path reaches this function. Clear the loading latch
+    // here as well, after either path has had a chance to promote the queue.
+    if (SCR_IsMapLoadingCinematicActive() &&
+        R_Cinematic_IsWorldMaterialPlayback())
+    {
+        switchMapLoadingCinematicFinished = true;
+        switchMapLoadingCinematicActive = false;
     }
 #endif
     if (R_Cinematic_IsFinished())
