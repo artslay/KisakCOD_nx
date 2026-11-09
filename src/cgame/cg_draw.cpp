@@ -16,6 +16,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern void CL_EnforceFadeCinematicSkipRule(void);
 #endif
 
 CenterPrint s_centerPrint[1];
@@ -843,6 +844,9 @@ void __cdecl CG_DrawFadeInCinematic(int localClientNum)
 #endif
     {
         R_Cinematic_StartNextPlayback();
+#ifdef __SWITCH__
+        CL_EnforceFadeCinematicSkipRule();
+#endif
         v2 = 1;
     }
 #ifdef __SWITCH__
