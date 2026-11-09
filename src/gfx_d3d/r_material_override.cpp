@@ -471,13 +471,16 @@ static bool Switch_IsValidTechniqueSetPointer(
     const uintptr_t address =
         reinterpret_cast<uintptr_t>(techSet);
 
-    // Serialized tokens are resolved through the alias table first. If an
-    // unresolved low value is a genuinely mapped native allocation, the
-    // readable-range check below permits it despite its 32-bit numeric value.
-    if ((Switch_Is32BitSerializedPointerToken(address) &&
-         !Switch_IsMappedNativeRange(
-             address, sizeof(MaterialTechniqueSet), alignof(MaterialTechniqueSet))) ||
-        (address & (alignof(MaterialTechniqueSet) - 1u)) != 0)
+    // A native ARM64 pointer is not valid merely because it is wider than
+    // 32 bits and correctly aligned. Validate the complete object range for
+    // every address before any member (including remappedTechniqueSet) is read.
+    // This rejects stale/poisoned high pointers such as 0x433f... that used to
+    // pass the old 32-bit-only mapping check.
+    if (!address ||
+        (address & (alignof(MaterialTechniqueSet) - 1u)) != 0 ||
+        Switch_IsSerializedAddress(address) ||
+        !Switch_IsMappedNativeRange(
+            address, sizeof(MaterialTechniqueSet), alignof(MaterialTechniqueSet)))
         return false;
 
     const uint32_t low = static_cast<uint32_t>(address);
@@ -485,7 +488,7 @@ static bool Switch_IsValidTechniqueSetPointer(
         (low & 0x00FFFFFFu) == 0x00ABABABu)
         return false;
 
-    return !Switch_IsSerializedAddress(address);
+    return true;
 }
 
 
@@ -1192,9 +1195,8 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
 
     const uintptr_t techniqueAddress =
         reinterpret_cast<uintptr_t>(technique);
-    if ((techniqueAddress <= UINT32_MAX &&
-         !Switch_IsMappedNativeRange(
-             techniqueAddress, sizeof(MaterialTechnique), alignof(MaterialTechnique))) ||
+    if (!Switch_IsMappedNativeRange(
+            techniqueAddress, sizeof(MaterialTechnique), alignof(MaterialTechnique)) ||
         (techniqueAddress & (alignof(MaterialTechnique) - 1u)) != 0 ||
         Switch_IsSerializedAddress(techniqueAddress))
     {
@@ -1209,10 +1211,15 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
 
     g_switchFrameStage = "frame/render/technique_resolve/technique_header";
     const uint32_t passCount = static_cast<uint32_t>(technique->passCount);
-    if (!passCount || passCount > 64u)
+    if (!passCount || passCount > 64u ||
+        !Switch_IsMappedNativeRange(
+            techniqueAddress,
+            sizeof(MaterialTechnique) +
+                static_cast<size_t>(passCount - 1u) * sizeof(MaterialPass),
+            alignof(MaterialTechnique)))
     {
         Switch_LogTechniqueRenderReject(
-            "passCount",
+            "passCountOrRange",
             techSet,
             techType,
             technique);
