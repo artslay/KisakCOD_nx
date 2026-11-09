@@ -226,6 +226,18 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         }
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
+#ifdef __SWITCH__
+        // A cinematicingame clip is displayed by its world material, not by
+        // the loading-screen fullscreen path. Once it is promoted, the load
+        // movie has completed: release the loading tail-draw latch so this
+        // world clip cannot be submitted over the entire camera every frame.
+        if (SCR_IsMapLoadingCinematicActive() &&
+            R_Cinematic_IsWorldMaterialPlayback())
+        {
+            switchMapLoadingCinematicFinished = true;
+            switchMapLoadingCinematicActive = false;
+        }
+#endif
     }
 #else
     if (R_Cinematic_IsNextReady())
@@ -238,7 +250,14 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         SCR_StopCinematic(localClientNum);
     if (R_Cinematic_IsStarted())
     {
-        R_Cinematic_DrawStretchPic_Letterboxed();
+#ifdef __SWITCH__
+        // Active-game cinematicingame videos are sampled by world materials.
+        // They must never be submitted as the fullscreen cinematic quad,
+        // including when this function is reached from a loading/cinematic
+        // transition path.
+        if (!R_Cinematic_IsWorldMaterialPlayback())
+#endif
+            R_Cinematic_DrawStretchPic_Letterboxed();
         UI_PaintCinematicSubtitles();
     }
 }
