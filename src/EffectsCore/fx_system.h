@@ -768,7 +768,7 @@ static_assert(sizeof(FxEffectDefTable) == 0x2004);
 void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile);
 uint32_t __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table);
 void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uintptr_t key, const FxEffectDef *effectDef);
-void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table);
+void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table, bool legacyPointerKeys);
 FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle);
 const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table, uintptr_t key);
 void __cdecl FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile);
