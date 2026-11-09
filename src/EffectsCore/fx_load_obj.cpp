@@ -1145,7 +1145,7 @@ const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
 
     const size_t prefixBytes = static_cast<size_t>(oldNameAddress - oldBaseAddress);
     const size_t oldNameCapacity = oldSize - prefixBytes;
-    const char *oldNameEnd = static_cast<const char *>(memchr(sourceDef->name, '\\0', oldNameCapacity));
+    const char *oldNameEnd = static_cast<const char *>(memchr(sourceDef->name, '\0', oldNameCapacity));
     if (!oldNameEnd)
     {
         Com_Error(ERR_DROP, "Invalid default FX name");
