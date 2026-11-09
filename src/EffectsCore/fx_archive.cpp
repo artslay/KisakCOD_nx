@@ -26,15 +26,15 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     if (!systemBuffers)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
     FX_RestoreEffectDefTable(memFile, &table);
-    MemFile_ReadData(memFile, 2656, (uint8_t *)p);
+    // FxSystem contains native-width pointers on Switch; archiving the old
+    // 32-bit byte count would truncate its tail (including restart state).
+    static_assert(sizeof(FxSystem) <= 0x7FFFFFFFu, "FxSystem archive size must fit MemFile");
+    static_assert(sizeof(FxSystemBuffers) <= 0x7FFFFFFFu, "FX buffer archive size must fit MemFile");
+    MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystem)), static_cast<uint8_t *>(p));
 #ifdef __SWITCH__
     // The saved FxSystem byte count is retained from the 32-bit engine, but
     // native pointer fields move members such as isArchiving and iteratorCount
     // on AArch64. Check the restored fields by member, not by legacy offsets.
-    static_assert(offsetof(FxSystem, iteratorCount) + sizeof(int32_t) <= 2656,
-        "FxSystem iteratorCount must be present in the archived prefix");
-    static_assert(offsetof(FxSystem, isArchiving) + sizeof(bool) <= 2656,
-        "FxSystem isArchiving must be present in the archived prefix");
 #endif
     FxSystem *restoredSystem = static_cast<FxSystem *>(p);
     if (!restoredSystem->isArchiving || restoredSystem->iteratorCount)
@@ -56,7 +56,7 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
         Com_Error(ERR_DROP, "Invalid FX visibility buffer offsets in save file");
 #endif
     FX_LinkSystemBuffers(restoredSystem, systemBuffers);
-    MemFile_ReadData(memFile, 291968, (uint8_t *)systemBuffers);
+    MemFile_ReadData(memFile, static_cast<int>(sizeof(FxSystemBuffers)), reinterpret_cast<uint8_t *>(systemBuffers));
     FX_FixupEffectDefHandles(restoredSystem, &table);
     // Consume the legacy 32-bit system address to keep the save stream layout.
     MemFile_ReadData(memFile, 4, (uint8_t *)&savedSystemAddress);
@@ -138,19 +138,25 @@ FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle)
 
     if (!system)
         MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 256, 0, "%s", "system");
-    if (handle >= 0x8000u || handle % 0x20u)
+    constexpr uint32_t handleStride = sizeof(FxEffect) / FxEffect::HANDLE_SCALE;
+    constexpr uint32_t maxHandle = FX_EFFECT_LIMIT * sizeof(FxEffect) / FxEffect::HANDLE_SCALE;
+    static_assert(sizeof(FxEffect) % FxEffect::HANDLE_SCALE == 0,
+        "FxEffect size must be representable by the handle scale");
+    static_assert(maxHandle <= 0xFFFFu,
+        "FX effect handles must fit in uint16_t");
+    if (handle >= maxHandle || handle % handleStride)
     {
         v2 = va("%p %i", system->effects, handle);
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\effectscore\\fx_system.h",
             257,
             0,
-            "%s\n\t%s",
-            "handle < FX_EFFECT_LIMIT * sizeof( FxEffect ) / FxEffect::HANDLE_SCALE && handle % (sizeof( FxEffect ) / FxEffect:"
-            ":HANDLE_SCALE) == 0",
+            "%s\\n\\t%s",
+            "handle < FX_EFFECT_LIMIT * sizeof( FxEffect ) / FxEffect::HANDLE_SCALE && handle % (sizeof( FxEffect ) / FxEffect::HANDLE_SCALE) == 0",
             v2);
     }
-    return (FxEffect *)((char *)system->effects + 4 * handle);
+    return reinterpret_cast<FxEffect *>(reinterpret_cast<uint8_t *>(system->effects)
+        + FxEffect::HANDLE_SCALE * handle);
 }
 
 const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table, uint32_t key)
@@ -236,10 +242,10 @@ void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 270, 0, "%s", "!system->isArchiving");
     system->isArchiving = 1;
     FX_SaveEffectDefTable(system, memFile);
-    MemFile_WriteData(memFile, 2656, system);
+    MemFile_WriteData(memFile, static_cast<int>(sizeof(FxSystem)), system);
     UsedSize = MemFile_GetUsedSize(memFile);
     // ProfMem_Begin("systemBuffers", UsedSize);
-    MemFile_WriteData(memFile, 291968, systemBuffers);
+    MemFile_WriteData(memFile, static_cast<int>(sizeof(FxSystemBuffers)), systemBuffers);
     v3 = MemFile_GetUsedSize(memFile);
     // ProfMem_End(v3);
     p = system;
@@ -259,11 +265,10 @@ void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 
 void __cdecl FX_SaveEffectDefTableEntry_FileLoadObj(const FxEffectDef* effectDef, MemoryFile* data)
 {
-    const FxEffectDef* p; // [esp+0h] [ebp-4h] BYREF
+    const uint32_t key = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(effectDef));
 
-    MemFile_WriteCString(data, (char*)effectDef->name);
-    p = effectDef;
-    MemFile_WriteData(data, 4, &p);
+    MemFile_WriteCString(data, const_cast<char *>(effectDef->name));
+    MemFile_WriteData(data, sizeof(key), &key);
 }
 
 void __cdecl FX_SaveEffectDefTable_LoadObj(MemoryFile* memFile)
