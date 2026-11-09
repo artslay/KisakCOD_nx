@@ -26,6 +26,9 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     if (!systemBuffers)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
     const bool nativeArchive = FX_RestoreEffectDefTable(memFile, &table);
+#ifndef __SWITCH__
+    (void)nativeArchive;
+#endif
     FxSystem *restoredSystem = static_cast<FxSystem *>(p);
 #ifdef __SWITCH__
     static_assert(sizeof(FxSystem) <= 0x7FFFFFFFu, "FxSystem archive size must fit MemFile");
@@ -176,7 +179,7 @@ FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle)
             "c:\\trees\\cod3\\src\\effectscore\\fx_system.h",
             257,
             0,
-            "%s\\n\\t%s",
+            "%s\n\t%s",
             "handle < FX_EFFECT_LIMIT * sizeof( FxEffect ) / FxEffect::HANDLE_SCALE && handle % (sizeof( FxEffect ) / FxEffect::HANDLE_SCALE) == 0",
             v2);
     }
@@ -281,7 +284,9 @@ void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
 
 void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 {
+#ifdef __SWITCH__
     MemFile_WriteCString(memFile, "__KISAK_FX_NATIVE64_V1__");
+#endif
     if (IsFastFileLoad())
         FX_SaveEffectDefTable_FastFile(memFile);
     else
