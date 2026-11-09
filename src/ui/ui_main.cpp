@@ -1910,55 +1910,42 @@ void __cdecl UI_Refresh()
         if (g_currentMenuType == UIMENU_PREGAME)
         {
 #ifdef __SWITCH__
-            // The Switch loading video can be followed by an intro/fade queued
-            // from the game script. In that case the "pregame" menu may remain
-            // in the stack but no longer be visible, so the stock visibility
-            // gate never calls UI_PlayerStart and leaves a finished movie over
-            // a running game. Consume the load-completion latch only once the
-            // client is active, then finish the normal auto-continue transition.
-            if (CL_GetLocalClientConnectionState(0) == CA_ACTIVE)
+            // Keep the stock handoff point: when the loading movie reaches
+            // EOF, UI_PlayerStart owns the transition and promotes any queued
+            // _fade/intro itself. The loading-tail draw must not promote that
+            // queue first, or the scene transition moves by a frame.
+            const bool pregameVisible = Menu_IsMenuOpenAndVisible(0, "pregame");
+            const bool cinematicFinished = R_Cinematic_IsFinished();
+            const bool cinematicStillActive =
+                R_Cinematic_IsStarted() ||
+                R_Cinematic_IsPending() ||
+                R_Cinematic_IsNextReady();
+            const bool activeFadeOverlay =
+                cinematicStillActive && SCR_IsCurrentCinematicFadeTransition();
+            const bool loadingMovieFinished =
+                SCR_IsMapLoadingCinematicActive() && cinematicFinished;
+
+            const bool mayConsumeLoadingLatch =
+                !cinematicStillActive || activeFadeOverlay || loadingMovieFinished;
+            const bool completedLoadingCinematic =
+                mayConsumeLoadingLatch
+                    ? SCR_ConsumeMapLoadingCinematicFinished()
+                    : false;
+            const bool noLoadingCinematic =
+                !SCR_IsMapLoadingCinematicActive();
+            const bool pregameFinished =
+                pregameVisible &&
+                !cinematicStillActive &&
+                (cinematicFinished || noLoadingCinematic);
+
+            if (pregameFinished ||
+                loadingMovieFinished ||
+                completedLoadingCinematic ||
+                activeFadeOverlay ||
+                (!pregameVisible && !cinematicStillActive))
             {
-                const bool pregameVisible = Menu_IsMenuOpenAndVisible(0, "pregame");
-                const bool cinematicFinished = R_Cinematic_IsFinished();
-                const bool cinematicStillActive =
-                    R_Cinematic_IsStarted() ||
-                    R_Cinematic_IsPending() ||
-                    R_Cinematic_IsNextReady();
-                const bool activeFadeOverlay =
-                    cinematicStillActive && SCR_IsCurrentCinematicFadeTransition();
-
-                // The load-completion latch must not trigger UI_PlayerStart in
-                // the middle of an ordinary queued intro movie: UI_PlayerStart
-                // stops a non-fade movie when there is no next item to promote.
-                // Keep the latch pending until either the movie chain drains or
-                // the designated _fade overlay starts, then hand gameplay over.
-                const bool mayConsumeLoadingLatch =
-                    !cinematicStillActive || activeFadeOverlay;
-                const bool completedLoadingCinematic =
-                    mayConsumeLoadingLatch
-                        ? SCR_ConsumeMapLoadingCinematicFinished()
-                        : false;
-                // R_Cinematic_StopPlayback intentionally clears the
-                // finished flag before its asynchronous target change is
-                // processed. A map with no loading movie therefore must not
-                // wait on cinematicFinished forever. It is safe to complete
-                // pregame when there is no loading cinematic configured and
-                // no current/pending/queued cinematic at all.
-                const bool noLoadingCinematic =
-                    !SCR_IsMapLoadingCinematicActive();
-                const bool pregameFinished =
-                    pregameVisible &&
-                    !cinematicStillActive &&
-                    (cinematicFinished || noLoadingCinematic);
-
-                if (pregameFinished ||
-                    completedLoadingCinematic ||
-                    activeFadeOverlay ||
-                    (!pregameVisible && !cinematicStillActive))
-                {
-                    Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\n");
-                    UI_PlayerStart();
-                }
+                Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\n");
+                UI_PlayerStart();
             }
 #else
             if (Menu_IsMenuOpenAndVisible(0, "pregame"))
