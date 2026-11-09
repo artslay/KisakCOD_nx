@@ -37,9 +37,9 @@ FxMarksSystem fx_marksSystemPool[1];
 
 void __cdecl TRACK_fx_system()
 {
-    track_static_alloc_internal(fx_systemPool, 2656, "fx_systemPool", 8);
-    track_static_alloc_internal(fx_systemBufferPool, 291968, "fx_systemBufferPool", 8);
-    track_static_alloc_internal(fx_marksSystemPool, 294940, "fx_marksSystemPool", 8);
+    track_static_alloc_internal(fx_systemPool, sizeof(fx_systemPool), "fx_systemPool", alignof(FxSystem));
+    track_static_alloc_internal(fx_systemBufferPool, sizeof(fx_systemBufferPool), "fx_systemBufferPool", alignof(FxSystemBuffers));
+    track_static_alloc_internal(fx_marksSystemPool, sizeof(fx_marksSystemPool), "fx_marksSystemPool", alignof(FxMarksSystem));
 }
 
 XModel *__cdecl FX_RegisterModel(const char *modelName)
@@ -174,7 +174,12 @@ int32_t __cdecl FX_EffectToHandle(FxSystem *system, FxEffect *effect)
     iassert(system);
     iassert(effect && effect >= &system->effects[0] && effect < &system->effects[FX_EFFECT_LIMIT]);
 
-    return ((char *)effect - (char *)system->effects) / 4;
+    const uintptr_t byteOffset = reinterpret_cast<uintptr_t>(effect) - reinterpret_cast<uintptr_t>(system->effects);
+    iassert(byteOffset % sizeof(FxEffect) == 0);
+    iassert(byteOffset / FxEffect::HANDLE_SCALE < 0xFFFFu);
+    static_assert(FX_EFFECT_LIMIT * sizeof(FxEffect) / FxEffect::HANDLE_SCALE <= 0xFFFFu,
+        "FX effect handles must fit in uint16_t");
+    return static_cast<int32_t>(byteOffset / FxEffect::HANDLE_SCALE);
 }
 
 
