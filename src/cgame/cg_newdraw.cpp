@@ -3181,9 +3181,13 @@ void __cdecl CG_OwnerDraw(
     // The script-controlled HUD flag can be left off by a mission transition.
     // Still render the map, mission objectives and target markers in the pause
     // menu: these are pause-screen navigation UI, not the live gameplay HUD.
+    // Pause overlays can be opened from several UI entry points. The
+    // active-menu enum is not guaranteed to be UIMENU_INGAME for every
+    // authored confirmation/pause popup, even though cl_paused is already
+    // set. Use the authoritative paused state so the stock objective header,
+    // objective list, PAUSED line and compass owner-draws are not suppressed.
     const bool switchPauseMissionMap =
         cg_paused->current.integer &&
-        UI_GetActiveMenu(localClientNum) == UIMENU_INGAME &&
         ((ownerDraw >= 99 && ownerDraw <= 102) ||
          (ownerDraw >= 145 && ownerDraw <= 164) ||
          (ownerDraw >= 180 && ownerDraw <= 187));
