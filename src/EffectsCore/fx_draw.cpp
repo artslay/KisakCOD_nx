@@ -592,6 +592,8 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
     uint32_t frustumPlaneCount; // [esp+18h] [ebp-4h]
 
     result = 0;
+    frustumPlaneCount = draw->camera->frustumPlaneCount;
+    v2 = 0.0f;
     if (fx_cull_elem_draw->current.enabled)
     {
         frustumPlaneCount = FX_CullElementForDraw_FrustumPlaneCount(draw);
@@ -599,11 +601,43 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
         v5 = draw->visState.size[1];
         v3 = v4 - v5;
         v2 = v3 < 0.0 ? v5 : v4;
-        if (FX_CullSphere(draw->camera, frustumPlaneCount, draw->posWorld, v2))
+        result = FX_CullSphere(draw->camera, frustumPlaneCount, draw->posWorld, v2) != 0;
+    }
+#ifdef __SWITCH__
+    {
+        static volatile uint32_t switchFxSpriteDrawCullTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchFxSpriteDrawCullTraceCount, 1u);
+        if (traceIndex < 48u)
         {
-            return 1;
+            const FxElemVisuals visuals =
+                FX_GetElemVisuals(draw->elemDef, draw->randomSeed);
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX SPRITE ACTIVE] stage=draw n=%u effect=%.80s elem=%u type=%u culled=%u cullEnabled=%u material=%p visualCount=%u radius=%.3f size=(%.3f,%.3f) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u elapsed=%.1f life=%.1f\\n",
+                traceIndex,
+                draw->effect && draw->effect->def && draw->effect->def->name
+                    ? draw->effect->def->name : "<null>",
+                static_cast<unsigned>(draw->elem->defIndex),
+                static_cast<unsigned>(draw->elemDef->elemType),
+                result ? 1u : 0u,
+                fx_cull_elem_draw->current.enabled ? 1u : 0u,
+                static_cast<void *>(visuals.material),
+                static_cast<unsigned>(draw->elemDef->visualCount),
+                v2,
+                draw->visState.size[0],
+                draw->visState.size[1],
+                static_cast<unsigned>(draw->visState.color[3]),
+                draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
+                draw->camera->origin[0], draw->camera->origin[1], draw->camera->origin[2],
+                static_cast<unsigned>(frustumPlaneCount),
+                draw->msecElapsed,
+                draw->msecLifeSpan);
+            Switch_LogWrite(trace);
         }
     }
+#endif
     return result;
 }
 
