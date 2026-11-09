@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "fx_system.h"
+#include <universal/com_math.h>
 
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
@@ -777,8 +778,13 @@ void __cdecl FX_SetEffectRandomSeed(FxEffect *effect, const FxEffectDef *remoteD
 {
     if (FX_EffectAffectsGameplay(remoteDef))
         effect->randomSeed = (479 * ((uint32_t)(214013 * effect->msecBegin + 2531011) >> 17)) >> 15; // has to be unsigned
+#ifdef __SWITCH__
+    else
+        effect->randomSeed = static_cast<uint32_t>(479.0f * random());
+#else
     else
         effect->randomSeed = 479 * rand() / 0x8000;
+#endif
 
     // LWSS ADD - bounds check
     iassert(effect->randomSeed < ARRAY_COUNT(fx_randomTable));
