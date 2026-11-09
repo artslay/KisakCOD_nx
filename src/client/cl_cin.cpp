@@ -64,7 +64,7 @@ static const char *CL_GetEffectiveCinematicName()
     return effectiveName;
 }
 
-static bool CL_IsCurrentCinematicFadeTransition()
+static bool CL_IsFadeTransitionInCinematicChain()
 {
     // Protect the whole handoff chain. While an ordinary loading movie is
     // still current, the authored *_fade may already be queued as next; a skip
@@ -76,7 +76,7 @@ static bool CL_IsCurrentCinematicFadeTransition()
 
 bool SCR_IsCurrentCinematicFadeTransition()
 {
-    return CL_IsCurrentCinematicFadeTransition();
+    return CL_IsFadeTransitionInCinematicChain();
 }
 
 // Recompute the skip policy for the effective movie instead of leaving a
@@ -251,7 +251,7 @@ static bool SCR_StopCinematicInternal(int32_t localClientNum, bool forceSkip)
     CL_EnforceFadeCinematicSkipRule();
 #ifdef __SWITCH__
     if (forceSkip && !cinematicFinished &&
-        (!cin_skippable || CL_IsCurrentCinematicFadeTransition()))
+        (!cin_skippable || CL_IsFadeTransitionInCinematicChain()))
     {
         Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game unskippable cinematic\n");
         return false;
@@ -364,9 +364,9 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
     (void)SCR_StopCinematicInternal(localClientNum, false);
 }
 
-// Scripted cinematics displayed while the connection remains CA_ACTIVE use the
-// same queue/loading cleanup as a regular cinematic skip. The current film's
-// fade suffix and explicit unskippablecinematic policy are still enforced.
+// Route active-game and loading-screen controller skips through the same
+// policy as keyboard input. Both the active target and a queued *_fade transition
+// are protected before the playback target can be stopped.
 bool SCR_SkipActiveGameCinematic(int32_t localClientNum)
 {
     // The render path normally promotes a queued movie from CG_DrawFadeInCinematic.
