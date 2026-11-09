@@ -3,6 +3,10 @@
 #endif
 
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "cg_scoreboard.h"
 #include "cg_newdraw.h"
 #include "cg_main.h"
@@ -76,6 +80,38 @@ void __cdecl CG_DrawObjectiveHeader(
             "(localClientNum == 0)",
             localClientNum);
     fadeAlpha = CG_FadeObjectives(cgArray);
+#ifdef __SWITCH__
+    if (cg_paused->current.integer && cg_drawpaused->current.enabled)
+    {
+        static uint32_t switchObjectiveHeaderTraceCount = 0;
+        if (switchObjectiveHeaderTraceCount < 2u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][PAUSE TEXT PIPE] stage=cgame_header n=%u fadeAlpha=%.3f font=%p pixelHeight=%d glyphCount=%d glyphs=%p material=%p glow=%p rect=%.1f,%.1f,%.1f,%.1f align=%d,%d scale=%.4f style=%d colorAlpha=%.3f textKey=CGAME_MISSIONOBJECTIVES\n",
+                switchObjectiveHeaderTraceCount,
+                fadeAlpha,
+                static_cast<void *>(font),
+                font ? font->pixelHeight : -1,
+                font ? font->glyphCount : -1,
+                font ? static_cast<void *>(font->glyphs) : nullptr,
+                font ? static_cast<void *>(font->material) : nullptr,
+                font ? static_cast<void *>(font->glowMaterial) : nullptr,
+                rect ? rect->x : 0.0f,
+                rect ? rect->y : 0.0f,
+                rect ? rect->w : 0.0f,
+                rect ? rect->h : 0.0f,
+                rect ? rect->horzAlign : -1,
+                rect ? rect->vertAlign : -1,
+                scale,
+                textStyle,
+                color ? color[3] : -1.0f);
+            Switch_LogWrite(trace);
+            ++switchObjectiveHeaderTraceCount;
+        }
+    }
+#endif
     if (fadeAlpha != 0.0)
     {
         //*(float *)(textStyle + 12) = fadeColor;
