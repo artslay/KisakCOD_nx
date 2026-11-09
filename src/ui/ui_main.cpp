@@ -1808,18 +1808,9 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 void UI_PlayerStart()
 {
 #ifdef __SWITCH__
-    // UI_AutoContinue() can reach UI_PlayerStart as soon as the map becomes
-    // active, before the independently-running load movie reaches EOF.
-    // Keep the load movie alive instead of stopping it just because there is
-    // no *next* cinematic queued yet.
-    if (SCR_IsMapLoadingCinematicActive() &&
-        (R_Cinematic_IsStarted() || R_Cinematic_IsPending()))
-    {
-        CL_SetSkipRendering(0);
-        UI_SetActiveMenu(0, UIMENU_NONE);
-        Switch_LogWrite("[KisakCOD][CIN LOAD] preserving active load movie through auto-continue\n");
-        return;
-    }
+    // Match the stock handoff: UI_PlayerStart owns the transition even when
+    // the loading cinematic is still active. A queued _fade must replace that
+    // movie immediately; otherwise stop the current movie as the original does.
     if (SCR_IsMapLoadingCinematicActive())
         SCR_SetMapLoadingCinematicActive(false);
 #endif
