@@ -1611,7 +1611,7 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
     int32_t visualIndex; // [esp+C0h] [ebp-134h]
     int32_t emitIndex[32]; // [esp+C4h] [ebp-130h] BYREF
     int32_t firstEmitted; // [esp+144h] [ebp-B0h]
-    int32_t totalBytesNeeded; // [esp+148h] [ebp-ACh]
+    size_t totalBytesNeeded;
     int32_t visStateCount[33]; // [esp+14Ch] [ebp-A8h] BYREF
     const FxEditorElemDef *edElemDef; // [esp+1D0h] [ebp-24h]
     int32_t elemIndex; // [esp+1D4h] [ebp-20h]
@@ -1622,7 +1622,8 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
     if (!editorEffect)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 1429, 0, "%s", "editorEffect");
     memset((uint8_t *)emitIndex, 0xFFu, sizeof(emitIndex));
-    totalBytesNeeded = 252 * editorEffect->elemCount + 32;
+    totalBytesNeeded = sizeof(FxEffectDef)
+        + sizeof(FxElemDef) * static_cast<size_t>(editorEffect->elemCount);
     elemCountTotal = editorEffect->elemCount;
     for (elemIndex = 0; elemIndex < editorEffect->elemCount; ++elemIndex)
     {
@@ -1686,11 +1687,18 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
             }
         }
     }
-    totalBytesNeeded += strlen(editorEffect->name) + 1;
-    effect = (FxEffectDef *)Alloc(totalBytesNeeded);
-    memPool = (uint8_t *)&effect[1];
-    effect->elemDefs = (const FxElemDef *)&effect[1];
-    memPool += 252 * elemCountTotal;
+    totalBytesNeeded += strlen(editorEffect->name) + 1u;
+    if (totalBytesNeeded > UINT32_MAX)
+    {
+        Com_Error(ERR_DROP, "FX effect '%s' exceeds the allocator size limit", editorEffect->name);
+        return nullptr;
+    }
+    effect = static_cast<FxEffectDef *>(Alloc(static_cast<uint32_t>(totalBytesNeeded)));
+    if (!effect)
+        return nullptr;
+    memPool = reinterpret_cast<uint8_t *>(&effect[1]);
+    effect->elemDefs = reinterpret_cast<const FxElemDef *>(&effect[1]);
+    memPool += sizeof(FxElemDef) * static_cast<size_t>(elemCountTotal);
     v9 = FX_ConvertElemDefsOfType((FxElemDef*)effect->elemDefs, editorEffect, 1u, velStateCount, visStateCount, emitIndex, &memPool);
     effect->elemDefCountLooping = v9;
     v10 = FX_ConvertElemDefsOfType(
@@ -1727,19 +1735,21 @@ const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, voi
     }
     LoopingLife = FX_GetLoopingLife(effect);
     effect->msecLoopingLife = LoopingLife;
-    effect->totalSize = totalBytesNeeded;
-    effect->name = (const char *)memPool;
+    effect->name = reinterpret_cast<const char *>(memPool);
     v15 = editorEffect;
-    name = (char *)effect->name;
+    name = const_cast<char *>(effect->name);
     do
     {
         v13 = v15->name[0];
         *name = v15->name[0];
-        v15 = (const FxEditorEffectDef *)((char *)v15 + 1);
+        v15 = reinterpret_cast<const FxEditorEffectDef *>(reinterpret_cast<const char *>(v15) + 1);
         ++name;
     } while (v13);
-    memPool += &effect->name[strlen(effect->name) + 1] - effect->name;
-    if (memPool - (uint8_t *)effect != effect->totalSize)
+    memPool += strlen(effect->name) + 1u;
+    effect->totalSize = static_cast<int32_t>(memPool - reinterpret_cast<uint8_t *>(effect));
+    if (static_cast<size_t>(memPool - reinterpret_cast<uint8_t *>(effect)) > totalBytesNeeded)
+        Com_Error(ERR_DROP, "FX effect '%s' exceeded its native allocation", editorEffect->name);
+    if (memPool - reinterpret_cast<uint8_t *>(effect) != effect->totalSize)
         MyAssertHandler(
             ".\\EffectsCore\\fx_convert.cpp",
             1536,
