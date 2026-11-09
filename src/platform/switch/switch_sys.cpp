@@ -3787,6 +3787,15 @@ static bool Switch_LogIsHudDiagnostic(const char *msg)
     return false;
 }
 
+// The pause-text pipeline trace is deliberately narrow and bounded at
+// its call sites. It is a temporary exception to the normal error-only filter
+// so UI submission and backend material decisions can be compared in one log.
+static bool Switch_LogIsPauseTextPipe(const char *msg)
+{
+    static constexpr char prefix[] = "[KisakCOD][PAUSE TEXT PIPE]";
+    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
+}
+
 static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
 {
     if (!msg || !*msg)
@@ -3873,6 +3882,7 @@ void Switch_LogWrite(const char *msg)
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
+        !Switch_LogIsPauseTextPipe(msg) &&
         !Switch_LogIsVulkanFrameTiming(msg) &&
         !Switch_LogIsCpuSceneTiming(msg) &&
         !Switch_LogIsFxDiagnostic(msg) &&
@@ -3882,7 +3892,9 @@ void Switch_LogWrite(const char *msg)
         !Switch_LogIsStartupMessage(msg) &&
         !Switch_LogIsLevelLoadMessage(msg))
         return;
-    if (!Switch_LogIsImportant(msg) && Switch_LogIsVerboseTrace(msg))
+    if (!Switch_LogIsImportant(msg) &&
+        !Switch_LogIsPauseTextPipe(msg) &&
+        Switch_LogIsVerboseTrace(msg))
         return;
 
     const bool isSwitchDiag = std::strncmp(msg, "[SWITCH ", 8) == 0;
