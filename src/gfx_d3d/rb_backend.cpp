@@ -2175,50 +2175,6 @@ void __cdecl DrawText2D(
     monospaceWidth = GetMonospaceWidth(font, renderFlags);
     glowMaterial = 0;
     material = Material_FromHandle(font->material);
-#ifdef __SWITCH__
-    // Compare the actual UI text submissions with what reaches the backend.
-    // The material's authored UNLIT technique is the one glyph quads request;
-    // a valid UNLIT entry must not be rejected because another variant is LIT.
-    static uint32_t switchPauseBackendTextTraceCount = 0;
-    if (switchPauseBackendTextTraceCount < 64u && Dvar_GetInt("cl_paused") != 0)
-    {
-        const MaterialTechniqueSet *techniqueSet =
-            material ? material->techniqueSet : nullptr;
-        const bool hasUnlit =
-            techniqueSet &&
-            techniqueSet->techniques[TECHNIQUE_UNLIT] != nullptr;
-        const bool fogable = RB_MaterialHasAnyFogableTechnique(material);
-        const char *safeText = text ? text : "<null>";
-        const char *safeFontName =
-            font->fontName ? font->fontName : "<null>";
-        const char *safeMaterialName =
-            material && material->info.name ? material->info.name : "<null>";
-        const char *safeTechniqueName =
-            techniqueSet && techniqueSet->name ? techniqueSet->name : "<null>";
-        char trace[768];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][PAUSE TEXT PIPE] stage=backend n=%u text='%.112s' font='%s' fontPtr=%p px=%d glyphs=%d glyphPtr=%p material=%p materialName='%s' techSet=%p tech='%s' unlit=%u fogable=%u pos=%.1f,%.1f scale=%.4f,%.4f flags=0x%x alpha=%.3f\n",
-            switchPauseBackendTextTraceCount,
-            safeText,
-            safeFontName,
-            static_cast<void *>(font),
-            font->pixelHeight,
-            font->glyphCount,
-            static_cast<void *>(font->glyphs),
-            static_cast<const void *>(material),
-            safeMaterialName,
-            static_cast<const void *>(techniqueSet),
-            safeTechniqueName,
-            hasUnlit ? 1u : 0u,
-            fogable ? 1u : 0u,
-            x, y, xScale, yScale,
-            static_cast<unsigned>(renderFlags),
-            color.array[3]);
-        Switch_LogWrite(trace);
-        ++switchPauseBackendTextTraceCount;
-    }
-#endif
     iassert( material );
 #ifdef __SWITCH__
     
