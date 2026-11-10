@@ -507,22 +507,6 @@ static void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
         return;
     }
 
-    // Font_s contains native pointers on ARM64. The generic clone path uses
-    // the original 32-bit asset size and copies only the serialized 24-byte
-    // layout, truncating material, glowMaterial and glyphs in the DB pool copy.
-    if (from && to && from->type == ASSET_TYPE_FONT)
-    {
-        const Font_s *source = from->header.font;
-        Font_s *destination = to->header.font;
-        if (!source || !destination)
-        {
-            Com_Error(ERR_DROP, "Switch Font clone received a null asset");
-            return;
-        }
-        std::memcpy(destination, source, sizeof(Font_s));
-        return;
-    }
-
     if (from && to && from->type == ASSET_TYPE_LIGHT_DEF)
     {
         GfxLightDef *destination = to->header.lightDef;
