@@ -1092,15 +1092,16 @@ void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output
 }
 
 static const AimScreenTarget *AimAssist_GetLockOnTarget(
-    AimAssistGlobals *aaGlob)
+    AimAssistGlobals *aaGlob,
+    int previousTarget)
 {
     constexpr float kAimAssistTargetRange = 8192.0f;
     const float maxDistanceSqr = kAimAssistTargetRange * kAimAssistTargetRange;
 
-    if (aaGlob->lockOnTargetEnt != ENTITYNUM_NONE)
+    if (previousTarget != ENTITYNUM_NONE)
     {
         const AimScreenTarget *currentTarget =
-            AimAssist_GetTargetFromEntity(aaGlob, aaGlob->lockOnTargetEnt);
+            AimAssist_GetTargetFromEntity(aaGlob, previousTarget);
         if (currentTarget &&
             currentTarget->distSqr < maxDistanceSqr &&
             AimAssist_DoBoundsIntersectCenterBox(
@@ -1219,7 +1220,7 @@ static void AimAssist_ApplyGamepadLockOn(
         return;
     }
 
-    const AimScreenTarget *target = AimAssist_GetLockOnTarget(aaGlob);
+    const AimScreenTarget *target = AimAssist_GetLockOnTarget(aaGlob, previousTarget);
     if (!target || !std::isfinite(target->distSqr) || target->distSqr <= 0.0f)
         return;
 
