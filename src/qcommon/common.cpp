@@ -2368,15 +2368,35 @@ void __cdecl Com_AssetLoadUI()
 #elif KISAK_SP
         zoneInfo.name = "ui";
 #endif
-        // Keep UI assets resident while SV_LoadLevelAssets replaces the DB_ZONE_GAME map zone.
-        // This same free mask still replaces UI/load/dev assets on an explicit UI reload.
         zoneInfo.allocFlags = DB_ZONE_LOAD;
-        zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_LOAD | DB_ZONE_DEV;
-        // UI_Init runs immediately after this call through CL_StartHunkUsers().
-        // On Switch the database worker is genuinely asynchronous; do not let
-        // UI_Init query the UI fastfile while its menus are still being loaded.
-        // Keep the normal archive/unarchive synchronization around this reload.
+#ifdef __SWITCH__
+        // R_LoadGraphicsAssets() has already loaded the UI fastfile as
+        // DB_ZONE_LOAD before renderer registration. The renderer rebinds
+        // material/image aliases from that zone before Com_StartHunkUsers()
+        // reaches this function. Unloading DB_ZONE_LOAD here would invalidate
+        // those freshly rebound pointers and can leave the frontend black or
+        // crash while its menus are initialized.
+        //
+        // Keep the existing UI zone and retire only the level/dev zones. A
+        // null zone name is supported by DB_LoadXZone(): DB_LoadXAssets still
+        // performs the requested unload without scheduling a duplicate "ui".
+        if (DB_IsZoneLoaded(zoneInfo.name))
+        {
+            zoneInfo.name = nullptr;
+            zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_DEV;
+        }
+        else
+        {
+            zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_LOAD | DB_ZONE_DEV;
+        }
+
+        // The Switch database worker is asynchronous; complete any UI reload
+        // before CL_StartHunkUsers() queries the menu assets.
         DB_LoadXAssets(&zoneInfo, 1u, 1);
+#else
+        zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_LOAD | DB_ZONE_DEV;
+        DB_LoadXAssets(&zoneInfo, 1u, 0);
+#endif
     }
 #ifdef KISAK_MP
     UI_SetMap((char*)"", (char*)"");
