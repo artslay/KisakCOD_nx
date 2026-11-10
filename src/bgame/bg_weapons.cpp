@@ -389,7 +389,7 @@ float __cdecl BG_GetWeaponAutoAimRange(uint32_t weaponIndex)
         return 0.0f;
 
     const float range = bg_weaponDefs[weaponIndex]->autoAimRange;
-    return range > 0.0f ? range : 0.0f;
+    return range > 0.0f && range <= 8192.0f ? range : 0.0f;
 }
 
 float __cdecl BG_GetWeaponAimAssistRange(uint32_t weaponIndex, float adsLerp)
@@ -404,8 +404,9 @@ float __cdecl BG_GetWeaponAimAssistRange(uint32_t weaponIndex, float adsLerp)
         adsLerp = 1.0f;
 
     const WeaponDef *weapDef = bg_weaponDefs[weaponIndex];
-    return weapDef->aimAssistRange +
+    const float range = weapDef->aimAssistRange +
         (weapDef->aimAssistRangeAds - weapDef->aimAssistRange) * adsLerp;
+    return range > 0.0f && range <= 8192.0f ? range : 0.0f;
 }
 
 bool __cdecl BG_WeaponRequiresLockonToFire(uint32_t weaponIndex)
