@@ -4091,8 +4091,8 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
-    // HUD/compass/subtitle and generic performance traces stay disabled.
-    // Only the bounded frame/scene timing summaries below are explicitly allowed.
+    // Keep transient render, player-input, DVAR and HUD diagnostics out of
+    // the persistent log. Errors and explicit level boundaries use separate paths.
     if (!msg || !*msg || Switch_LogIsSuppressedDiagnostic(msg) ||
         Switch_LogIsHudDiagnostic(msg) || Switch_LogIsPerformanceDiagnostic(msg))
         return;
