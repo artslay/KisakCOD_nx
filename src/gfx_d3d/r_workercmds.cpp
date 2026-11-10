@@ -441,8 +441,20 @@ void R_InitWorkerThreads()
         R_InitWorkerCmds();
         for (workerThreadIndexa = 0; workerThreadIndexa < 2; ++workerThreadIndexa)
         {
-            if (!Sys_SpawnWorkerThread((void(__cdecl *)(uint32_t))R_WorkerThread, workerThreadIndexa))
+            const ThreadContext_t workerContext =
+                static_cast<ThreadContext_t>(workerThreadIndexa + 2u);
+            if (!Sys_SpawnWorkerThread(
+                    (void(__cdecl *)(uint32_t))R_WorkerThread,
+                    workerThreadIndexa))
+            {
                 Com_Error(ERR_FATAL, "Failed to create thread");
+            }
+
+            // Sys_CreateThread preserves the engine's suspended-start
+            // semantics. Start workers whose registered defaults enable
+            // them; R_UpdateActiveWorkerThreads handles later dvar changes.
+            if (r_smp_worker_thread[workerThreadIndexa]->current.enabled)
+                Sys_ResumeThread(workerContext);
         }
     }
 }
