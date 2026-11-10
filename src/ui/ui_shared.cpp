@@ -2716,7 +2716,6 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
     if (!dc)
         return nullptr;
 
-    const char *wantedCommand = restart ? "Restart" : "Leave";
     menuDef_t *bestMenu = nullptr;
     int bestScore = 0;
     const int menuCount = dc->menuCount < 0 ? 0 : (dc->menuCount > 640 ? 640 : dc->menuCount);
@@ -2735,8 +2734,7 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
         }
 
         // Menus marked hidden while KEYCATCH_UI is active cannot serve as
-        // pause confirmations even if one of their items happens to carry
-        // a matching Leave/Restart script.
+        // visible pause confirmations, even if they contain actionable items.
         if ((menu->window.staticFlags & 0x40000000u) != 0)
         {
             clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(dc->localClientNum);
@@ -2819,7 +2817,6 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
         return false;
     }
 
-    const char *wantedCommand = restart ? "Restart" : "Leave";
     for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
     {
         itemDef_s *candidate = menu->items[itemIndex];
