@@ -250,6 +250,8 @@ static void Switch_LogTerminateBacktrace();
     __builtin_unreachable();
 }
 
+// std::terminate does not provide a libnx ThreadExceptionDump. Record the
+// unwinder's call-chain IPs instead of presenting them as fault registers.
 struct SwitchTerminateBacktrace
 {
     static constexpr unsigned int kMaxFrames = 48u;
@@ -296,7 +298,7 @@ static void Switch_LogTerminateBacktrace()
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][CRASH] terminate_frame[%u] pc=0x%016llx\n",
+            "[KisakCOD][CRASH] terminate_frame[%u] unwind_ip=0x%016llx\n",
             i,
             static_cast<unsigned long long>(trace.frames[i]));
         Switch_LogCrashLine(line);
