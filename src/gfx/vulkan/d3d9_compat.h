@@ -463,12 +463,6 @@ struct KisakVkShader : IDirect3DResource9 {
     // The shared VERTDECL_PACKED route has a different POSITION0 format for
     // FX code meshes because their authored binormalSign lives in position.w.
     bool linkedFxCodeMesh=false;
-    // Cache which pixel-shader sampler slots implement CoD4 HSM depth taps.
-    uint32_t sunShadowCompareShaderMask=UINT32_MAX;
-    bool sunShadowCompareBindingTraceLogged=false;
-    bool sunShadowCompareSamplerTraceLogged=false;
-    // The fragment SPIR-V module variant linked for the currently bound sun map.
-    uint32_t linkedSunShadowCompareMask=UINT32_MAX;
     uint32_t AddRef() override
     {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;
