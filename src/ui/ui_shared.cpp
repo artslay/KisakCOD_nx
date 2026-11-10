@@ -2717,10 +2717,10 @@ static bool Switch_UI_ItemLabelMatchesPauseConfirmation(
         Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и вернуться в меню");
 }
 
-// Most stock confirmation buttons call Restart/Leave directly. The Save and
-// Quit popup may instead own a save-specific alias (for example forcesave)
-// while keeping the same authored label. Recognize that button only inside an
-// explicitly named save/quit popup; its actual action script remains untouched.
+// The authored yes/no controls in stock confirmation popups may use
+// aliases and generic labels ("Yes"/"No") instead of embedding Restart/Leave
+// or repeating the question in the button text. Trust those controls only
+// inside the corresponding named confirmation popup; preserve their scripts.
 static bool Switch_UI_ItemMatchesPauseConfirmationAction(
     const itemDef_s *item,
     const char *menuName,
@@ -2739,11 +2739,11 @@ static bool Switch_UI_ItemMatchesPauseConfirmationAction(
     if (restart)
     {
         return Switch_UI_ContainsCaseInsensitive(menuName, "restart") &&
-            Switch_UI_ItemLabelMatchesPauseConfirmation(item, true);
+            Switch_UI_IsConfirmationMenuName(menuName);
     }
 
     return Switch_UI_IsSaveQuitConfirmationMenuName(menuName) &&
-        Switch_UI_ItemLabelMatchesPauseConfirmation(item, false);
+        Switch_UI_IsConfirmationMenuName(menuName);
 }
 
 static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restart)
@@ -3037,27 +3037,18 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
 
     if (isRestart)
     {
-        // Prefer the authored confirmation popup when this level/UI set has one.
-        // Some maps do not load a restart popup; in that case dispatch the same
-        // engine menu command instead of consuming the button press.
-        if (!Switch_UI_OpenPauseConfirmation(dc, true))
-        {
-            const char *restartArgs[] = { "Restart" };
-            UI_RunMenuScript(dc->localClientNum, restartArgs, "Restart");
-        }
+        // A pause action must not bypass its confirmation prompt. If this
+        // level's authored popup is unavailable, leave the pause menu active
+        // instead of executing Restart immediately.
+        Switch_UI_OpenPauseConfirmation(dc, true);
         return true;
     }
 
     if (isReturnToMenu)
     {
-        // Prefer the authored confirmation popup when it is available. A few
-        // level UI sets omit it; falling back to the engine's Leave command is
-        // required so the action still disconnects and enters UIMENU_MAIN.
-        if (!Switch_UI_OpenPauseConfirmation(dc, false))
-        {
-            const char *leaveArgs[] = { "Leave" };
-            UI_RunMenuScript(dc->localClientNum, leaveArgs, "Leave");
-        }
+        // Keep the confirmation dialog's authored save/leave flow intact.
+        // Never turn a missing popup into an immediate Leave action.
+        Switch_UI_OpenPauseConfirmation(dc, false);
         return true;
     }
 
@@ -4480,97 +4471,10 @@ void __cdecl Menu_HandleKey(UiContext *dc, menuDef_t *menu, int key, int down)
                             item = menu->items[i];
                     }
                 }
-#ifdef __SWITCH__
-                // Menus normally receive their initial focus in Menus_Open.
-                // If an onOpen script or a visibility transition leaves the
-                // active menu without a focused child, do not require a wasted
-                // first A/Enter press just to acquire focus. Resolve the first
-                // actionable visible item now and let the ordinary key path
-                // activate it on this same press.
-                if (!item && down &&
-                    (key == K_ENTER || key == K_KP_ENTER) &&
-                    menu->items && menu->itemCount > 0 &&
-                    Menu_GetFocused(dc) == menu)
-                {
-                    int startIndex = menu->cursorItem[dc->localClientNum];
-                    if (startIndex < 0 || startIndex >= menu->itemCount)
-                        startIndex = 0;
-
-                    for (int offset = 0; offset < menu->itemCount; ++offset)
-                    {
-                        const int candidateIndex =
-                            (startIndex + offset) % menu->itemCount;
-                        itemDef_s *candidate = menu->items[candidateIndex];
-                        if (!candidate || Switch_UI_BadPointer(candidate))
-                            continue;
-                        if ((candidate->window.staticFlags & 0x100000) != 0)
-                            continue;
-
-                        const bool hasAction =
-                            candidate->action &&
-                            !Switch_UI_BadPointer(candidate->action) &&
-                            candidate->action[0];
-                        const bool hasKeyboardControl =
-                            Item_IsTextField(candidate) ||
-                            candidate->type == 6 ||
-                            (candidate->type >= 0xA && candidate->type <= 0xE);
-                        if (!hasAction && !hasKeyboardControl)
-                            continue;
-
-                        if (!Window_IsVisible(dc->localClientNum, &candidate->window) ||
-                            !Item_IsVisible(dc->localClientNum, candidate))
-                            continue;
-                        if (candidate->window.ownerDrawFlags &&
-                            !UI_OwnerDrawVisible(candidate->window.ownerDrawFlags))
-                            continue;
-                        if ((candidate->dvarFlags & 0xCu) != 0 &&
-                            !Item_EnableShowViaDvar(candidate, 4))
-                            continue;
-                        if ((candidate->dvarFlags & 3u) != 0 &&
-                            !Item_EnableShowViaDvar(candidate, 1))
-                            continue;
-
-                        bool candidateFocused = false;
-                        if (candidate->type == 0)
-                        {
-                            Menu_ClearFocus(dc, menu);
-                            if (Menu_GetFocused(dc) != menu)
-                                break;
-                            Window_AddDynamicFlags(
-                                dc->localClientNum, &candidate->window, 2);
-                            if (candidate->onFocus &&
-                                !Switch_UI_BadPointer(candidate->onFocus))
-                                Item_RunScript(dc, candidate, (char *)candidate->onFocus);
-                            candidateFocused =
-                                Window_HasFocus(dc->localClientNum, &candidate->window) &&
-                                Menu_GetFocused(dc) == menu;
-                        }
-                        else
-                        {
-                            const float focusX = candidate->window.rect.x +
-                                candidate->window.rect.w * 0.5f;
-                            const float focusY = candidate->window.rect.y +
-                                candidate->window.rect.h * 0.5f;
-                            candidateFocused =
-                                Item_SetFocus(dc, candidate, focusX, focusY);
-                        }
-
-                        if (candidateFocused &&
-                            Window_HasFocus(dc->localClientNum, &candidate->window) &&
-                            Menu_GetFocused(dc) == menu)
-                        {
-                            Menu_SetCursorItem(
-                                dc->localClientNum, menu, candidateIndex);
-                            item = candidate;
-                            break;
-                        }
-
-                        // A focus callback may have opened another menu.
-                        if (Menu_GetFocused(dc) != menu)
-                            break;
-                    }
-                }
-#endif
+                // The controller focus pass in Menus_Open owns initial
+                // selection. Do not acquire focus and activate a confirmation
+                // button on the same Enter press: that skips the visible
+                // selected state and can trigger Yes before the user sees it.
                 if (key != K_MWHEELDOWN && key != K_MWHEELUP || item && item->type == 6)
                 {
                     if (item && Item_HandleKey(dc, item, key, down))
@@ -7778,7 +7682,9 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // This also handles the case where both siblings are null or are painted in
                 // the opposite order. Unpaired separators, panels, and control backgrounds
                 // are deliberately left alone.
-                if (UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME &&
+                if ((UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME ||
+                     (item->parent && item->parent->window.name &&
+                      Switch_UI_IsConfirmationMenuName(item->parent->window.name))) &&
                     item->window.style == 3 &&
                     (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
@@ -7866,7 +7772,9 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     }
                 }
 
-                if (UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME &&
+                if ((UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME ||
+                     (item->parent && item->parent->window.name &&
+                      Switch_UI_IsConfirmationMenuName(item->parent->window.name))) &&
                     item->window.style == 3 &&
                     (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
