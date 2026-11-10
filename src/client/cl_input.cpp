@@ -1136,8 +1136,10 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     AimInput aimInput{};
     AimOutput aimOutput{};
 
-    aimInput.pitchAxis = effectivePitchAxis;
-    aimInput.yawAxis = effectiveYawAxis;
+    // Keep the stick axes normalized; AimAssist applies input_viewSensitivity
+    // to the native CoD4 turn rates, before graph shaping and acceleration.
+    aimInput.pitchAxis = pitchAxis;
+    aimInput.yawAxis = yawAxis;
     aimInput.forwardAxis = forwardAxis;
     aimInput.rightAxis = rightAxis;
     aimInput.buttons = cmd->buttons;
