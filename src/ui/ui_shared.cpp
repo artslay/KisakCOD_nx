@@ -2682,41 +2682,6 @@ static bool Switch_UI_ItemHasActionScript(const itemDef_s *item)
          (item->onAccept && !Switch_UI_BadPointer(item->onAccept) && item->onAccept[0]));
 }
 
-static bool Switch_UI_ItemLabelMatchesPauseConfirmation(
-    const itemDef_s *item,
-    bool restart)
-{
-    if (!item)
-        return false;
-
-    const char *rawText =
-        item->text && !Switch_UI_BadPointer(item->text) ? item->text : nullptr;
-    const char *translatedText = rawText ? UI_SafeTranslateString(rawText) : nullptr;
-    const char *itemName =
-        item->window.name && !Switch_UI_BadPointer(item->window.name)
-            ? item->window.name : nullptr;
-
-    if (restart)
-    {
-        return Switch_UI_ContainsCaseInsensitive(itemName, "restart") ||
-            Switch_UI_ContainsCaseInsensitive(rawText, "restart") ||
-            Switch_UI_ContainsCaseInsensitive(translatedText, "restart") ||
-            Switch_UI_ContainsCaseInsensitive(rawText, "перезапуск") ||
-            Switch_UI_ContainsCaseInsensitive(translatedText, "перезапуск") ||
-            Switch_UI_ContainsCaseInsensitive(rawText, "перезапустить") ||
-            Switch_UI_ContainsCaseInsensitive(translatedText, "перезапустить");
-    }
-
-    return Switch_UI_ContainsCaseInsensitive(itemName, "savequit") ||
-        Switch_UI_ContainsCaseInsensitive(rawText, "save and quit") ||
-        Switch_UI_ContainsCaseInsensitive(rawText, "save & quit") ||
-        Switch_UI_ContainsCaseInsensitive(rawText, "save_and_quit") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "save and quit") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "save & quit") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и выйти") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и вернуться в меню");
-}
-
 // The authored yes/no controls in stock confirmation popups may use
 // aliases and generic labels ("Yes"/"No") instead of embedding Restart/Leave
 // or repeating the question in the button text. Trust those controls only
