@@ -3092,7 +3092,10 @@ CallBuiltIn:
                         builtinIndex,
                         builtinIndexPos,
                         builtinTableSize,
-                        builtinTarget);
+                        builtinTarget,
+                        opcode,
+                        fs.localId,
+                        scrVmPub.function_count);
                 }
             }
             scrVmPub.function_frame->fs.pos = fs.pos;
