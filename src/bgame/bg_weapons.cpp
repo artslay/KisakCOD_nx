@@ -382,6 +382,50 @@ WeaponDef *__cdecl BG_GetWeaponDef(uint32_t weaponIndex)
     return bg_weaponDefs[weaponIndex];
 }
 
+float __cdecl BG_GetWeaponAutoAimRange(uint32_t weaponIndex)
+{
+    if (!weaponIndex || weaponIndex >= ARRAY_COUNT(bg_weaponDefs) ||
+        weaponIndex > bg_lastParsedWeaponIndex || !bg_weaponDefs[weaponIndex])
+        return 0.0f;
+
+    const float range = bg_weaponDefs[weaponIndex]->autoAimRange;
+    return range > 0.0f ? range : 0.0f;
+}
+
+float __cdecl BG_GetWeaponAimAssistRange(uint32_t weaponIndex, float adsLerp)
+{
+    if (!weaponIndex || weaponIndex >= ARRAY_COUNT(bg_weaponDefs) ||
+        weaponIndex > bg_lastParsedWeaponIndex || !bg_weaponDefs[weaponIndex])
+        return 0.0f;
+
+    if (!(adsLerp >= 0.0f))
+        adsLerp = 0.0f;
+    else if (adsLerp > 1.0f)
+        adsLerp = 1.0f;
+
+    const WeaponDef *weapDef = bg_weaponDefs[weaponIndex];
+    return weapDef->aimAssistRange +
+        (weapDef->aimAssistRangeAds - weapDef->aimAssistRange) * adsLerp;
+}
+
+bool __cdecl BG_WeaponRequiresLockonToFire(uint32_t weaponIndex)
+{
+    if (!weaponIndex || weaponIndex >= ARRAY_COUNT(bg_weaponDefs) ||
+        weaponIndex > bg_lastParsedWeaponIndex || !bg_weaponDefs[weaponIndex])
+        return true;
+
+    return bg_weaponDefs[weaponIndex]->requireLockonToFire != 0;
+}
+
+bool __cdecl BG_WeaponIsOffhand(uint32_t weaponIndex)
+{
+    if (!weaponIndex || weaponIndex >= ARRAY_COUNT(bg_weaponDefs) ||
+        weaponIndex > bg_lastParsedWeaponIndex || !bg_weaponDefs[weaponIndex])
+        return false;
+
+    return bg_weaponDefs[weaponIndex]->offhandClass != OFFHAND_CLASS_NONE;
+}
+
 uint32_t __cdecl BG_GetWeaponIndex(const WeaponDef *weapDef)
 {
     uint32_t weapIndex; // [esp+0h] [ebp-4h]
