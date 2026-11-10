@@ -244,6 +244,55 @@ static void Switch_LogScriptReturn(
     Switch_LogWrite(trace);
 }
 
+// Emit a bounded diagnostic before the VM dereferences a suspicious builtin entry.
+// AArch64 instruction addresses must be 4-byte aligned; an unaligned target is
+// evidence that either the bytecode index or the function table has been corrupted.
+static void Switch_LogBuiltinDispatchFault(
+    const char *reason,
+    uint32_t builtinIndex,
+    const char *indexPos,
+    int tableSize,
+    uintptr_t target)
+{
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (traceId >= 8u)
+        return;
+
+    const uintptr_t programBase =
+        reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
+    const uintptr_t codeAddress =
+        reinterpret_cast<uintptr_t>(indexPos);
+    const bool codePosInProgram =
+        programBase && codeAddress >= programBase &&
+        codeAddress - programBase < scrCompilePub.programLen;
+    const uint64_t codeOffset = codePosInProgram
+        ? static_cast<uint64_t>(codeAddress - programBase)
+        : ~uint64_t{0};
+
+    char trace[768];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][SCRIPT BUILTIN DISPATCH] n=%u reason=%s opcode=%d index=%u tableSize=%d capacity=%u target=0x%llx targetAlign=%u indexPos=%p codeOffset=0x%llx codeValid=%u program=%p programLen=%u localId=%u vmDepth=%d\n",
+        traceId,
+        reason ? reason : "unknown",
+        opcode,
+        builtinIndex,
+        tableSize,
+        static_cast<unsigned int>(SCR_FUNC_TABLE_SIZE),
+        static_cast<unsigned long long>(target),
+        static_cast<unsigned int>(target & 3u),
+        static_cast<const void *>(indexPos),
+        static_cast<unsigned long long>(codeOffset),
+        codePosInProgram ? 1u : 0u,
+        static_cast<const void *>(scrVarPub.programBuffer),
+        scrCompilePub.programLen,
+        fs.localId,
+        scrVmPub.function_count);
+    Switch_LogWrite(trace);
+}
+
 // Called by Scr_CastBool only on an invalid input type. Keep the trace bounded:
 // this is an error-path diagnostic, not a per-opcode trace.
 extern function_stack_t fs;
@@ -2995,7 +3044,48 @@ setlocalvariablefieldcached:
             scrVmPub.outparamcount = *(unsigned char *)fs.pos++;
 CallBuiltIn:
             iassert(!scrVmPub.inparamcount);
-            builtinIndex = Scr_ReadUnsignedShort(&fs.pos);
+            {
+                const char *builtinIndexPos = fs.pos;
+                builtinIndex = Scr_ReadUnsignedShort(&fs.pos);
+
+                const int builtinTableSize = scrCompilePub.func_table_size;
+                const bool builtinIndexValid =
+                    builtinTableSize >= 0 &&
+                    builtinTableSize <= SCR_FUNC_TABLE_SIZE &&
+                    builtinIndex < static_cast<uint32_t>(builtinTableSize) &&
+                    builtinIndex < static_cast<uint32_t>(SCR_FUNC_TABLE_SIZE);
+                const uintptr_t builtinTarget = builtinIndexValid
+                    ? scrCompilePub.func_table[builtinIndex]
+                    : 0u;
+
+                if (!builtinIndexValid)
+                {
+                    Switch_LogBuiltinDispatchFault(
+                        "index_out_of_range",
+                        builtinIndex,
+                        builtinIndexPos,
+                        builtinTableSize,
+                        0u);
+                }
+                else if (!builtinTarget)
+                {
+                    Switch_LogBuiltinDispatchFault(
+                        "null_target",
+                        builtinIndex,
+                        builtinIndexPos,
+                        builtinTableSize,
+                        builtinTarget);
+                }
+                else if (builtinTarget & 3u)
+                {
+                    Switch_LogBuiltinDispatchFault(
+                        "unaligned_target",
+                        builtinIndex,
+                        builtinIndexPos,
+                        builtinTableSize,
+                        builtinTarget);
+                }
+            }
             scrVmPub.function_frame->fs.pos = fs.pos;
             if (scrVmDebugPub.func_table[builtinIndex].breakpointCount)
             {
