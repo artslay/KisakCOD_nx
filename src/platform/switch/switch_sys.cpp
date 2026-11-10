@@ -3921,11 +3921,12 @@ static bool Switch_LogIsScriptDiagnostic(const char *msg)
     if (!msg || !*msg)
         return false;
 
-    // These bounded VM traces identify the source of undefined script values.
+    // Bounded VM traces expose malformed builtin dispatch and script-value faults.
     // Keep them explicit so the normal Switch log remains filtered.
     static constexpr const char *const kScriptDiagnosticPrefixes[] =
     {
         "[KisakCOD][SCRIPT RETURN]",
+        "[KisakCOD][SCRIPT BUILTIN DISPATCH]",
         "[KisakCOD][SCRIPT OBJECT ARG UNDEFINED]",
         "[KisakCOD][SCRIPT VECTOR ARG UNDEFINED]"
     };
@@ -3946,7 +3947,6 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
 
     static constexpr const char *const kPlayerAnglePrefixes[] =
     {
-        "[KisakCOD][PLAYER INPUT]",
         "[KisakCOD][PLAYER ANGLES POST]"
     };
     for (const char *prefix : kPlayerAnglePrefixes)
@@ -4092,7 +4092,7 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
-    // Keep transient render timing, selected player-angle/input-gate, DVAR
+    // Keep transient render timing, selected player-angle and DVAR
     // and HUD diagnostics out of the persistent log. Errors and level boundaries
     // use separate paths.
     if (!msg || !*msg || Switch_LogIsSuppressedDiagnostic(msg) ||
