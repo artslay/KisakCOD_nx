@@ -142,6 +142,12 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     if (fps_index < 32)
         return y;
     farRight = cg_debugInfoCornerOffset->current.value + scrPlace->virtualViewableMax[0] - scrPlace->virtualViewableMin[0];
+#ifdef __SWITCH__
+    // The Switch overlay right-aligns strings by subtracting their measured
+    // width. Keep the anchor inside the viewable edge; the stock positive
+    // offset placed the right edge beyond the screen.
+    farRight = scrPlace->virtualViewableMax[0] - cg_debugInfoCornerOffset->current.value;
+#endif
     minTime = 0x7FFFFFFF;
     maxTime = 0;
     total = 0;
