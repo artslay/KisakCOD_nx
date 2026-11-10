@@ -1093,10 +1093,12 @@ void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output
 
 static const AimScreenTarget *AimAssist_GetLockOnTarget(
     AimAssistGlobals *aaGlob,
+    float range,
     int previousTarget)
 {
-    constexpr float kAimAssistTargetRange = 8192.0f;
-    const float maxDistanceSqr = kAimAssistTargetRange * kAimAssistTargetRange;
+    if (!std::isfinite(range) || range <= 0.0f)
+        return nullptr;
+    const float maxDistanceSqr = range * range;
 
     if (previousTarget != ENTITYNUM_NONE)
     {
@@ -1116,7 +1118,7 @@ static const AimScreenTarget *AimAssist_GetLockOnTarget(
 
     return AimAssist_GetBestTarget(
         aaGlob,
-        kAimAssistTargetRange,
+        range,
         aaGlob->tweakables.lockOnRegionWidth,
         aaGlob->tweakables.lockOnRegionHeight);
 }
@@ -1190,6 +1192,117 @@ static float AimAssist_TrackTurnRate(
     return LinearTrack(target, current, acceleration, deltaTime);
 }
 
+static void AimAssist_ClearGamepadAutoAimTarget(AimAssistGlobals *aaGlob)
+{
+    aaGlob->autoAimTargetEnt = ENTITYNUM_NONE;
+    aaGlob->autoAimActive = false;
+    aaGlob->autoAimPitch = 0.0f;
+    aaGlob->autoAimPitchTarget = 0.0f;
+    aaGlob->autoAimYaw = 0.0f;
+    aaGlob->autoAimYawTarget = 0.0f;
+}
+
+static bool AimAssist_UpdateGamepadAutoAimTarget(AimAssistGlobals *aaGlob)
+{
+    const AimScreenTarget *target =
+        AimAssist_GetTargetFromEntity(aaGlob, aaGlob->autoAimTargetEnt);
+    if (!target)
+        return false;
+
+    float targetDir[3];
+    float targetAngles[3];
+    Vec3Sub(target->aimPos, aaGlob->viewOrigin, targetDir);
+    vectoangles(targetDir, targetAngles);
+    aaGlob->autoAimPitchTarget = targetAngles[0];
+    aaGlob->autoAimYawTarget = targetAngles[1];
+    return std::isfinite(targetAngles[0]) && std::isfinite(targetAngles[1]);
+}
+
+static void AimAssist_SetGamepadAutoAimTarget(
+    AimAssistGlobals *aaGlob,
+    const AimScreenTarget *target)
+{
+    AimAssist_ClearGamepadAutoAimTarget(aaGlob);
+    aaGlob->autoAimTargetEnt = target->entIndex;
+    aaGlob->autoAimActive = true;
+    aaGlob->autoAimPitch = aaGlob->viewAngles[0];
+    aaGlob->autoAimYaw = aaGlob->viewAngles[1];
+    AimAssist_UpdateGamepadAutoAimTarget(aaGlob);
+}
+
+static void AimAssist_ApplyGamepadAutoAim(
+    const AimInput *input,
+    AimOutput *output,
+    AimAssistGlobals *aaGlob,
+    float deltaTime)
+{
+    const bool reloadState =
+        input->ps->weaponstate >= WEAPON_RELOADING &&
+        input->ps->weaponstate <= WEAPON_RELOAD_END;
+
+    const uint32_t weaponIndex = input->ps->weapon
+        ? BG_GetViewmodelWeaponIndex(input->ps)
+        : 0;
+    const float autoAimRange = weaponIndex
+        ? BG_GetWeaponAutoAimRange(weaponIndex)
+        : 0.0f;
+
+    // Native CoD4 behavior: auto-aim acquires once on ADS press, only for
+    // ADS-capable weapons, then tracks that same entity until ADS is released.
+    if (!aim_autoaim_enabled || !aim_autoaim_enabled->current.enabled ||
+        !weaponIndex || autoAimRange <= 0.0f ||
+        !BG_IsAimDownSightWeapon(weaponIndex) ||
+        reloadState || !(input->buttons & BUTTON_ADS) ||
+        aaGlob->adsLerp <= 0.0f)
+    {
+        AimAssist_ClearGamepadAutoAimTarget(aaGlob);
+        aaGlob->autoAimPressed = false;
+        return;
+    }
+
+    if (!aaGlob->autoAimPressed)
+    {
+        const AimScreenTarget *target = AimAssist_GetBestTarget(
+            aaGlob,
+            autoAimRange,
+            aaGlob->tweakables.autoAimRegionWidth,
+            aaGlob->tweakables.autoAimRegionHeight);
+        if (target)
+            AimAssist_SetGamepadAutoAimTarget(aaGlob, target);
+        aaGlob->autoAimPressed = true;
+    }
+
+    if (!aaGlob->autoAimActive)
+        return;
+
+    if (!AimAssist_UpdateGamepadAutoAimTarget(aaGlob))
+    {
+        // Do not acquire a different enemy while ADS remains held.
+        AimAssist_ClearGamepadAutoAimTarget(aaGlob);
+        return;
+    }
+
+    const float rate = aim_autoaim_lerp
+        ? AimAssist_ClampFinite(aim_autoaim_lerp->current.value, 0.0f, 100.0f, 0.0f)
+        : 0.0f;
+    if (rate <= 0.0f || deltaTime <= 0.0f)
+        return;
+
+    // DiffTrackAngle is the original ADS auto-aim interpolation (rate * dt
+    // is a blend coefficient here, unlike turn-rate degrees/second). Bound
+    // the coefficient below 1 so a frame hitch cannot snap across the yaw wrap.
+    const float trackTime = std::min(deltaTime, 0.90f / rate);
+    const float newPitch = DiffTrackAngle(
+        aaGlob->autoAimPitchTarget, aaGlob->autoAimPitch, rate, trackTime);
+    const float newYaw = DiffTrackAngle(
+        aaGlob->autoAimYawTarget, aaGlob->autoAimYaw, rate, trackTime);
+
+    output->pitch += AngleDelta(newPitch, aaGlob->autoAimPitch);
+    output->yaw += AngleDelta(newYaw, aaGlob->autoAimYaw);
+    aaGlob->autoAimPitch = newPitch;
+    aaGlob->autoAimYaw = newYaw;
+}
+
 static void AimAssist_ApplyGamepadLockOn(
     const AimInput *input,
     AimOutput *output,
@@ -1199,8 +1312,17 @@ static void AimAssist_ApplyGamepadLockOn(
     const int previousTarget = aaGlob->lockOnTargetEnt;
     aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
 
+    const uint32_t weaponIndex = input->ps->weapon;
+    const bool usingOffhand =
+        (input->ps->weapFlags & PWF_USING_OFFHAND) != 0 &&
+        weaponIndex && BG_WeaponIsOffhand(weaponIndex);
+    const float lockRange = weaponIndex
+        ? BG_GetWeaponAimAssistRange(weaponIndex, aaGlob->adsLerp)
+        : 0.0f;
+
     if (!aim_lockon_enabled || !aim_lockon_enabled->current.enabled ||
-        (input->ps->weapFlags & PWF_USING_OFFHAND) != 0 ||
+        !weaponIndex || BG_WeaponRequiresLockonToFire(weaponIndex) ||
+        usingOffhand || lockRange <= 0.0f ||
         aaGlob->autoAimActive || aaGlob->autoMeleeActive ||
         deltaTime <= 0.0f)
     {
@@ -1220,7 +1342,8 @@ static void AimAssist_ApplyGamepadLockOn(
         return;
     }
 
-    const AimScreenTarget *target = AimAssist_GetLockOnTarget(aaGlob, previousTarget);
+    const AimScreenTarget *target = AimAssist_GetLockOnTarget(
+        aaGlob, lockRange, previousTarget);
     if (!target || !std::isfinite(target->distSqr) || target->distSqr <= 0.0f)
         return;
 
@@ -1307,13 +1430,24 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
 
     float pitchSlowdown = 1.0f;
     float yawSlowdown = 1.0f;
+    const uint32_t currentWeapon = input->ps->weapon;
+    const bool usingOffhand =
+        (input->ps->weapFlags & PWF_USING_OFFHAND) != 0 &&
+        currentWeapon && BG_WeaponIsOffhand(currentWeapon);
+    const bool slowdownWeaponValid =
+        currentWeapon &&
+        !BG_WeaponRequiresLockonToFire(currentWeapon) &&
+        (input->ps->eFlags & 0x300) == 0 &&
+        BG_WeaponAmmo(input->ps, currentWeapon) > 0;
+
     if (aim_slowdown_enabled && aim_slowdown_enabled->current.enabled &&
-        (input->ps->weapFlags & PWF_USING_OFFHAND) == 0)
+        slowdownWeaponValid)
     {
-        constexpr float kAimAssistTargetRange = 8192.0f;
+        const float slowdownRange =
+            BG_GetWeaponAimAssistRange(currentWeapon, ads);
         const AimScreenTarget *slowdownTarget = AimAssist_GetBestTarget(
             aaGlob,
-            kAimAssistTargetRange,
+            slowdownRange,
             aaGlob->tweakables.slowdownRegionWidth,
             aaGlob->tweakables.slowdownRegionHeight);
         if (slowdownTarget)
@@ -1328,6 +1462,8 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
             yawSlowdown = AimAssist_ClampFinite(yawSlowdown, 0.0f, 1.0f, 1.0f);
         }
     }
+    if (usingOffhand)
+        pitchSlowdown = 1.0f;
 
     if (aaGlob->autoMeleeActive)
     {
@@ -1377,10 +1513,10 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
     output->pitch += aaGlob->pitchDelta * dt * pitchSign;
     output->yaw += aaGlob->yawDelta * dt * yawSign;
 
-    AimAssist_ApplyGamepadLockOn(input, output, aaGlob, dt);
-
+    AimAssist_ApplyGamepadAutoAim(input, output, aaGlob, dt);
     AimAssist_ApplyAutoMelee(input, output);
     AimAssist_ApplyMeleeCharge(input, output);
+    AimAssist_ApplyGamepadLockOn(input, output, aaGlob, dt);
 
     if (!std::isfinite(output->pitch) || !std::isfinite(output->yaw))
     {
