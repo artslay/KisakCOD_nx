@@ -4,6 +4,7 @@
 
 #include <universal/q_shared.h>
 #include "savedevice.h"
+#include "savememory.h"
 #include <qcommon/qcommon.h>
 #include <universal/com_files.h>
 #include <client/client.h>      // SaveHeader
@@ -190,7 +191,7 @@ static bool SaveExistsValidated(char const *path)
 	const int bytesRead = FS_Read((unsigned char *)&header, (unsigned int)sizeof(SaveHeader), handle);
 	FS_FCloseFile(handle);
 
-	return bytesRead == (int)sizeof(SaveHeader) && header.saveVersion == 287;
+	return bytesRead == (int)sizeof(SaveHeader) && header.saveVersion == KISAK_SAVEGAME_FORMAT_VERSION;
 }
 
 bool __cdecl SaveExists(char const *savename)

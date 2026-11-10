@@ -6,6 +6,9 @@
 
 #include "g_save.h"
 
+// Keep save creation, discovery, and loading on the same serialized format.
+static constexpr int KISAK_SAVEGAME_FORMAT_VERSION = 291;
+
 unsigned int __cdecl Com_BlockChecksum32(const void *buffer, unsigned int length);
 void __cdecl TRACK_save_memory();
 MemoryFile *SaveMemory_GetMemoryFile(SaveGame *save);
