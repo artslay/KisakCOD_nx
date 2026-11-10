@@ -507,6 +507,22 @@ static void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
         return;
     }
 
+    // Font_s contains native pointers on ARM64. The generic clone path uses
+    // the original 32-bit asset size and copies only the serialized 24-byte
+    // layout, truncating material, glowMaterial and glyphs in the DB pool copy.
+    if (from && to && from->type == ASSET_TYPE_FONT)
+    {
+        const Font_s *source = from->header.font;
+        Font_s *destination = to->header.font;
+        if (!source || !destination)
+        {
+            Com_Error(ERR_DROP, "Switch Font clone received a null asset");
+            return;
+        }
+        std::memcpy(destination, source, sizeof(Font_s));
+        return;
+    }
+
     if (from && to && from->type == ASSET_TYPE_LIGHT_DEF)
     {
         GfxLightDef *destination = to->header.lightDef;
@@ -5886,7 +5902,19 @@ void __cdecl Mark_LightDefAsset(GfxLightDef *lightDef)
 
 void __cdecl Load_FontAsset(XAssetHeader *font)
 {
+#ifdef __SWITCH__
+    // DB_AddXAsset may clone the fastfile Font_s into the persistent native
+    // font pool. Material-name fixups were queued while loading the source
+    // object, so retarget them to the registered copy before the source zone
+    // storage is released.
+    Font_s *const sourceFont = font->font;
+    const XAssetHeader registered =
+        DB_AddXAsset(ASSET_TYPE_FONT, *font);
+    font->font = registered.font;
+    DB_RebindSwitchFontMaterialAliasFixups(sourceFont, font->font);
+#else
     font->xmodelPieces = DB_AddXAsset(ASSET_TYPE_FONT, (XAssetHeader)font->xmodelPieces).xmodelPieces;
+#endif
 }
 
 void __cdecl Mark_FontAsset(Font_s *font)
