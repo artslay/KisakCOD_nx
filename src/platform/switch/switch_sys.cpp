@@ -4030,7 +4030,7 @@ static bool Switch_LogIsSuppressedDiagnostic(const char *msg)
         "[KisakCOD][VK FRAME TIMING]",
         "[KisakCOD][CPU SCENE TIMING]",
         "[KisakCOD][PLAYER ANGLES PRE]",
-        "[KisakCOD][PLAYER INPUT GATE]",
+        "[KisakCOD][PLAYER INPUT]",
         "[KisakCOD][CIN STATE]",
         "[KisakCOD][SAVED DVAR SCRIPT]",
         "[KisakCOD][PLAYER SPAWN ANGLES]",
