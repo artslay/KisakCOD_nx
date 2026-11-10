@@ -2467,7 +2467,12 @@ void __cdecl DrawText2D(
                                                 cosAngle,
                                                 dropShadowColor.packed,
                                                 GFX_PRIM_STATS_HUD);
+                                        }
                                     }
+                                }
+                                // The shadow pass is optional. Close its flag
+                                // before drawing the normal glyph so styles 0/1
+                                // render the base text just like the CoD4 path.
                                 }
                                 xRot = xa + xAdj;
                                 yRot = ya + yAdj;
