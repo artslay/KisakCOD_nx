@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <cmath>
 #include "aim_assist.h"
 #include <qcommon/mem_track.h>
 #include <universal/com_math.h>
@@ -1100,7 +1101,7 @@ static const AimScreenTarget *AimAssist_GetLockOnTarget(
         const AimScreenTarget *currentTarget =
             AimAssist_GetTargetFromEntity(aaGlob, aaGlob->lockOnTargetEnt);
         if (currentTarget &&
-            currentTarget->distSqr <= maxDistanceSqr &&
+            currentTarget->distSqr < maxDistanceSqr &&
             AimAssist_DoBoundsIntersectCenterBox(
                 currentTarget->clipMins,
                 currentTarget->clipMaxs,
@@ -1116,6 +1117,147 @@ static const AimScreenTarget *AimAssist_GetLockOnTarget(
         kAimAssistTargetRange,
         aaGlob->tweakables.lockOnRegionWidth,
         aaGlob->tweakables.lockOnRegionHeight);
+}
+
+static float AimAssist_ClampFinite(float value, float minimum, float maximum, float fallback)
+{
+    if (!std::isfinite(value))
+        return fallback;
+    return value < minimum ? minimum : (value > maximum ? maximum : value);
+}
+
+static void AimAssist_CalcAdjustedAxis(
+    const AimInput *input,
+    float *pitchAxis,
+    float *yawAxis)
+{
+    *pitchAxis = AimAssist_ClampFinite(input->pitchAxis, -1.0f, 1.0f, 0.0f);
+    *yawAxis = AimAssist_ClampFinite(input->yawAxis, -1.0f, 1.0f, 0.0f);
+
+    if (aim_input_graph_enabled && aim_input_graph_enabled->current.enabled &&
+        aim_input_graph_index)
+    {
+        const int graphIndex = aim_input_graph_index->current.integer;
+        if (graphIndex >= 0 && graphIndex < 4)
+        {
+            const GraphFloat *graph = &aaInputGraph[graphIndex];
+            const float deflection = sqrtf(
+                (*pitchAxis) * (*pitchAxis) + (*yawAxis) * (*yawAxis));
+            if (graph->knotCount >= 2 && graph->knotCount <= 32 &&
+                graph->knots[graph->knotCount - 1][0] == 1.0f &&
+                std::isfinite(graph->scale) && std::isfinite(deflection))
+            {
+                const float fraction = AimAssist_ClampFinite(deflection, 0.0f, 1.0f, 0.0f);
+                const float graphScale = GraphGetValueFromFraction(
+                    graph->knotCount, graph->knots, fraction) * graph->scale;
+                if (std::isfinite(graphScale))
+                {
+                    *pitchAxis *= graphScale;
+                    *yawAxis *= graphScale;
+                }
+            }
+        }
+    }
+
+    // The original CoD4 pad path reduces the weaker axis on diagonal input.
+    if (aim_scale_view_axis && aim_scale_view_axis->current.enabled)
+    {
+        const float absPitch = fabsf(*pitchAxis);
+        const float absYaw = fabsf(*yawAxis);
+        if (absPitch <= absYaw)
+            *pitchAxis *= 1.0f - (absYaw - absPitch);
+        else
+            *yawAxis *= 1.0f - (absPitch - absYaw);
+    }
+}
+
+static float AimAssist_TrackTurnRate(
+    float target,
+    float current,
+    float acceleration,
+    float deltaTime)
+{
+    if (!std::isfinite(target) || target < 0.0f)
+        target = 0.0f;
+    if (!std::isfinite(current) || current < 0.0f)
+        current = 0.0f;
+
+    if (target <= current || acceleration <= 0.0f)
+        return target;
+
+    return LinearTrack(target, current, acceleration, deltaTime);
+}
+
+static void AimAssist_ApplyGamepadLockOn(
+    const AimInput *input,
+    AimOutput *output,
+    AimAssistGlobals *aaGlob,
+    float deltaTime)
+{
+    const int previousTarget = aaGlob->lockOnTargetEnt;
+    aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+
+    if (!aim_lockon_enabled || !aim_lockon_enabled->current.enabled ||
+        (input->ps->weapFlags & PWF_USING_OFFHAND) != 0 ||
+        aaGlob->autoAimActive || aaGlob->autoMeleeActive ||
+        deltaTime <= 0.0f)
+    {
+        return;
+    }
+
+    const float deflection = aim_lockon_deflection
+        ? AimAssist_ClampFinite(aim_lockon_deflection->current.value, 0.0f, 1.0f, 1.0f)
+        : 1.0f;
+
+    // Match the CoD4 single-player/Xbox gate: deliberate look input or
+    // lateral movement may engage lock-on; forward movement alone may not.
+    if (deflection > fabsf(input->pitchAxis) &&
+        deflection > fabsf(input->yawAxis) &&
+        deflection > fabsf(input->rightAxis))
+    {
+        return;
+    }
+
+    const AimScreenTarget *target = AimAssist_GetLockOnTarget(aaGlob);
+    if (!target || !std::isfinite(target->distSqr) || target->distSqr <= 0.0f)
+        return;
+
+    aaGlob->lockOnTargetEnt = target->entIndex;
+
+    const float distance = sqrtf(target->distSqr);
+    const float arcLength = distance * 3.14159265358979323846f;
+    if (!std::isfinite(arcLength) || arcLength <= 0.001f)
+    {
+        aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+        return;
+    }
+
+    const float strength = aim_lockon_strength
+        ? AimAssist_ClampFinite(aim_lockon_strength->current.value, 0.0f, 1.0f, 0.0f)
+        : 0.0f;
+
+    // CoD4 lock-on is target-motion compensation, not a command to point
+    // the camera at the target's absolute world-space angle. Using absolute
+    // target angles here caused a false 180-degree turn when the target was
+    // behind/near the yaw wrap boundary.
+    float relativeVelocity[3];
+    Vec3Sub(target->velocity, input->ps->velocity, relativeVelocity);
+
+    const float pitchVelocity =
+        relativeVelocity[0] * aaGlob->viewAxis[2][0] +
+        relativeVelocity[1] * aaGlob->viewAxis[2][1] +
+        relativeVelocity[2] * aaGlob->viewAxis[2][2];
+    const float yawVelocity =
+        relativeVelocity[0] * aaGlob->viewAxis[1][0] +
+        relativeVelocity[1] * aaGlob->viewAxis[1][1] +
+        relativeVelocity[2] * aaGlob->viewAxis[1][2];
+
+    const float pitchTurnRate = pitchVelocity / arcLength * 180.0f * strength;
+    const float yawTurnRate = yawVelocity / arcLength * 180.0f * strength;
+    if (std::isfinite(pitchTurnRate))
+        output->pitch -= pitchTurnRate * deltaTime;
+    if (std::isfinite(yawTurnRate))
+        output->yaw += yawTurnRate * deltaTime;
 }
 
 void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *output)
@@ -1138,11 +1280,18 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
     AimAssist_UpdateAdsLerp(input);
 
     AimAssistGlobals *aaGlob = &aaGlobArray[input->localClientNum];
+    const float dt = AimAssist_ClampFinite(input->deltaTime, 0.0f, 0.05f, 0.0f);
+    if (dt <= 0.0f)
+    {
+        aaGlob->pitchDelta = 0.0f;
+        aaGlob->yawDelta = 0.0f;
+        aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+        AimAssist_ApplyAutoMelee(input, output);
+        AimAssist_ApplyMeleeCharge(input, output);
+        return;
+    }
 
-    const bool ads =
-        (input->buttons & BUTTON_ADS) != 0 ||
-        input->ps->fWeaponPosFrac > 0.0f;
-
+    const float ads = AimAssist_ClampFinite(aaGlob->adsLerp, 0.0f, 1.0f, 0.0f);
     const float basePitchRate = ads
         ? aim_turnrate_pitch_ads->current.value
         : aim_turnrate_pitch->current.value;
@@ -1150,18 +1299,14 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         ? aim_turnrate_yaw_ads->current.value
         : aim_turnrate_yaw->current.value;
 
-    // Keep aim-assist tracking bounded after frame stalls. The gamepad
-    // path normally supplies <= 50 ms, but this function also guards its own
-    // time step so a caller cannot turn a hitch into a camera snap.
-    const float dt = input->deltaTime > 0.0f
-        ? (input->deltaTime > 0.05f ? 0.05f : input->deltaTime)
-        : 0.0f;
-    float pitchRate = basePitchRate;
-    float yawRate = baseYawRate;
+    float adjustedPitchAxis = 0.0f;
+    float adjustedYawAxis = 0.0f;
+    AimAssist_CalcAdjustedAxis(input, &adjustedPitchAxis, &adjustedYawAxis);
 
-    // CoD4 controller slowdown: reduce turn rate only while a valid visible
-    // target's projected bounds overlap the central slowdown region.
-    if (aim_slowdown_enabled && aim_slowdown_enabled->current.enabled)
+    float pitchSlowdown = 1.0f;
+    float yawSlowdown = 1.0f;
+    if (aim_slowdown_enabled && aim_slowdown_enabled->current.enabled &&
+        (input->ps->weapFlags & PWF_USING_OFFHAND) == 0)
     {
         constexpr float kAimAssistTargetRange = 8192.0f;
         const AimScreenTarget *slowdownTarget = AimAssist_GetBestTarget(
@@ -1171,99 +1316,81 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
             aaGlob->tweakables.slowdownRegionHeight);
         if (slowdownTarget)
         {
-            const float pitchScale = ads
+            pitchSlowdown = ads
                 ? aim_slowdown_pitch_scale_ads->current.value
                 : aim_slowdown_pitch_scale->current.value;
-            const float yawScale = ads
+            yawSlowdown = ads
                 ? aim_slowdown_yaw_scale_ads->current.value
                 : aim_slowdown_yaw_scale->current.value;
-
-            pitchRate *= pitchScale < 0.0f ? 0.0f : (pitchScale > 1.0f ? 1.0f : pitchScale);
-            yawRate *= yawScale < 0.0f ? 0.0f : (yawScale > 1.0f ? 1.0f : yawScale);
+            pitchSlowdown = AimAssist_ClampFinite(pitchSlowdown, 0.0f, 1.0f, 1.0f);
+            yawSlowdown = AimAssist_ClampFinite(yawSlowdown, 0.0f, 1.0f, 1.0f);
         }
     }
 
-    output->pitch += input->pitchAxis * pitchRate * dt;
-    output->yaw += input->yawAxis * yawRate * dt;
-
-    if (aim_accel_turnrate_enabled->current.enabled)
+    if (aaGlob->autoMeleeActive)
     {
-        const float accel = aim_accel_turnrate_lerp->current.value * dt;
-        (void)accel;
+        adjustedPitchAxis = 0.0f;
+        adjustedYawAxis = 0.0f;
+        pitchSlowdown = 1.0f;
+        yawSlowdown = 1.0f;
     }
 
-    // Lock-on is intentionally gated by deliberate right-stick movement. The
-    // selected target is held while it remains inside the CoD4 lock-on region,
-    // preventing rapid target switching as two actors cross near the reticle.
-    if (aim_lockon_enabled && aim_lockon_enabled->current.enabled)
+    const float pitchRate = AimAssist_ClampFinite(basePitchRate, 0.0f, 1080.0f, 0.0f) *
+        pitchSlowdown * AimAssist_ClampFinite(aaGlob->fovTurnRateScale, 0.0f, 4.0f, 1.0f);
+    const float yawRate = AimAssist_ClampFinite(baseYawRate, 0.0f, 1080.0f, 0.0f) *
+        yawSlowdown * AimAssist_ClampFinite(aaGlob->fovTurnRateScale, 0.0f, 4.0f, 1.0f);
+
+    float pitchMax = input->pitchMax;
+    float yawMax = input->yawMax;
+    if (pitchMax > 0.0f && std::isfinite(pitchMax))
+        pitchRate = pitchRate < pitchMax ? pitchRate : pitchMax;
+    if (yawMax > 0.0f && std::isfinite(yawMax))
+        yawRate = yawRate < yawMax ? yawRate : yawMax;
+
+    const float desiredPitchDelta = fabsf(adjustedPitchAxis) * pitchRate;
+    const float desiredYawDelta = fabsf(adjustedYawAxis) * yawRate;
+
+    if (aim_accel_turnrate_enabled && aim_accel_turnrate_enabled->current.enabled)
     {
-        const float stickDeflection = sqrtf(
-            input->pitchAxis * input->pitchAxis +
-            input->yawAxis * input->yawAxis);
-        const float activationDeflection =
-            aim_lockon_deflection ? aim_lockon_deflection->current.value : 1.0f;
-
-        if (stickDeflection >= activationDeflection && dt > 0.0f)
-        {
-            const AimScreenTarget *lockTarget = AimAssist_GetLockOnTarget(aaGlob);
-            if (lockTarget)
-            {
-                aaGlob->lockOnTargetEnt = lockTarget->entIndex;
-
-                float targetDir[3];
-                float targetAngles[3];
-                Vec3Sub(lockTarget->aimPos, aaGlob->viewOrigin, targetDir);
-                vectoangles(targetDir, targetAngles);
-
-                const float strength = aim_lockon_strength
-                    ? aim_lockon_strength->current.value : 0.0f;
-                const float boundedStrength =
-                    strength < 0.0f ? 0.0f : (strength > 1.0f ? 1.0f : strength);
-                const float boundedDeflection =
-                    stickDeflection < 0.0f ? 0.0f :
-                    (stickDeflection > 1.0f ? 1.0f : stickDeflection);
-                const float lockPitchRate =
-                    basePitchRate * boundedStrength * boundedDeflection;
-                const float lockYawRate =
-                    baseYawRate * boundedStrength * boundedDeflection;
-
-                // aim_turnrate_* are angular velocities in degrees/second.
-                // DiffTrackAngle treats its rate as an interpolation coefficient;
-                // at normal stick deflection rate * dt exceeds 1 and snaps to the
-                // target angle (which can look like a sudden 180-degree turn).
-                // LinearTrackAngle instead limits the angular step to rate * dt.
-                output->pitch = LinearTrackAngle(
-                    targetAngles[0], output->pitch, lockPitchRate, dt);
-                output->yaw = LinearTrackAngle(
-                    targetAngles[1], output->yaw, lockYawRate, dt);
-            }
-            else
-            {
-                aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
-            }
-        }
-        else
-        {
-            aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
-        }
+        const float sensitivity = AimAssist_ClampFinite(
+            input_viewSensitivity ? input_viewSensitivity->current.value : 1.0f,
+            0.0f, 5.0f, 1.0f);
+        const float accel = AimAssist_ClampFinite(
+            aim_accel_turnrate_lerp ? aim_accel_turnrate_lerp->current.value : 0.0f,
+            0.0f, 4000.0f, 0.0f) * sensitivity;
+        aaGlob->pitchDelta = AimAssist_TrackTurnRate(
+            desiredPitchDelta, aaGlob->pitchDelta, accel, dt);
+        aaGlob->yawDelta = AimAssist_TrackTurnRate(
+            desiredYawDelta, aaGlob->yawDelta, accel, dt);
     }
     else
     {
-        aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+        aaGlob->pitchDelta = desiredPitchDelta;
+        aaGlob->yawDelta = desiredYawDelta;
     }
+
+    const float pitchSign = adjustedPitchAxis >= 0.0f ? 1.0f : -1.0f;
+    const float yawSign = adjustedYawAxis >= 0.0f ? 1.0f : -1.0f;
+    output->pitch += aaGlob->pitchDelta * dt * pitchSign;
+    output->yaw += aaGlob->yawDelta * dt * yawSign;
+
+    AimAssist_ApplyGamepadLockOn(input, output, aaGlob, dt);
 
     AimAssist_ApplyAutoMelee(input, output);
     AimAssist_ApplyMeleeCharge(input, output);
 
-    if (output->pitch > 85.0f)
-        output->pitch = 85.0f;
-    else if (output->pitch < -85.0f)
-        output->pitch = -85.0f;
+    if (!std::isfinite(output->pitch) || !std::isfinite(output->yaw))
+    {
+        output->pitch = input->pitch;
+        output->yaw = input->yaw;
+        aaGlob->pitchDelta = 0.0f;
+        aaGlob->yawDelta = 0.0f;
+        aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+        return;
+    }
 
-    while (output->yaw >= 180.0f)
-        output->yaw -= 360.0f;
-    while (output->yaw < -180.0f)
-        output->yaw += 360.0f;
+    output->pitch = AimAssist_ClampFinite(output->pitch, -85.0f, 85.0f, input->pitch);
+    output->yaw = AngleNormalize180(output->yaw);
 }
 
 void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output)
