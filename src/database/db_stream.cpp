@@ -1086,6 +1086,34 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
     return true;
 }
 
+void __cdecl DB_RebindSwitchFontMaterialAliasFixups(
+    const Font_s *source,
+    Font_s *destination)
+{
+    if (!source || !destination || source == destination)
+        return;
+
+    const uintptr_t sourceMaterialSlot =
+        reinterpret_cast<uintptr_t>(&source->material);
+    const uintptr_t sourceGlowSlot =
+        reinterpret_cast<uintptr_t>(&source->glowMaterial);
+    uintptr_t *const destinationMaterialSlot =
+        reinterpret_cast<uintptr_t *>(&destination->material);
+    uintptr_t *const destinationGlowSlot =
+        reinterpret_cast<uintptr_t *>(&destination->glowMaterial);
+
+    for (SwitchMaterialNameAliasFixup &fixup :
+         g_switchMaterialNameAliasFixups)
+    {
+        const uintptr_t slot =
+            reinterpret_cast<uintptr_t>(fixup.destination);
+        if (slot == sourceMaterialSlot)
+            fixup.destination = destinationMaterialSlot;
+        else if (slot == sourceGlowSlot)
+            fixup.destination = destinationGlowSlot;
+    }
+}
+
 void __cdecl DB_ResolvePendingSwitchMaterialNameAliases(bool finalPass)
 {
     if (g_switchMaterialNameAliasFixups.empty())
