@@ -184,7 +184,11 @@ int __cdecl RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **ma
             "%s\n\t(halfTapCount) = %i",
             "(halfTapCount > 0 && halfTapCount <= 8)",
             halfTapCount);
-    *material = (const Material *)*((uint32_t *)&rgp.postFxMaterial + halfTapCount);
+    // The original 32-bit code walked the contiguous pointer fields starting
+    // at postFxMaterial with 4-byte steps. On ARM64 that reads pointer halves
+    // and can select an invalid material (the renderer's default checker).
+    // halfTapCount is 1..8, matching symmetricFilterMaterial[0..7].
+    *material = rgp.symmetricFilterMaterial[halfTapCount - 1];
     return halfTapCount;
 }
 
