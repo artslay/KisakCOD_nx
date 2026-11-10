@@ -17,6 +17,8 @@
 #include <cstdarg>
 #include <unwind.h>
 #include <exception>
+#include <cxxabi.h>
+#include <typeinfo>
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
@@ -257,12 +259,21 @@ static void Switch_LogTerminateBacktrace();
     __builtin_unreachable();
 }
 
-// std::terminate does not provide a libnx ThreadExceptionDump. Record the
-// unwinder's call-chain IPs instead of presenting them as fault registers.
+// std::terminate does not provide a libnx ThreadExceptionDump. Capture the
+// active C++ exception type and the AArch64 unwind registers so the crash log
+// already contains the ELF-relative addresses needed by addr2line.
+struct SwitchTerminateFrame
+{
+    uintptr_t ip;
+    uintptr_t lr;
+    uintptr_t fp;
+    uintptr_t cfa;
+};
+
 struct SwitchTerminateBacktrace
 {
     static constexpr unsigned int kMaxFrames = 48u;
-    uintptr_t frames[kMaxFrames];
+    SwitchTerminateFrame frames[kMaxFrames];
     unsigned int count;
 };
 
@@ -274,40 +285,130 @@ static _Unwind_Reason_Code Switch_CollectTerminateFrame(
     if (!trace || trace->count >= SwitchTerminateBacktrace::kMaxFrames)
         return _URC_END_OF_STACK;
 
-    const uintptr_t pc = static_cast<uintptr_t>(_Unwind_GetIP(context));
-    if (pc != 0u)
-        trace->frames[trace->count++] = pc;
+    const uintptr_t ip = static_cast<uintptr_t>(_Unwind_GetIP(context));
+    if (ip != 0u)
+    {
+        SwitchTerminateFrame &frame = trace->frames[trace->count++];
+        frame.ip = ip;
+        // AArch64 DWARF register numbers: x29=FP and x30=LR.
+        frame.fp = static_cast<uintptr_t>(_Unwind_GetGR(context, 29));
+        frame.lr = static_cast<uintptr_t>(_Unwind_GetGR(context, 30));
+        frame.cfa = static_cast<uintptr_t>(_Unwind_GetCFA(context));
+    }
 
     return trace->count >= SwitchTerminateBacktrace::kMaxFrames
         ? _URC_END_OF_STACK
         : _URC_NO_REASON;
 }
 
+static const char *Switch_TerminateExceptionTypeName(
+    const std::type_info *exceptionType)
+{
+    if (!exceptionType)
+        return "(none: explicit terminate or unavailable)";
+
+    const char *name = exceptionType->name();
+    if (!name)
+        return "(unknown)";
+
+    // Keep these common allocation/standard-library failures readable without
+    // calling __cxa_demangle, which may allocate while handling a fatal error.
+    if (std::strcmp(name, "St9bad_alloc") == 0)
+        return "std::bad_alloc";
+    if (std::strcmp(name, "St12length_error") == 0)
+        return "std::length_error";
+    if (std::strcmp(name, "St11logic_error") == 0)
+        return "std::logic_error";
+    if (std::strcmp(name, "St13runtime_error") == 0)
+        return "std::runtime_error";
+    if (std::strcmp(name, "St12out_of_range") == 0)
+        return "std::out_of_range";
+    if (std::strcmp(name, "St16invalid_argument") == 0)
+        return "std::invalid_argument";
+
+    return name;
+}
+
+static const char *Switch_UnwindResultName(_Unwind_Reason_Code result)
+{
+    switch (result)
+    {
+    case _URC_NO_REASON:
+        return "continue";
+    case _URC_END_OF_STACK:
+        return "end_of_stack";
+    case _URC_NORMAL_STOP:
+        return "normal_stop";
+    case _URC_FATAL_PHASE1_ERROR:
+        return "fatal_phase1";
+    case _URC_FATAL_PHASE2_ERROR:
+        return "fatal_phase2";
+    case _URC_FOREIGN_EXCEPTION_CAUGHT:
+        return "foreign_exception_caught";
+    default:
+        return "unknown";
+    }
+}
+
 static void Switch_LogTerminateBacktrace()
 {
+    const std::type_info *exceptionType =
+        __cxxabiv1::__cxa_current_exception_type();
+    const char *exceptionAbiName =
+        exceptionType ? exceptionType->name() : "(none)";
+    const char *exceptionReadableName =
+        Switch_TerminateExceptionTypeName(exceptionType);
+
+    char line[384];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] terminate_exception_type=%s abi_name=%s\n",
+        exceptionReadableName,
+        exceptionAbiName ? exceptionAbiName : "(unknown)");
+    Switch_LogCrashLine(line);
+
     SwitchTerminateBacktrace trace{};
     const _Unwind_Reason_Code unwindResult =
         _Unwind_Backtrace(Switch_CollectTerminateFrame, &trace);
     const uintptr_t moduleBase = reinterpret_cast<uintptr_t>(__code_start);
 
-    char line[192];
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][CRASH] terminate_backtrace frames=%u unwind_result=%u module_base=0x%016llx\n",
+        "[KisakCOD][CRASH] terminate_backtrace frames=%u unwind_result=%u unwind_status=%s module_base=0x%016llx frame_limit=%u\n",
         trace.count,
         static_cast<unsigned int>(unwindResult),
-        static_cast<unsigned long long>(moduleBase));
+        Switch_UnwindResultName(unwindResult),
+        static_cast<unsigned long long>(moduleBase),
+        SwitchTerminateBacktrace::kMaxFrames);
     Switch_LogCrashLine(line);
 
+    const uintptr_t invalidOffset = ~uintptr_t(0);
     for (unsigned int i = 0; i < trace.count; ++i)
     {
+        const SwitchTerminateFrame &frame = trace.frames[i];
+        const uintptr_t ipOffset =
+            frame.ip >= moduleBase ? frame.ip - moduleBase : invalidOffset;
+        const uintptr_t lookupOffset =
+            ipOffset != invalidOffset && ipOffset >= 4u
+                ? ipOffset - 4u
+                : ipOffset;
+        const uintptr_t lrOffset =
+            frame.lr >= moduleBase ? frame.lr - moduleBase : invalidOffset;
+
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][CRASH] terminate_frame[%u] unwind_ip=0x%016llx\n",
+            "[KisakCOD][CRASH] terminate_frame[%u] ip=0x%016llx ip_offset=0x%016llx lookup_offset=0x%016llx lr=0x%016llx lr_offset=0x%016llx fp=0x%016llx cfa=0x%016llx\n",
             i,
-            static_cast<unsigned long long>(trace.frames[i]));
+            static_cast<unsigned long long>(frame.ip),
+            static_cast<unsigned long long>(ipOffset),
+            static_cast<unsigned long long>(lookupOffset),
+            static_cast<unsigned long long>(frame.lr),
+            static_cast<unsigned long long>(lrOffset),
+            static_cast<unsigned long long>(frame.fp),
+            static_cast<unsigned long long>(frame.cfa));
         Switch_LogCrashLine(line);
     }
 }
