@@ -3795,42 +3795,6 @@ static bool Switch_LogIsVerboseTrace(const char *msg)
     return false;
 }
 
-// Keep the bounded FX diagnostics needed to distinguish missing FX generation,
-// model-lighting failures, and incorrect near-camera frustum culling. These call
-// sites already cap their own output; do not enable general per-frame tracing.
-static bool Switch_LogIsFxDiagnostic(const char *msg)
-{
-    if (!msg || !*msg)
-        return false;
-
-    static constexpr const char *const kFxDiagnosticPrefixes[] =
-    {
-        "[KisakCOD][FX CLOUD",
-        "[KisakCOD][FX SPRITE ACTIVE]",
-        "[KisakCOD][FX EFFECT INVENTORY]",
-        "[KisakCOD][FX CODEMESH SUBMIT]",
-        "[KisakCOD][FX CODEMESH DRAW]",
-        "[KisakCOD][FX CODEMESH SKIP]",
-        "[KisakCOD][FX GPU DRAW BEGIN]",
-        "[KisakCOD][FX GPU DRAW RECORDED]",
-        "[KisakCOD][FX MODEL SUBMIT]",
-        "[KisakCOD][FX MODEL LIGHT]",
-        "[KisakCOD][MODEL LIGHTING]",
-        "[KisakCOD][FX NEAR CULL]",
-        "[KisakCOD][FX FRUSTUM]",
-        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
-        "[KisakCOD][VK SAMPLER STAGE EMPTY]",
-        "[KisakCOD][VK SAMPLER FALLBACK]",
-        "[KisakCOD][VK ACTIVE SAMPLER FALLBACK]"
-    };
-    for (const char *prefix : kFxDiagnosticPrefixes)
-    {
-        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
-            return true;
-    }
-    return false;
-}
-
 static bool Switch_LogIsScriptDiagnostic(const char *msg)
 {
     if (!msg || !*msg)
@@ -4008,7 +3972,6 @@ void Switch_LogWrite(const char *msg)
     if (!Switch_LogIsImportant(msg) &&
         !Switch_LogIsVulkanFrameTiming(msg) &&
         !Switch_LogIsCpuSceneTiming(msg) &&
-        !Switch_LogIsFxDiagnostic(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
