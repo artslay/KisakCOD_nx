@@ -72,28 +72,17 @@ static inline uint64_t KisakRendererClock()
 }
 #endif
 
-// Keep the font glyph renderer's 2D technique test consistent with the
-// Switch picture path. Glyph quads always request UNLIT; LIT/EMISSIVE variants
-// for other view types do not make a font material invalid for 2D drawing.
+// Text glyphs are emitted as TECHNIQUE_UNLIT quads. Decide whether that
+// exact technique can be drawn through Material_GetTechnique(), which applies
+// the same technique-set remap used later by RB_BeginSurface. Inspecting the
+// serialized/authored set directly can reject a valid remapped UNLIT variant
+// (or accept one that the active remap does not actually provide), silently
+// dropping every glyph in the string.
 static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
 {
 #ifdef __SWITCH__
-    // Test the authored set because the remapped set can contain unrelated 3D
-    // variants. A usable authored UNLIT technique takes precedence for glyphs.
-    const MaterialTechniqueSet *authoredTechniqueSet =
-        material ? material->techniqueSet : nullptr;
-    const bool hasUnlitTechnique =
-        authoredTechniqueSet &&
-        authoredTechniqueSet->techniques[TECHNIQUE_UNLIT] != nullptr;
-    const bool hasFogableTechnique =
-        authoredTechniqueSet &&
-        (authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
-         authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE]);
-
-    // These 2D callers draw with TECHNIQUE_UNLIT. A material may also carry
-    // LIT/EMISSIVE techniques for other view types; those variants must not
-    // suppress its valid unlit glyph or picture path.
-    return hasFogableTechnique && !hasUnlitTechnique;
+    return !material ||
+        Material_GetTechnique(material, TECHNIQUE_UNLIT) == nullptr;
 #else
     return Material_HasAnyFogableTechnique(const_cast<Material *>(material));
 #endif
