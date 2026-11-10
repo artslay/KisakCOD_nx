@@ -201,6 +201,26 @@ static void Switch_LogCrashSync()
         (void)::fsync(g_switchLogFd);
 }
 
+extern "C" void Switch_LogLevelStart(const char *mapName, int savegame)
+{
+    // A level boundary is written directly so normal diagnostic filtering
+    // cannot hide it. Keep map transitions visually distinct in the one log.
+    Switch_LogCrashLine(
+        "\n============================================================\n"
+        "[KisakCOD] LEVEL START\n");
+
+    char line[192];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][LEVEL] map=%s savegame=%d\n",
+        mapName && *mapName ? mapName : "(unknown)",
+        savegame ? 1 : 0);
+    Switch_LogCrashLine(line);
+    Switch_LogCrashLine(
+        "------------------------------------------------------------\n");
+}
+
 static void Switch_LogCrashReport(const char *source, const char *detail)
 {
     const bool firstReport =
@@ -3928,8 +3948,6 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
     {
         "[KisakCOD][PLAYER SPAWN ANGLES]",
         "[KisakCOD][PLAYER INPUT]",
-        "[KisakCOD][PLAYER INPUT GATE]",
-        "[KisakCOD][PLAYER ANGLES PRE]",
         "[KisakCOD][PLAYER ANGLES POST]"
     };
     for (const char *prefix : kPlayerAnglePrefixes)
@@ -3945,18 +3963,6 @@ static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
     // Keep the generic PERF/PROFILING categories out of the runtime log.
     // Bounded Vulkan/scene timing summaries use separate explicit allowlists.
     return Switch_LogContainsInsensitive(msg, "perf");
-}
-
-static bool Switch_LogIsVulkanFrameTiming(const char *msg)
-{
-    static constexpr char prefix[] = "[KisakCOD][VK FRAME TIMING]";
-    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
-}
-
-static bool Switch_LogIsCpuSceneTiming(const char *msg)
-{
-    static constexpr char prefix[] = "[KisakCOD][CPU SCENE TIMING]";
-    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
 }
 
 // Bounded HUD and cinematic lifecycle diagnostics. These are deliberately
@@ -3992,13 +3998,8 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
 
     static constexpr const char *const kHudCinematicPrefixes[] =
     {
-        "[KisakCOD][DVAR WATCH]",
-        "[KisakCOD][DVAR ORIGIN]",
-        "[KisakCOD][DVAR SET CALLER]",
-        "[KisakCOD][SAVED DVAR SCRIPT]",
         "[KisakCOD][UI MENU PAINT GATE]",
         "[KisakCOD][FRONTEND MENU OPEN]",
-        "[KisakCOD][CIN STATE]",
         "[KisakCOD][CIN LOAD]",
         "[KisakCOD][CIN SKIP]",
         "[KisakCOD][CIN SKIP FLOW]",
@@ -4009,6 +4010,34 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
     };
 
     for (const char *prefix : kHudCinematicPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Explicitly suppress short-lived runtime traces that were useful during
+// bring-up but are no longer wanted in the persistent log. This gate runs
+// before the generic error matcher so these tags stay silent even if a payload
+// happens to contain words such as "error" or "failed".
+static bool Switch_LogIsSuppressedDiagnostic(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    static constexpr const char *const kSuppressedPrefixes[] =
+    {
+        "[KisakCOD][VK FRAME TIMING]",
+        "[KisakCOD][CPU SCENE TIMING]",
+        "[KisakCOD][PLAYER ANGLES PRE]",
+        "[KisakCOD][PLAYER INPUT GATE]",
+        "[KisakCOD][CIN STATE]",
+        "[KisakCOD][SAVED DVAR SCRIPT]",
+        "[KisakCOD][DVAR"
+    };
+
+    for (const char *prefix : kSuppressedPrefixes)
     {
         if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
             return true;
@@ -4064,15 +4093,13 @@ void Switch_LogWrite(const char *msg)
 {
     // HUD/compass/subtitle and generic performance traces stay disabled.
     // Only the bounded frame/scene timing summaries below are explicitly allowed.
-    if (!msg || !*msg || Switch_LogIsHudDiagnostic(msg) ||
-        Switch_LogIsPerformanceDiagnostic(msg))
+    if (!msg || !*msg || Switch_LogIsSuppressedDiagnostic(msg) ||
+        Switch_LogIsHudDiagnostic(msg) || Switch_LogIsPerformanceDiagnostic(msg))
         return;
 
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
-        !Switch_LogIsVulkanFrameTiming(msg) &&
-        !Switch_LogIsCpuSceneTiming(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
