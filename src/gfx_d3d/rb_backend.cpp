@@ -72,13 +72,12 @@ static inline uint64_t KisakRendererClock()
 }
 #endif
 
-// Text glyphs are emitted as TECHNIQUE_UNLIT quads. Decide whether that
-// exact technique can be drawn through Material_GetTechnique(), which applies
-// the same technique-set remap used later by RB_BeginSurface. Inspecting the
-// serialized/authored set directly can reject a valid remapped UNLIT variant
-// (or accept one that the active remap does not actually provide), silently
-// dropping every glyph in the string.
-static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
+// Text glyphs are emitted as TECHNIQUE_UNLIT quads. On Switch, decide
+// whether that exact technique can be drawn through Material_GetTechnique(),
+// which applies the same technique-set remap used later by RB_BeginSurface.
+// Inspecting the serialized/authored set directly can silently drop valid
+// glyphs when the active remap provides the UNLIT variant.
+static bool RB_ShouldSkip2DTextMaterial(const Material *material)
 {
 #ifdef __SWITCH__
     return !material ||
@@ -2387,7 +2386,7 @@ void __cdecl DrawText2D(
 #ifdef __SWITCH__
                                             g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_glow";
 #endif
-                                            if (RB_MaterialHasAnyFogableTechnique(glowMaterial))
+                                            if (RB_ShouldSkip2DTextMaterial(glowMaterial))
                                                 R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, glowMaterial->info.name);
                                             else
                                                 RB_DrawStretchPicRotate(
@@ -2443,7 +2442,7 @@ void __cdecl DrawText2D(
                                         g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base/call";
 #endif
                                         const bool baseMaterialFogable =
-                                            RB_MaterialHasAnyFogableTechnique(material);
+                                            RB_ShouldSkip2DTextMaterial(material);
 #ifdef __SWITCH__
                                         g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base/return";
 #endif
@@ -2495,7 +2494,7 @@ void __cdecl DrawText2D(
                                     v37 = xScale * (double)glyph->pixelWidth;
                                     v38 = yScale * (double)glyph->pixelHeight;
                                     v39.packed = finalColor.packed;
-                                    if (RB_MaterialHasAnyFogableTechnique(material))
+                                    if (RB_ShouldSkip2DTextMaterial(material))
                                         R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, material->info.name);
                                     else
                                         RB_DrawStretchPicRotate(
@@ -2691,7 +2690,7 @@ void __cdecl RB_DrawCursor(
         v10 = (double)cursorGlyph->y0 * yScale + y;
         w = xScale * (double)cursorGlyph->pixelWidth;
         h = yScale * (double)cursorGlyph->pixelHeight;
-        if (RB_MaterialHasAnyFogableTechnique(material))
+        if (RB_ShouldSkip2DTextMaterial(material))
             R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, material->info.name);
         else
             RB_DrawStretchPicRotate(
