@@ -3946,7 +3946,6 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
 
     static constexpr const char *const kPlayerAnglePrefixes[] =
     {
-        "[KisakCOD][PLAYER SPAWN ANGLES]",
         "[KisakCOD][PLAYER INPUT]",
         "[KisakCOD][PLAYER ANGLES POST]"
     };
@@ -4034,6 +4033,8 @@ static bool Switch_LogIsSuppressedDiagnostic(const char *msg)
         "[KisakCOD][PLAYER INPUT GATE]",
         "[KisakCOD][CIN STATE]",
         "[KisakCOD][SAVED DVAR SCRIPT]",
+        "[KisakCOD][PLAYER SPAWN ANGLES]",
+        "[KisakCOD][ADS OVERLAY MISSING]",
         "[KisakCOD][DVAR"
     };
 
