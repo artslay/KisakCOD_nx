@@ -233,16 +233,23 @@ static void Switch_LogTerminateBacktrace();
     const char *detail)
 {
     Switch_LogCrashReport(source, detail);
-    if (source && std::strcmp(source, "std::terminate") == 0)
+    const bool isTerminate =
+        source && std::strcmp(source, "std::terminate") == 0;
+    if (isTerminate)
         Switch_LogTerminateBacktrace();
 
-    char line[160];
-    std::snprintf(
-        line,
-        sizeof(line),
-        "[KisakCOD][CRASH] result=0x%08x\n",
-        result);
-    Switch_LogCrashLine(line);
+    // std::terminate passes a constant zero panic payload; it is not a
+    // crash result and must not be printed as if it identified the cause.
+    if (!isTerminate)
+    {
+        char line[160];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][CRASH] result=0x%08x\n",
+            result);
+        Switch_LogCrashLine(line);
+    }
     Switch_LogCrashSync();
 
     // Match libnx's standard panic termination after persisting the report.
