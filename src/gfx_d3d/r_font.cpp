@@ -96,9 +96,14 @@ Font_s *__cdecl R_LoadFont(const char *fontName, int imageTrack)
         if (fileLen >= 16)
         {
             varMemSize = fileLen - 16;
-            totalMemSize = fileLen - 16 + 24;
+
+            // Font files use a 24-byte 32-bit serialized Font_s header.
+            // The runtime Font_s contains native pointers and is 40 bytes
+            // on Switch/AArch64. Place variable data after the native object
+            // and reserve that full native header size in the hunk allocation.
+            totalMemSize = varMemSize + static_cast<int>(sizeof(Font_s));
             font = (Font_s *)Hunk_Alloc(totalMemSize, "R_LoadFont", 22);
-            variableFontData = (char *)&font[1];
+            variableFontData = reinterpret_cast<char *>(font) + sizeof(Font_s);
             FS_Read((uint8_t *)&fontNameOffset, 4u, file);
             FS_Read((uint8_t *)&font->pixelHeight, 4u, file);
             FS_Read((uint8_t *)&font->glyphCount, 4u, file);
