@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+extern const dvar_t *input_viewSensitivity;
 #include <cmath>
 #include "aim_assist.h"
 #include <qcommon/mem_track.h>
@@ -1335,10 +1336,14 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         yawSlowdown = 1.0f;
     }
 
-    const float pitchRate = AimAssist_ClampFinite(basePitchRate, 0.0f, 1080.0f, 0.0f) *
+    const float sensitivity = AimAssist_ClampFinite(
+        input_viewSensitivity ? input_viewSensitivity->current.value : 1.0f,
+        0.0f, 5.0f, 1.0f);
+    float pitchRate = AimAssist_ClampFinite(basePitchRate, 0.0f, 1080.0f, 0.0f) *
         pitchSlowdown * AimAssist_ClampFinite(aaGlob->fovTurnRateScale, 0.0f, 4.0f, 1.0f);
-    const float yawRate = AimAssist_ClampFinite(baseYawRate, 0.0f, 1080.0f, 0.0f) *
-        yawSlowdown * AimAssist_ClampFinite(aaGlob->fovTurnRateScale, 0.0f, 4.0f, 1.0f);
+    float yawRate = AimAssist_ClampFinite(baseYawRate, 0.0f, 1080.0f, 0.0f) *
+        yawSlowdown * AimAssist_ClampFinite(aaGlob->fovTurnRateScale, 0.0f, 4.0f, 1.0f) * sensitivity;
+    pitchRate *= sensitivity;
 
     float pitchMax = input->pitchMax;
     float yawMax = input->yawMax;
@@ -1352,9 +1357,6 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
 
     if (aim_accel_turnrate_enabled && aim_accel_turnrate_enabled->current.enabled)
     {
-        const float sensitivity = AimAssist_ClampFinite(
-            input_viewSensitivity ? input_viewSensitivity->current.value : 1.0f,
-            0.0f, 5.0f, 1.0f);
         const float accel = AimAssist_ClampFinite(
             aim_accel_turnrate_lerp ? aim_accel_turnrate_lerp->current.value : 0.0f,
             0.0f, 4000.0f, 0.0f) * sensitivity;
