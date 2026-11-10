@@ -26,14 +26,19 @@ struct AimAssistGlobals {
 struct AimInput { float deltaTime; float pitch; float pitchAxis; float pitchMax; float yaw; float yawAxis; float yawMax; float forwardAxis; float rightAxis; int32_t buttons; int32_t localClientNum; const struct playerState_s *ps; };
 struct AimOutput { float pitch; float yaw; float meleeChargeYaw; uint8_t meleeChargeDist; };
 
-#ifndef __SWITCH__
+// These structures contain only fixed-width values and must keep the
+// original CoD4 layout on every target, including 64-bit Switch builds.
 static_assert(sizeof(AimTarget) == 0x2C);
 static_assert(sizeof(AimTargetGlob) == 0x1608);
 static_assert(sizeof(AimTweakables) == 0x20);
 static_assert(sizeof(AimScreenTarget) == 0x34);
 static_assert(sizeof(AimAssistGlobals) == 0xE34);
-static_assert(sizeof(AimInput) == 0x30);
 static_assert(sizeof(AimOutput) == 0x10);
+
+// AimInput contains a native playerState_s pointer, so its size is expected
+// to differ on 64-bit Switch and remains asserted only on 32-bit targets.
+#ifndef __SWITCH__
+static_assert(sizeof(AimInput) == 0x30);
 #endif
 
 void __cdecl TRACK_aim_assist();
