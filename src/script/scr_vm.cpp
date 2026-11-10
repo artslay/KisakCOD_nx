@@ -3047,6 +3047,7 @@ setlocalvariablefieldcached:
             scrVmPub.outparamcount = *(unsigned char *)fs.pos++;
 CallBuiltIn:
             iassert(!scrVmPub.inparamcount);
+#ifdef KISAK_SWITCH
             {
                 const char *builtinIndexPos = fs.pos;
                 builtinIndex = Scr_ReadUnsignedShort(&fs.pos);
@@ -3098,6 +3099,9 @@ CallBuiltIn:
                         scrVmPub.function_count);
                 }
             }
+#else
+            builtinIndex = Scr_ReadUnsignedShort(&fs.pos);
+#endif
             scrVmPub.function_frame->fs.pos = fs.pos;
             if (scrVmDebugPub.func_table[builtinIndex].breakpointCount)
             {
