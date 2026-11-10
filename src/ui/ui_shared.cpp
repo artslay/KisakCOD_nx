@@ -2660,7 +2660,11 @@ static bool Switch_UI_IsConfirmationMenuName(const char *name)
         Switch_UI_ContainsCaseInsensitive(name, "question") ||
         Switch_UI_ContainsCaseInsensitive(name, "yesno") ||
         Switch_UI_ContainsCaseInsensitive(name, "yes_no") ||
-        Switch_UI_ContainsCaseInsensitive(name, "dialog");
+        Switch_UI_ContainsCaseInsensitive(name, "dialog") ||
+        // Stock CoD4 single-player confirmation screens are named
+        // "restart_warning" and "savegame_warning", not *_popmenu.
+        Switch_UI_ContainsCaseInsensitive(name, "restart_warning") ||
+        Switch_UI_ContainsCaseInsensitive(name, "savegame_warning");
 }
 
 static bool Switch_UI_IsSaveQuitConfirmationMenuName(const char *name)
@@ -2672,7 +2676,8 @@ static bool Switch_UI_IsSaveQuitConfirmationMenuName(const char *name)
         Switch_UI_ContainsCaseInsensitive(name, "quit_to_menu") ||
         Switch_UI_ContainsCaseInsensitive(name, "return_to_menu") ||
         Switch_UI_ContainsCaseInsensitive(name, "leavegame") ||
-        Switch_UI_ContainsCaseInsensitive(name, "leave_game");
+        Switch_UI_ContainsCaseInsensitive(name, "leave_game") ||
+        Switch_UI_ContainsCaseInsensitive(name, "savegame_warning");
 }
 
 static bool Switch_UI_ItemHasActionScript(const itemDef_s *item)
@@ -2875,6 +2880,7 @@ static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
     // rather than embedding the command in an item action. Try known SP popup
     // names, but never use the application-exit popup for "return to menu".
     const char *const restartMenus[] = {
+        "restart_warning",
         "restart_popmenu",
         "restartlevel_popmenu",
         "restart_level_popmenu",
@@ -2882,6 +2888,8 @@ static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
         "restart_mission_popmenu"
     };
     const char *const leaveMenus[] = {
+        "savegame_warning",
+        "savegame_warning_noprofile",
         "savequit_popmenu",
         "save_quit_popmenu",
         "saveandquit_popmenu",
