@@ -8534,63 +8534,6 @@ void __cdecl Item_Text_Paint(UiContext *dc, itemDef_s *item)
                 MyAssertHandler("c:\\trees\\cod3\\src\\ui\\ui_utils_api.h", 36, 0, "%s", "w");
             rect = &item->window.rect;
             font = UI_GetFontHandle(&scrPlaceView[dc->localClientNum], item->fontEnum, item->textscale);
-#ifdef __SWITCH__
-            if (!subtitle &&
-                item->window.name &&
-                !Switch_UI_BadPointer(item->window.name) &&
-                !I_stricmp(item->window.name, "pausedMsg"))
-            {
-                static uint32_t switchPausedItemTraceCount = 0;
-                if (switchPausedItemTraceCount < 2u)
-                {
-                    const bool traceFontValid = font && !Switch_UI_BadPointer(font);
-                    const Font_s *traceFont = traceFontValid ? font : nullptr;
-                    const char *traceFontName =
-                        traceFont && traceFont->fontName &&
-                        !Switch_UI_BadPointer(traceFont->fontName)
-                            ? traceFont->fontName : "<invalid>";
-                    const Material *traceMaterial =
-                        traceFont ? traceFont->material : nullptr;
-                    const Material *traceGlowMaterial =
-                        traceFont ? traceFont->glowMaterial : nullptr;
-                    const bool traceMaterialValid =
-                        traceMaterial && !Switch_UI_BadPointer(traceMaterial);
-                    const char *traceMaterialName =
-                        traceMaterialValid && traceMaterial->info.name &&
-                        !Switch_UI_BadPointer(traceMaterial->info.name)
-                            ? traceMaterial->info.name : "<invalid>";
-                    const char *rawText =
-                        item->text && !Switch_UI_BadPointer(item->text)
-                            ? item->text : "<null>";
-                    char trace[896];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][PAUSE TEXT PIPE] stage=ui_item n=%u item=%s raw='%.48s' resolved='%.80s' fontEnum=%d font=%p fontValid=%u fontName='%.48s' pixelHeight=%d glyphCount=%d glyphs=%p material=%p materialName='%.64s' glow=%p textScale=%.4f style=%d color=%.2f,%.2f,%.2f,%.2f textRect=%.1f,%.1f,%.1f,%.1f itemRect=%.1f,%.1f,%.1f,%.1f\n",
-                        switchPausedItemTraceCount,
-                        item->window.name,
-                        rawText,
-                        textPtr,
-                        item->fontEnum,
-                        static_cast<const void *>(font),
-                        traceFontValid ? 1u : 0u,
-                        traceFontName,
-                        traceFont ? traceFont->pixelHeight : -1,
-                        traceFont ? traceFont->glyphCount : -1,
-                        traceFont ? static_cast<const void *>(traceFont->glyphs) : nullptr,
-                        static_cast<const void *>(traceMaterial),
-                        traceMaterialName,
-                        static_cast<const void *>(traceGlowMaterial),
-                        item->textscale,
-                        item->textStyle,
-                        color[0], color[1], color[2], color[3],
-                        textRect->x, textRect->y, textRect->w, textRect->h,
-                        item->window.rect.x, item->window.rect.y,
-                        item->window.rect.w, item->window.rect.h);
-                    Switch_LogWrite(trace);
-                    ++switchPausedItemTraceCount;
-                }
-            }
-#endif
             if (subtitle)
                 UI_DrawTextWithGlow(
                     &scrPlaceView[dc->localClientNum],
