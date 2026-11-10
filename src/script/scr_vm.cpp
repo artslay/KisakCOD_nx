@@ -252,7 +252,10 @@ static void Switch_LogBuiltinDispatchFault(
     uint32_t builtinIndex,
     const char *indexPos,
     int tableSize,
-    uintptr_t target)
+    uintptr_t target,
+    int currentOpcode,
+    uint32_t localId,
+    int vmDepth)
 {
     static std::atomic<uint32_t> traceCount{0};
     const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
@@ -277,7 +280,7 @@ static void Switch_LogBuiltinDispatchFault(
         "[KisakCOD][SCRIPT BUILTIN DISPATCH] n=%u reason=%s opcode=%d index=%u tableSize=%d capacity=%u target=0x%llx targetAlign=%u indexPos=%p codeOffset=0x%llx codeValid=%u program=%p programLen=%u localId=%u vmDepth=%d\n",
         traceId,
         reason ? reason : "unknown",
-        opcode,
+        currentOpcode,
         builtinIndex,
         tableSize,
         static_cast<unsigned int>(SCR_FUNC_TABLE_SIZE),
@@ -288,8 +291,8 @@ static void Switch_LogBuiltinDispatchFault(
         codePosInProgram ? 1u : 0u,
         static_cast<const void *>(scrVarPub.programBuffer),
         scrCompilePub.programLen,
-        fs.localId,
-        scrVmPub.function_count);
+        localId,
+        vmDepth);
     Switch_LogWrite(trace);
 }
 
@@ -3065,7 +3068,10 @@ CallBuiltIn:
                         builtinIndex,
                         builtinIndexPos,
                         builtinTableSize,
-                        0u);
+                        0u,
+                        opcode,
+                        fs.localId,
+                        scrVmPub.function_count);
                 }
                 else if (!builtinTarget)
                 {
@@ -3074,7 +3080,10 @@ CallBuiltIn:
                         builtinIndex,
                         builtinIndexPos,
                         builtinTableSize,
-                        builtinTarget);
+                        builtinTarget,
+                        opcode,
+                        fs.localId,
+                        scrVmPub.function_count);
                 }
                 else if (builtinTarget & 3u)
                 {
