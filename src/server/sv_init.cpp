@@ -23,6 +23,10 @@ extern void Sys_Print(const char *text);
 #include <universal/com_files.h>
 #include <universal/com_sndalias.h>
 
+#ifdef __SWITCH__
+extern "C" void Switch_LogLevelStart(const char *mapName, int savegame);
+#endif
+
 const dvar_t *sv_clientFrameRateFix;
 const dvar_t *sv_loadMyChanges;
 
@@ -418,6 +422,9 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
     char filename[160]; // [sp+60h] [-A0h] BYREF
 
     Com_SyncThreads();
+#ifdef __SWITCH__
+    Switch_LogLevelStart(mapname, savegame);
+#endif
     startTime = Sys_Milliseconds();
 
     // MP ADD
