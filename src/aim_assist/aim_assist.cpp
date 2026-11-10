@@ -187,6 +187,12 @@ void AimAssist_RegisterDvars()
         1,
         DVAR_CHEAT,
         "Slowdown the turn rate when the cross hair passes over a target");
+#elif defined(KISAK_SWITCH)
+    aim_slowdown_enabled = Dvar_RegisterBool(
+        "aim_slowdown_enabled",
+        1,
+        DVAR_CHEAT,
+        "Slowdown the turn rate when the cross hair passes over a target");
 #elif KISAK_SP
     aim_slowdown_enabled = Dvar_RegisterBool(
         "aim_slowdown_enabled",
@@ -308,6 +314,12 @@ void AimAssist_RegisterDvars()
         1,
         DVAR_CHEAT,
         "Aim lock on helps the player to stay on target");
+#elif defined(KISAK_SWITCH)
+    aim_lockon_enabled = Dvar_RegisterBool(
+        "aim_lockon_enabled",
+        1,
+        DVAR_CHEAT,
+        "Aim lock on helps the player to stay on target");
 #elif KISAK_SP
     aim_lockon_enabled = Dvar_RegisterBool(
         "aim_lockon_enabled",
@@ -349,6 +361,12 @@ void AimAssist_RegisterDvars()
         DVAR_CHEAT,
         "The height of the auto aim region in virtual screen coordinates(0-480)");
 #ifdef KISAK_MP
+    aim_scale_view_axis = Dvar_RegisterBool(
+        "aim_scale_view_axis",
+        1,
+        DVAR_CHEAT,
+        "Scale the influence of each input axis so that the major axis has more influence on the control");
+#elif defined(KISAK_SWITCH)
     aim_scale_view_axis = Dvar_RegisterBool(
         "aim_scale_view_axis",
         1,
@@ -1071,6 +1089,35 @@ void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output
     }
 }
 
+static const AimScreenTarget *AimAssist_GetLockOnTarget(
+    AimAssistGlobals *aaGlob)
+{
+    constexpr float kAimAssistTargetRange = 8192.0f;
+    const float maxDistanceSqr = kAimAssistTargetRange * kAimAssistTargetRange;
+
+    if (aaGlob->lockOnTargetEnt != ENTITYNUM_NONE)
+    {
+        const AimScreenTarget *currentTarget =
+            AimAssist_GetTargetFromEntity(aaGlob, aaGlob->lockOnTargetEnt);
+        if (currentTarget &&
+            currentTarget->distSqr <= maxDistanceSqr &&
+            AimAssist_DoBoundsIntersectCenterBox(
+                currentTarget->clipMins,
+                currentTarget->clipMaxs,
+                aaGlob->tweakables.lockOnRegionWidth,
+                aaGlob->tweakables.lockOnRegionHeight))
+        {
+            return currentTarget;
+        }
+    }
+
+    return AimAssist_GetBestTarget(
+        aaGlob,
+        kAimAssistTargetRange,
+        aaGlob->tweakables.lockOnRegionWidth,
+        aaGlob->tweakables.lockOnRegionHeight);
+}
+
 void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *output)
 {
     PROF_SCOPED("AimAssist_UpdateGamePadInput");
@@ -1096,14 +1143,40 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         (input->buttons & BUTTON_ADS) != 0 ||
         input->ps->fWeaponPosFrac > 0.0f;
 
-    const float pitchRate = ads
+    const float basePitchRate = ads
         ? aim_turnrate_pitch_ads->current.value
         : aim_turnrate_pitch->current.value;
-    const float yawRate = ads
+    const float baseYawRate = ads
         ? aim_turnrate_yaw_ads->current.value
         : aim_turnrate_yaw->current.value;
 
     const float dt = input->deltaTime > 0.0f ? input->deltaTime : 0.0f;
+    float pitchRate = basePitchRate;
+    float yawRate = baseYawRate;
+
+    // CoD4 controller slowdown: reduce turn rate only while a valid visible
+    // target's projected bounds overlap the central slowdown region.
+    if (aim_slowdown_enabled && aim_slowdown_enabled->current.enabled)
+    {
+        constexpr float kAimAssistTargetRange = 8192.0f;
+        const AimScreenTarget *slowdownTarget = AimAssist_GetBestTarget(
+            aaGlob,
+            kAimAssistTargetRange,
+            aaGlob->tweakables.slowdownRegionWidth,
+            aaGlob->tweakables.slowdownRegionHeight);
+        if (slowdownTarget)
+        {
+            const float pitchScale = ads
+                ? aim_slowdown_pitch_scale_ads->current.value
+                : aim_slowdown_pitch_scale->current.value;
+            const float yawScale = ads
+                ? aim_slowdown_yaw_scale_ads->current.value
+                : aim_slowdown_yaw_scale->current.value;
+
+            pitchRate *= pitchScale < 0.0f ? 0.0f : (pitchScale > 1.0f ? 1.0f : pitchScale);
+            yawRate *= yawScale < 0.0f ? 0.0f : (yawScale > 1.0f ? 1.0f : yawScale);
+        }
+    }
 
     output->pitch += input->pitchAxis * pitchRate * dt;
     output->yaw += input->yawAxis * yawRate * dt;
@@ -1114,8 +1187,61 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         (void)accel;
     }
 
-    // SP aim-assist dvars are disabled by default in this port, but preserve
-    // the existing melee processing for controller input.
+    // Lock-on is intentionally gated by deliberate right-stick movement. The
+    // selected target is held while it remains inside the CoD4 lock-on region,
+    // preventing rapid target switching as two actors cross near the reticle.
+    if (aim_lockon_enabled && aim_lockon_enabled->current.enabled)
+    {
+        const float stickDeflection = sqrtf(
+            input->pitchAxis * input->pitchAxis +
+            input->yawAxis * input->yawAxis);
+        const float activationDeflection =
+            aim_lockon_deflection ? aim_lockon_deflection->current.value : 1.0f;
+
+        if (stickDeflection >= activationDeflection && dt > 0.0f)
+        {
+            const AimScreenTarget *lockTarget = AimAssist_GetLockOnTarget(aaGlob);
+            if (lockTarget)
+            {
+                aaGlob->lockOnTargetEnt = lockTarget->entIndex;
+
+                float targetDir[3];
+                float targetAngles[3];
+                Vec3Sub(lockTarget->aimPos, aaGlob->viewOrigin, targetDir);
+                vectoangles(targetDir, targetAngles);
+
+                const float strength = aim_lockon_strength
+                    ? aim_lockon_strength->current.value : 0.0f;
+                const float boundedStrength =
+                    strength < 0.0f ? 0.0f : (strength > 1.0f ? 1.0f : strength);
+                const float boundedDeflection =
+                    stickDeflection < 0.0f ? 0.0f :
+                    (stickDeflection > 1.0f ? 1.0f : stickDeflection);
+                const float lockPitchRate =
+                    basePitchRate * boundedStrength * boundedDeflection;
+                const float lockYawRate =
+                    baseYawRate * boundedStrength * boundedDeflection;
+
+                output->pitch = DiffTrackAngle(
+                    targetAngles[0], output->pitch, lockPitchRate, dt);
+                output->yaw = DiffTrackAngle(
+                    targetAngles[1], output->yaw, lockYawRate, dt);
+            }
+            else
+            {
+                aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+            }
+        }
+        else
+        {
+            aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+        }
+    }
+    else
+    {
+        aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
+    }
+
     AimAssist_ApplyAutoMelee(input, output);
     AimAssist_ApplyMeleeCharge(input, output);
 
@@ -1128,8 +1254,6 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         output->yaw -= 360.0f;
     while (output->yaw < -180.0f)
         output->yaw += 360.0f;
-
-    (void)aaGlob;
 }
 
 void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output)
