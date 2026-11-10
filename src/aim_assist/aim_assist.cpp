@@ -1150,7 +1150,12 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
         ? aim_turnrate_yaw_ads->current.value
         : aim_turnrate_yaw->current.value;
 
-    const float dt = input->deltaTime > 0.0f ? input->deltaTime : 0.0f;
+    // Keep aim-assist tracking bounded after frame stalls. The gamepad
+    // path normally supplies <= 50 ms, but this function also guards its own
+    // time step so a caller cannot turn a hitch into a camera snap.
+    const float dt = input->deltaTime > 0.0f
+        ? (input->deltaTime > 0.05f ? 0.05f : input->deltaTime)
+        : 0.0f;
     float pitchRate = basePitchRate;
     float yawRate = baseYawRate;
 
@@ -1222,9 +1227,14 @@ void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *outp
                 const float lockYawRate =
                     baseYawRate * boundedStrength * boundedDeflection;
 
-                output->pitch = DiffTrackAngle(
+                // aim_turnrate_* are angular velocities in degrees/second.
+                // DiffTrackAngle treats its rate as an interpolation coefficient;
+                // at normal stick deflection rate * dt exceeds 1 and snaps to the
+                // target angle (which can look like a sudden 180-degree turn).
+                // LinearTrackAngle instead limits the angular step to rate * dt.
+                output->pitch = LinearTrackAngle(
                     targetAngles[0], output->pitch, lockPitchRate, dt);
-                output->yaw = DiffTrackAngle(
+                output->yaw = LinearTrackAngle(
                     targetAngles[1], output->yaw, lockYawRate, dt);
             }
             else
