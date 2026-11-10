@@ -1573,6 +1573,9 @@ void __cdecl CG_Init(int localClientNum, int savegame)
     CG_AntiBurnInHUD_RegisterDvars();
     CL_SetADS(localClientNum, 0);
     AimAssist_Init(localClientNum);
+    // CG_InitViewDimensions has already populated the Switch viewport; set up
+    // the screen-space target transform before the first view update.
+    AimAssist_Setup(localClientNum);
 
 #ifndef KISAK_NO_FASTFILES
     CG_ModelPreviewerCreateDevGui(localClientNum);
