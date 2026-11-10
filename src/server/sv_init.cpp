@@ -421,10 +421,10 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
     SaveGame *save; // [sp+50h] [-B0h] BYREF
     char filename[160]; // [sp+60h] [-A0h] BYREF
 
-    Com_SyncThreads();
 #ifdef __SWITCH__
     Switch_LogLevelStart(mapname, savegame);
 #endif
+    Com_SyncThreads();
     startTime = Sys_Milliseconds();
 
     // MP ADD
