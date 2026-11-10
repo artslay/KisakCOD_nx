@@ -273,6 +273,10 @@ struct SurfaceTypeSoundList // sizeof=0x8
 };
 
 struct WeaponDef *__cdecl BG_LoadWeaponDef_LoadObj(const char *name);
+float __cdecl BG_GetWeaponAutoAimRange(uint32_t weaponIndex);
+float __cdecl BG_GetWeaponAimAssistRange(uint32_t weaponIndex, float adsLerp);
+bool __cdecl BG_WeaponRequiresLockonToFire(uint32_t weaponIndex);
+bool __cdecl BG_WeaponIsOffhand(uint32_t weaponIndex);
 
 inline void __cdecl SetConfigString(char **ppszConfigString, const char *pszKeyValue)
 {
