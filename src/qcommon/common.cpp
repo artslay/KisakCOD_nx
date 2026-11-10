@@ -2372,7 +2372,11 @@ void __cdecl Com_AssetLoadUI()
         // This same free mask still replaces UI/load/dev assets on an explicit UI reload.
         zoneInfo.allocFlags = DB_ZONE_LOAD;
         zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_LOAD | DB_ZONE_DEV;
-        DB_LoadXAssets(&zoneInfo, 1u, 0);
+        // UI_Init runs immediately after this call through CL_StartHunkUsers().
+        // On Switch the database worker is genuinely asynchronous; do not let
+        // UI_Init query the UI fastfile while its menus are still being loaded.
+        // Keep the normal archive/unarchive synchronization around this reload.
+        DB_LoadXAssets(&zoneInfo, 1u, 1);
     }
 #ifdef KISAK_MP
     UI_SetMap((char*)"", (char*)"");
