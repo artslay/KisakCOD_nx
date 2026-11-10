@@ -1084,15 +1084,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         Switch_SmoothRightStickAxis(rawPitchAxis, s_switchRightStickPitch, deltaTime);
     const float yawAxis =
         Switch_SmoothRightStickAxis(rawYawAxis, s_switchRightStickYaw, deltaTime);
-    const float viewSensitivity = input_viewSensitivity
-        ? std::clamp(input_viewSensitivity->current.value, 0.0001f, 5.0f)
-        : 1.0f;
-    // Mouse sensitivity is a PC mouse setting; the Switch stick has its
-    // own archived input_viewSensitivity control and must not inherit it.
-    const float effectiveSensitivity =
-        std::clamp(viewSensitivity, 0.0001f, 5.0f);
-    const float effectivePitchAxis = pitchAxis * effectiveSensitivity;
-    const float effectiveYawAxis = yawAxis * effectiveSensitivity;
 
     if (!padActive &&
         std::fabs(pitchAxis) < 0.003f &&
