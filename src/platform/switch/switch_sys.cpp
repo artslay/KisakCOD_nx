@@ -4162,7 +4162,7 @@ void Switch_LogInit()
     Switch_LogRotateIfNeeded(kSwitchLogPath, kSwitchPreviousLogPath, 0u);
     g_switchLogFd = ::open(
         kSwitchLogPath,
-        O_WRONLY | O_CREAT | O_TRUNC,
+        O_WRONLY | O_CREAT | O_TRUNC | O_APPEND,
         0666);
 
     if (g_switchLogFd < 0)
