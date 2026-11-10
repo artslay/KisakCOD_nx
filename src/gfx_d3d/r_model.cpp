@@ -65,6 +65,20 @@ void __cdecl R_UnlockSkinnedCache()
         PROF_SCOPED("UnlockSkinnedCache");
         vb = frontEndDataOut->skinnedCacheVb->buffer;
         iassert( vb );
+#ifdef __SWITCH__
+        // R_AllocSkinnedCachedVerts reserves vertices atomically from offset 0,
+        // so [0, used) is the exact prefix consumed by this frame. Clamp the
+        // counter to the D3D buffer size because failed allocations can push
+        // the reservation counter beyond the cache capacity.
+        const int usedBytes = frontEndDataOut->skinnedCacheVb->used;
+        const int totalBytes = frontEndDataOut->skinnedCacheVb->total;
+        if (usedBytes > 0 && totalBytes > 0)
+        {
+            const uint32_t uploadBytes = static_cast<uint32_t>(
+                std::min(usedBytes, totalBytes));
+            vb->MarkWrittenRange(0u, uploadBytes);
+        }
+#endif
         R_UnlockVertexBuffer(vb);
     }
 }
@@ -440,6 +454,13 @@ void __cdecl R_LockSkinnedCache()
 
         PROF_SCOPED("LockSkinnedCache");
 
+#ifdef __SWITCH__
+        // The skinned cache is a linear allocator: R_AllocSkinnedCachedVerts
+        // reserves a contiguous prefix and advances skinnedCacheVb->used.
+        // Track that prefix so Unlock queues only bytes this frame actually
+        // generated, rather than uploading the entire 0x480000-byte pool.
+        vb->BeginMeshWriteTracking();
+#endif
         gfxBuf.skinnedCacheLockAddr = (unsigned char *)R_LockVertexBuffer(vb, 0, 0, 0x2000);
         if ((reinterpret_cast<uintptr_t>(gfxBuf.skinnedCacheLockAddr) & 0xF) != 0)
         {
