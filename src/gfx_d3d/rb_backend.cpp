@@ -2467,7 +2467,6 @@ void __cdecl DrawText2D(
                                                 cosAngle,
                                                 dropShadowColor.packed,
                                                 GFX_PRIM_STATS_HUD);
-                                        }
                                     }
                                 }
                                 // The shadow pass is optional. Close its flag
