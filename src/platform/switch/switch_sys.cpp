@@ -15,6 +15,7 @@
 #include <cstring>
 #include <cctype>
 #include <cstdarg>
+#include <unwind.h>
 #include <exception>
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
@@ -25,13 +26,8 @@ static const auto g_sysStart = std::chrono::steady_clock::now();
 static std::recursive_mutex g_sysCritical[32];
 
 static int g_switchLogFd = -1;
-static int g_switchCrashLogFd = -1;
 static const char *const kSwitchLogPath = "sdmc:/switch/KisakCOD/kisakcod.log";
 static const char *const kSwitchPreviousLogPath = "sdmc:/switch/KisakCOD/kisakcod.previous.log";
-static const char *const kSwitchCrashLogPath = "sdmc:/switch/KisakCOD/kisakcod_crash.log";
-static const char *const kSwitchPreviousCrashLogPath = "sdmc:/switch/KisakCOD/kisakcod_crash.previous.log";
-static constexpr unsigned long long kSwitchLogRotateBytes = 16ull * 1024ull * 1024ull;
-static constexpr unsigned long long kSwitchCrashLogRotateBytes = 4ull * 1024ull * 1024ull;
 static std::atomic_flag g_switchDeferredDiagLock = ATOMIC_FLAG_INIT;
 static std::atomic_flag g_switchCrashReportStarted = ATOMIC_FLAG_INIT;
 static bool g_switchScreenLog = false;
@@ -188,23 +184,19 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
 
 static void Switch_LogCrashLine(const char *line)
 {
-    // Bypass normal filtering and stdio. The crash journal is append-only
-    // across launches, independently of the per-session engine log.
+    // Crash records bypass normal filtering but use the same single log file.
     if (!line || !*line)
         return;
 
     const size_t len = std::strlen(line);
     Switch_LogWriteAll(STDOUT_FILENO, line, len);
     Switch_LogWriteAll(g_switchLogFd, line, len);
-    Switch_LogWriteAll(g_switchCrashLogFd, line, len);
 }
 
 static void Switch_LogCrashSync()
 {
     if (g_switchLogFd >= 0)
         (void)::fsync(g_switchLogFd);
-    if (g_switchCrashLogFd >= 0)
-        (void)::fsync(g_switchCrashLogFd);
 }
 
 static void Switch_LogCrashReport(const char *source, const char *detail)
@@ -233,12 +225,16 @@ static void Switch_LogCrashReport(const char *source, const char *detail)
     }
 }
 
+static void Switch_LogTerminateBacktrace();
+
 [[noreturn]] static void Switch_LogFatalBreak(
     const char *source,
     uint32_t result,
     const char *detail)
 {
     Switch_LogCrashReport(source, detail);
+    if (source && std::strcmp(source, "std::terminate") == 0)
+        Switch_LogTerminateBacktrace();
 
     char line[160];
     std::snprintf(
@@ -252,6 +248,59 @@ static void Switch_LogCrashReport(const char *source, const char *detail)
     // Match libnx's standard panic termination after persisting the report.
     svcBreak(BreakReason_Panic, reinterpret_cast<uintptr_t>(&result), sizeof(result));
     __builtin_unreachable();
+}
+
+struct SwitchTerminateBacktrace
+{
+    static constexpr unsigned int kMaxFrames = 48u;
+    uintptr_t frames[kMaxFrames];
+    unsigned int count;
+};
+
+static _Unwind_Reason_Code Switch_CollectTerminateFrame(
+    _Unwind_Context *context,
+    void *argument)
+{
+    auto *trace = static_cast<SwitchTerminateBacktrace *>(argument);
+    if (!trace || trace->count >= SwitchTerminateBacktrace::kMaxFrames)
+        return _URC_END_OF_STACK;
+
+    const uintptr_t pc = static_cast<uintptr_t>(_Unwind_GetIP(context));
+    if (pc != 0u)
+        trace->frames[trace->count++] = pc;
+
+    return trace->count >= SwitchTerminateBacktrace::kMaxFrames
+        ? _URC_END_OF_STACK
+        : _URC_NO_REASON;
+}
+
+static void Switch_LogTerminateBacktrace()
+{
+    SwitchTerminateBacktrace trace{};
+    const _Unwind_Reason_Code unwindResult =
+        _Unwind_Backtrace(Switch_CollectTerminateFrame, &trace);
+    const uintptr_t moduleBase = reinterpret_cast<uintptr_t>(__code_start);
+
+    char line[192];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] terminate_backtrace frames=%u unwind_result=%u module_base=0x%016llx\n",
+        trace.count,
+        static_cast<unsigned int>(unwindResult),
+        static_cast<unsigned long long>(moduleBase));
+    Switch_LogCrashLine(line);
+
+    for (unsigned int i = 0; i < trace.count; ++i)
+    {
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][CRASH] terminate_frame[%u] pc=0x%016llx\n",
+            i,
+            static_cast<unsigned long long>(trace.frames[i]));
+        Switch_LogCrashLine(line);
+    }
 }
 
 static void Switch_TerminateHandler() noexcept
@@ -3862,15 +3911,6 @@ static bool Switch_LogIsHudDiagnostic(const char *msg)
     return false;
 }
 
-// The pause-text pipeline trace is deliberately narrow and bounded at
-// its call sites. It is a temporary exception to the normal error-only filter
-// so UI submission and backend material decisions can be compared in one log.
-static bool Switch_LogIsPauseTextPipe(const char *msg)
-{
-    static constexpr char prefix[] = "[KisakCOD][PAUSE TEXT PIPE]";
-    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
-}
-
 static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
 {
     if (!msg || !*msg)
@@ -3957,7 +3997,6 @@ void Switch_LogWrite(const char *msg)
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
-        !Switch_LogIsPauseTextPipe(msg) &&
         !Switch_LogIsVulkanFrameTiming(msg) &&
         !Switch_LogIsCpuSceneTiming(msg) &&
         !Switch_LogIsFxDiagnostic(msg) &&
@@ -3968,7 +4007,6 @@ void Switch_LogWrite(const char *msg)
         !Switch_LogIsLevelLoadMessage(msg))
         return;
     if (!Switch_LogIsImportant(msg) &&
-        !Switch_LogIsPauseTextPipe(msg) &&
         Switch_LogIsVerboseTrace(msg))
         return;
 
@@ -4145,41 +4183,19 @@ void Switch_LogInit()
 {
     g_switchScreenLog = false;
 
-    if (g_switchLogFd >= 0 && g_switchCrashLogFd >= 0)
+    if (g_switchLogFd >= 0)
         return;
 
-    if (g_switchLogFd < 0)
-    {
-        Switch_LogRotateIfNeeded(
-            kSwitchLogPath,
-            kSwitchPreviousLogPath,
-            kSwitchLogRotateBytes);
-        g_switchLogFd = ::open(
-            kSwitchLogPath,
-            O_WRONLY | O_CREAT | O_APPEND,
-            0666);
-    }
-
-    if (g_switchCrashLogFd < 0)
-    {
-        Switch_LogRotateIfNeeded(
-            kSwitchCrashLogPath,
-            kSwitchPreviousCrashLogPath,
-            kSwitchCrashLogRotateBytes);
-        g_switchCrashLogFd = ::open(
-            kSwitchCrashLogPath,
-            O_WRONLY | O_CREAT | O_APPEND,
-            0666);
-    }
+    // Archive the preceding run at every launch and start a clean active log.
+    Switch_LogRotateIfNeeded(kSwitchLogPath, kSwitchPreviousLogPath, 0u);
+    g_switchLogFd = ::open(
+        kSwitchLogPath,
+        O_WRONLY | O_CREAT | O_TRUNC,
+        0666);
 
     if (g_switchLogFd < 0)
     {
         const char *msg = "[KisakCOD][LOG] Failed to open sdmc log file\n";
-        Switch_LogWriteAll(STDOUT_FILENO, msg, std::strlen(msg));
-    }
-    if (g_switchCrashLogFd < 0)
-    {
-        const char *msg = "[KisakCOD][LOG] Failed to open persistent crash journal\n";
         Switch_LogWriteAll(STDOUT_FILENO, msg, std::strlen(msg));
     }
 
@@ -4187,7 +4203,6 @@ void Switch_LogInit()
         "\n========================================\n"
         "KisakCOD Switch engine log session\n"
         "Log file: sdmc:/switch/KisakCOD/kisakcod.log\n"
-        "Crash journal: sdmc:/switch/KisakCOD/kisakcod_crash.log\n"
         "========================================\n";
     Switch_LogWriteAll(g_switchLogFd, header, sizeof(header) - 1u);
 }
@@ -4214,6 +4229,7 @@ void Switch_LogShutdown()
 {
     if (g_switchLogFd >= 0)
     {
+        (void)::fsync(g_switchLogFd);
         ::close(g_switchLogFd);
         g_switchLogFd = -1;
     }
