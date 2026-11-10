@@ -2519,7 +2519,6 @@ void __cdecl DrawText2D(
                                             g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/draw_base/return";
 #endif
                                         }
-                                }
                                 if ((renderFlags & 2) != 0 && count == cursorPos)
                                 {
                                     xRot = xa + xAdj;
