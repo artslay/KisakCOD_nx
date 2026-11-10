@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <algorithm>
 extern const dvar_t *input_viewSensitivity;
 #include <cmath>
 #include "aim_assist.h"
@@ -1186,8 +1187,10 @@ static float AimAssist_TrackTurnRate(
     if (!std::isfinite(current) || current < 0.0f)
         current = 0.0f;
 
-    if (target <= current || acceleration <= 0.0f)
+    if (target <= current)
         return target;
+    if (acceleration <= 0.0f)
+        return current;
 
     return LinearTrack(target, current, acceleration, deltaTime);
 }
@@ -1227,7 +1230,8 @@ static void AimAssist_SetGamepadAutoAimTarget(
     aaGlob->autoAimActive = true;
     aaGlob->autoAimPitch = aaGlob->viewAngles[0];
     aaGlob->autoAimYaw = aaGlob->viewAngles[1];
-    AimAssist_UpdateGamepadAutoAimTarget(aaGlob);
+    if (!AimAssist_UpdateGamepadAutoAimTarget(aaGlob))
+        AimAssist_ClearGamepadAutoAimTarget(aaGlob);
 }
 
 static void AimAssist_ApplyGamepadAutoAim(
