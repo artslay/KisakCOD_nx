@@ -236,13 +236,18 @@ void __cdecl Con_InitGameMsgChannels()
     {
         const char *channelNames = con_gameMsgWindowNFilter[gameWindowIndexa]->current.string;
 #ifdef __SWITCH__
-        // Window 2 is the stock in-game subtitle window. Its default filter is
-        // "subtitle"; recover it if a saved Switch dvar was cleared/corrupted.
-        if (gameWindowIndexa == 2 &&
+        // The first three stock game-message windows are:
+        // 0 = gamenotify/obituary, 1 = boldgame, 2 = subtitle.
+        // Old Switch configs can contain an empty/"0" value for these string
+        // dvars. An empty filter silently drops messages such as EXE_GAMESAVED,
+        // GAME_OBJECTIVECOMPLETED and GAME_OBJECTIVESUPDATED. Restore only the
+        // stock non-empty defaults; window 3 is intentionally empty.
+        if (gameWindowIndexa < 3u &&
             (!channelNames || !channelNames[0] || !I_stricmp(channelNames, "0")))
         {
             channelNames = defaultGameWindowFilters[gameWindowIndexa];
-            Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=init_fallback configured_filter=empty_or_zero default=subtitle\n");
+            if (gameWindowIndexa == 2)
+                Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=init_fallback configured_filter=empty_or_zero default=subtitle\n");
         }
 #endif
         Con_InitChannelsForDestFromList(
