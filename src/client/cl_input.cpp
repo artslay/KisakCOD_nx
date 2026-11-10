@@ -1110,9 +1110,9 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 
 
     cmd->pitchmove = ClampChar(
-        static_cast<int>(effectivePitchAxis * 127.0f) + cmd->pitchmove);
+        static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
     cmd->yawmove = ClampChar(
-        static_cast<int>(effectiveYawAxis * 127.0f) + cmd->yawmove);
+        static_cast<int>(yawAxis * 127.0f) + cmd->yawmove);
 
     if (GPad_GetButton(controller, GPAD_R_TRIG) >= cl_analog_attack_threshold->current.value ||
         rightTrigger >= cl_analog_attack_threshold->current.value)
