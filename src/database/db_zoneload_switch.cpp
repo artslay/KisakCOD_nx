@@ -657,8 +657,29 @@ static void __cdecl CollectRegisteredWeaponForSoundFixup(
         weapons->push_back(header.weapon);
 }
 
+static void NormalizeWeaponMaterialReferences(WeaponDef *weapon)
+{
+    if (!weapon)
+        return;
+
+    // WeaponDef contains fastfile Material* dependencies as well as its model
+    // and sound references. Rebind every material slot to DB's canonical
+    // object after the complete zone has been linked, just like XModel and
+    // GfxWorld surface materials.
+    NormalizeMaterialReference(&weapon->reticleCenter, "weapon", nullptr, 0);
+    NormalizeMaterialReference(&weapon->reticleSide, "weapon", nullptr, 1);
+    NormalizeMaterialReference(&weapon->hudIcon, "weapon", nullptr, 2);
+    NormalizeMaterialReference(&weapon->ammoCounterIcon, "weapon", nullptr, 3);
+    NormalizeMaterialReference(&weapon->overlayMaterial, "weapon", nullptr, 4);
+    NormalizeMaterialReference(&weapon->overlayMaterialLowRes, "weapon", nullptr, 5);
+    NormalizeMaterialReference(&weapon->killIcon, "weapon", nullptr, 6);
+    NormalizeMaterialReference(&weapon->dpadIcon, "weapon", nullptr, 7);
+}
+
 void FixupWeapon(ZoneLoadState &state, WeaponDef *weapon)
 {
+    NormalizeWeaponMaterialReferences(weapon);
+
     for (snd_alias_list_t **sound : {
              &weapon->pickupSound, &weapon->pickupSoundPlayer, &weapon->ammoPickupSound, &weapon->ammoPickupSoundPlayer,
              &weapon->projectileSound, &weapon->pullbackSound, &weapon->pullbackSoundPlayer, &weapon->fireSound,
