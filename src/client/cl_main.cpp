@@ -2073,7 +2073,13 @@ void __cdecl CL_Vid_Restart_f()
     else
     {
         SND_StopSounds(SND_STOP_ALL);
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=begin\n");
+#endif
         CL_ShutdownHunkUsers();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_shutdown_hunk_users\n");
+#endif
 #ifdef __SWITCH__
         // The Switch display mode and native VI surface do not change when
         // CoD4 applies graphics dvars. Keep the Vulkan WSI/device alive while
