@@ -2076,8 +2076,17 @@ void __cdecl DB_LoadXZone(XZoneInfo *zoneInfo, uint32_t zoneCount)
 
 void __cdecl DB_InitThread()
 {
+    // The database worker is process-lifetime: DB_Thread() waits for work forever
+    // and is not stopped by Com_Restart(). vid_restart calls Com_InitXAssets()
+    // again, so only create this worker once instead of joining it and blocking.
+    static bool databaseThreadStarted = false;
+    if (databaseThreadStarted)
+        return;
+
     if (!Sys_SpawnDatabaseThread((void(__cdecl *)(uint32_t))DB_Thread))
         Sys_Error("Failed to create database thread");
+
+    databaseThreadStarted = true;
 }
 
 void __cdecl  DB_Thread(uint32_t threadContext)
