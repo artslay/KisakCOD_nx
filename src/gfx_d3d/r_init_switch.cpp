@@ -148,6 +148,14 @@ void R_ShutdownMaterialUsage()
 
 void R_ShutdownDirect3D()
 {
+    // CoD4 unloads the renderer's fastfile zones before releasing its device
+    // when shutdown is part of an active fastfile load. The Switch loader
+    // deliberately retains already-loaded code/UI/common zones on a normal
+    // map restart, but a full vid_restart during loading must drop them so the
+    // next R_LoadGraphicsAssets() rebuilds assets against the new renderer.
+    if (IsFastFileLoad())
+        DB_ShutdownXAssets();
+
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
     // shutdown ordering and prevents dangling GPU resources after device loss.
