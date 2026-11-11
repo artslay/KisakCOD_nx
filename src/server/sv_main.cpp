@@ -222,20 +222,14 @@ int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave)
     result = G_SaveGame(pendingSave, checksum);
     if (!pendingSave)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 191, 0, "%s", "filename");
-    // G_WriteGame() can return zero both when a save was skipped during
-    // serialization and when the file was successfully written. Internal
-    // restart commands require the latter: the queued loadgame must never
-    // target a save file that was not actually finalized on the device.
-    SaveGame *save = SaveMemory_GetSaveHandle(SAVE_GAME_HANDLE);
-    const bool saveWritten = save && SaveMemory_IsWrittenToDevice(save);
-    const bool isRestartSave =
-        !strcmp(pendingSave->filename, "internal/vid_restart") ||
-        !strcmp(pendingSave->filename, "internal/snd_restart");
 
-    if (result == 0 && saveWritten)
-        AppendCommandsForInternalSave(pendingSave->filename);
-    else if (result == 0 && isRestartSave)
-        result = 1;
+    // CoD4 always queues the continuation for an internal renderer/audio
+    // restart after attempting the temporary save. Do not suppress it based
+    // on the save-device status: SV_ProcessPendingSaves clears the pending
+    // queue immediately, so a failed/pending device-status check otherwise
+    // drops "disconnect;vid_restart;loadgame" permanently and leaves the
+    // in-game frontend with no frame to display.
+    AppendCommandsForInternalSave(pendingSave->filename);
     return result;
 }
 
