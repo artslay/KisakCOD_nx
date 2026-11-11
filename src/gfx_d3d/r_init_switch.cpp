@@ -528,7 +528,11 @@ void R_InitGraphicsApi() {
     // loaded. The previous order loaded code_post_gfx first and dereferenced
     // a null dx.device in R_AllocStaticVertexBuffer().
     if (!dx.device)
+    {
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_create_begin\n");
         dx.device = new IDirect3DDevice9;
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_create_done\n");
+    }
 
     if (s_switchVulkanRecoveryInProgress)
     {
