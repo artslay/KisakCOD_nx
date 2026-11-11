@@ -2172,7 +2172,11 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 
 bool VulkanBackend::IsFrameRecordingThread() const
 {
-    return g_frameRecordingBackend == this;
+    // Renderer shutdown may finalize an acquired frame from the main thread
+    // after the render thread has relinquished ownership. Its thread-local
+    // marker cannot be cleared by that other thread, so the active-frame bit
+    // must also participate in the ownership test.
+    return m_frameActive && g_frameRecordingBackend == this;
 }
 
 void VulkanBackend::RecordModelLightingUpload(
