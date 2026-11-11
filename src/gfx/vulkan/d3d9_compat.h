@@ -260,8 +260,13 @@ struct KisakVkTexture : IDirect3DResource9 {
     char debugName[96] = "<unlabeled>";
     GfxImage *sourceImage = nullptr;
     VkImage image=VK_NULL_HANDLE;
+    // Attachment views keep the full D3D depth/stencil aspect set. Vulkan sampled-image
+    // descriptors for depth/stencil images require a single aspect, so these views expose
+    // depth only while referencing the same underlying image.
     VkImageView view=VK_NULL_HANDLE;
     VkImageView baseMipView=VK_NULL_HANDLE;
+    VkImageView sampledView=VK_NULL_HANDLE;
+    VkImageView baseMipSampledView=VK_NULL_HANDLE;
     VkSampler sampler=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     VkImage resolveImage=VK_NULL_HANDLE;
