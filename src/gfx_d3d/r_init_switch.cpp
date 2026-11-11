@@ -588,6 +588,7 @@ void R_InitGraphicsApi() {
     // Windows R_InitHardware path is not entered. Initialize the same
     // device-dependent render resources before R_InitSystems() registers the
     // runtime renderer state.
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=create_renderer_resources_begin\n");
     if (!R_CreateForInitOrReset())
     {
         if (s_switchVulkanRecoveryInProgress)
@@ -595,11 +596,14 @@ void R_InitGraphicsApi() {
         R_FatalInitError("Couldn't initialize renderer resources");
         return;
     }
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=create_renderer_resources_done\n");
 
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] before R_Cinematic_Init\n");
 #endif
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_init_begin\n");
     R_Cinematic_Init();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_init_done\n");
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_Cinematic_Init\n");
 #endif
