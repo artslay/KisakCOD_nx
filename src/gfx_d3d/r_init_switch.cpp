@@ -7,6 +7,7 @@
 #include "r_state.h"
 #include "r_image.h"
 #include "r_rendercmds.h"
+#include "r_cmds.h"
 #include "r_rendertarget.h"
 #include "r_buffers.h"
 #include "r_scene.h"
