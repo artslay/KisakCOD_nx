@@ -2086,9 +2086,18 @@ void __cdecl CL_Vid_Restart_f()
         // rebuilding the engine renderer and its device-dependent resources.
         R_PreserveSwitchVulkanBackendForVideoRestart();
 #endif
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_shutdown_ref\n");
+#endif
         CL_ShutdownRef();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_shutdown_ref\n");
+#endif
         cls.rendererStarted = 0;
         Com_Restart();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_com_restart\n");
+#endif
         Dvar_RegisterInt("loc_language", 0, (DvarLimits)0xE00000000LL, DVAR_ARCHIVE | DVAR_LATCH, "The current language locale");
         Dvar_RegisterBool("loc_translate", true, DVAR_LATCH, "Turn on string translation");
         Dvar_RegisterBool("fs_ignoreLocalized", false, DVAR_LATCH | DVAR_CHEAT, "Ignore localized assets");
