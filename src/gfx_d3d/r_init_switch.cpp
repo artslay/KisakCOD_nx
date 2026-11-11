@@ -184,7 +184,7 @@ void R_ShutdownDirect3D()
 
             if (backend->IsFrameActive())
             {
-                                const bool endFrameOk = backend->EndFrame();
+                const bool endFrameOk = backend->EndFrame();
                 if (!endFrameOk)
                 {
                     R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
@@ -224,7 +224,7 @@ void R_ShutdownDirect3D()
     // shutdown ordering and prevents dangling GPU resources after device loss.
     g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
     R_Cinematic_Shutdown();
-        g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
+    g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
     R_ReleaseForShutdownOrReset();
 
     g_switchFrameStage = "frame/r_shutdown/direct3d/device";
