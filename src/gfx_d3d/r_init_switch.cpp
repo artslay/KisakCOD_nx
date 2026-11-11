@@ -7,7 +7,6 @@
 #include "r_state.h"
 #include "r_image.h"
 #include "r_rendercmds.h"
-#include "r_cmds.h"
 #include "r_rendertarget.h"
 #include "r_buffers.h"
 #include "r_scene.h"
@@ -1124,9 +1123,9 @@ void R_Shutdown(int destroyWindow)
         {
             R_ShutdownLoadWater();
             R_ShutdownFonts();
-            // Match CoD4's renderer teardown: clear material registrations and
-            // built-in material state before the image system is destroyed.
-            Material_Shutdown();
+            // Switch materials are fastfile-owned. The original loose-file
+            // Material_Shutdown() path calls Material_FreeAll(), which belongs
+            // to the excluded D3D9 load-obj implementation and must not run here.
             if (s_registered)
             {
                 g_switchFrameStage = "frame/r_shutdown/images";
@@ -1150,10 +1149,8 @@ void R_Shutdown(int destroyWindow)
             R_ShutdownRenderCommands();
         }
 
-        // The original renderer unregisters its command set before the next
-        // R_Register()/R_Init() cycle. Leaving these registered across
-        // vid_restart leaks renderer command ownership into the new instance.
-        R_UnregisterCmds();
+        // Renderer commands live in the excluded D3D9 r_cmds.cpp module;
+        // this Switch target does not register that module's command set.
     }
 
     s_registered = false;
