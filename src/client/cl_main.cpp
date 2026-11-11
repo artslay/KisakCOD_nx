@@ -33,7 +33,6 @@
 // Set by CL_PlayCinematic_f / CL_PlayUnskippableCinematic_f in cl_cin.cpp.
 extern bool cin_skippable;
 extern void CL_EnforceFadeCinematicSkipRule(void);
-
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdint>
@@ -47,7 +46,6 @@ extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
-static bool s_switchVidRestartTraceActive = false;
 #endif
 
 enum MovieToPlayScriptOp : __int32
@@ -302,22 +300,12 @@ void __cdecl CL_ShutdownHunkUsers()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/sync_threads";
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=sync_threads_begin\n");
 #endif
     Com_SyncThreads();
 #ifdef __SWITCH__
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=sync_threads_done\n");
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/cgame";
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_cgame_begin\n");
 #endif
     CL_ShutdownCGame();
-#ifdef __SWITCH__
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_cgame_done\n");
-#endif
     if (cls.devGuiStarted)
     {
         CL_DestroyDevGui();
@@ -327,15 +315,11 @@ void __cdecl CL_ShutdownHunkUsers()
         Cmd_RemoveCommand("devgui_open");
         cls.devGuiStarted = 0;
     }
- #ifdef __SWITCH__
+#ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui";
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_ui_begin\n");
 #endif
     CL_ShutdownUI();
 #ifdef __SWITCH__
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_ui_done\n");
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui_done";
 #endif
     if (cls.uiStarted)
@@ -886,7 +870,6 @@ void __cdecl CL_Frame(int localClientNum, int msec)
     g_switchFrameStage = "frame/cl_frame/hunk_high_clear_done";
 #endif
     //PIXSetMarker(0xFFFFFFFF, "CL_Frame");
-
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_frame/is_running";
 #endif
@@ -910,7 +893,6 @@ void __cdecl CL_Frame(int localClientNum, int msec)
         //} while (!v21);
         //if (_R10)
         //    UI_SetActiveMenu(0, UIMENU_MAIN);
-
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/script_error";
 #endif
@@ -1013,8 +995,6 @@ void __cdecl CL_InitRenderer()
 {
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
-#ifdef __SWITCH__
-#endif
     R_BeginRegistration(&cls.vidConfig);
     ScrPlace_SetupUnsafeViewport(&scrPlaceFullUnsafe, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
     ScrPlace_SetupViewport(&scrPlaceFull, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
@@ -1029,7 +1009,6 @@ void __cdecl CL_InitRenderer()
     StatMon_Reset();
     Con_InitClientAssets();
 }
-
 #ifdef __SWITCH__
 static bool CL_IsKnownSwitchMissingDevGuiDvar(const char *name)
 {
@@ -1240,15 +1219,9 @@ void __cdecl CL_StartHunkUsers()
         if (!cls.devGuiStarted)
         {
             cls.devGuiStarted = 1;
-#ifdef __SWITCH__
-#endif
             CL_InitDevGui();
-#ifdef __SWITCH__
-#endif
             Sys_LoadingKeepAlive();
         }
-#ifdef __SWITCH__
-#endif
     }
 }
 
@@ -1500,7 +1473,6 @@ void __cdecl CL_PlayLogo_f()
     cls.logo.material[1] = Material_RegisterHandle(v13, IMAGE_TRACK_UI);
     cls.logo.startTime = cls.realtime + 100;
 }
-
 #ifdef __SWITCH__
 static void CL_LogSwitchCinematicSkipTrace(
     const char *event,
@@ -1666,7 +1638,6 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 #ifdef __SWITCH__
     CL_LogSwitchCinematicSkipTrace("after_ui_set_active_menu", localClientNum, connectionState, nextCommand);
 #endif
-
 #ifdef __SWITCH__
     {
         CL_LogSwitchCinematicSkipTrace("summary", localClientNum, connectionState, nextCommand);
@@ -1941,7 +1912,6 @@ bool __cdecl CL_SkipRendering()
 void __cdecl CL_UpdateSound()
 {
     PROF_SCOPED("update sound");
-
 #ifdef __SWITCH__
     static uint64_t playFxNsTotal = 0;
     static uint64_t loopingNsTotal = 0;
@@ -2040,7 +2010,6 @@ void __cdecl CL_ShutdownAll(bool destroyWindow)
         CL_ShutdownRenderer(destroyWindow);
         iassert(!cls.rendererStarted);
     }
-
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_shutdown_all/track_shutdown";
 #endif
@@ -2088,32 +2057,16 @@ void __cdecl CL_Vid_Restart_f()
     else
     {
         SND_StopSounds(SND_STOP_ALL);
-#ifdef __SWITCH__
-        s_switchVidRestartTraceActive = true;
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=begin\n");
-#endif
         CL_ShutdownHunkUsers();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_shutdown_hunk_users\n");
-#endif
 #ifdef __SWITCH__
         // The Switch display mode and native VI surface do not change when
         // CoD4 applies graphics dvars. Keep the Vulkan WSI/device alive while
         // rebuilding the engine renderer and its device-dependent resources.
         R_PreserveSwitchVulkanBackendForVideoRestart();
 #endif
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_shutdown_ref\n");
-#endif
         CL_ShutdownRef();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_shutdown_ref\n");
-#endif
         cls.rendererStarted = 0;
         Com_Restart();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_com_restart\n");
-#endif
         Dvar_RegisterInt("loc_language", 0, (DvarLimits)0xE00000000LL, DVAR_ARCHIVE | DVAR_LATCH, "The current language locale");
         Dvar_RegisterBool("loc_translate", true, DVAR_LATCH, "Turn on string translation");
         Dvar_RegisterBool("fs_ignoreLocalized", false, DVAR_LATCH | DVAR_CHEAT, "Ignore localized assets");
@@ -2121,28 +2074,10 @@ void __cdecl CL_Vid_Restart_f()
             FS_Restart(0, 0);
         SEH_UpdateLanguageInfo();
         Dvar_SetInt(cl_paused, 0);
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_xassets\n");
-#endif
         Com_InitXAssets();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_xassets\n");
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_ref\n");
-#endif
         CL_InitRef();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_ref\n");
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_renderer\n");
-#endif
         CL_InitRenderer();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_renderer\n");
-#endif
         CL_StartHunkUsers();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=complete\n");
-        s_switchVidRestartTraceActive = false;
-#endif
     }
 }
 
@@ -2165,22 +2100,9 @@ void __cdecl CL_ShutdownRef()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/vid_restart/cl_shutdown_ref_sync";
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_ref_sync_begin\n");
 #endif
     R_SyncRenderThread();
-#ifdef __SWITCH__
-    if (s_switchVidRestartTraceActive)
-    {
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_ref_sync_done\n");
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_renderer_begin\n");
-    }
-#endif
 	CL_ShutdownRenderer(1);
-#ifdef __SWITCH__
-    if (s_switchVidRestartTraceActive)
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_renderer_done\n");
-#endif
 
     //Con_ShutdownClientAssets(); // nullsub
     track_shutdown(3);
