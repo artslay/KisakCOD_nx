@@ -181,22 +181,10 @@ void R_ShutdownDirect3D()
         VulkanBackend *backend = GetVulkanBackend();
         if (backend)
         {
-            char trace[192];
-            std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][VID RESTART] step=direct3d_begin active=%u slot=%u\n",
-                backend->IsFrameActive() ? 1u : 0u,
-                backend->CurrentFrameSlot());
-            Switch_LogWrite(trace);
 
             if (backend->IsFrameActive())
             {
-                Switch_LogWrite("[KisakCOD][VID RESTART] step=end_frame_begin\n");
-                const bool endFrameOk = backend->EndFrame();
-                std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][VID RESTART] step=end_frame_done ok=%u active=%u\n",
-                    endFrameOk ? 1u : 0u,
-                    backend->IsFrameActive() ? 1u : 0u);
-                Switch_LogWrite(trace);
+                                const bool endFrameOk = backend->EndFrame();
                 if (!endFrameOk)
                 {
                     R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
@@ -205,20 +193,11 @@ void R_ShutdownDirect3D()
             }
 
             // Wait for both renderer frame submissions through their fences.
-            // Log each fence boundary so a shutdown stall can be localized.
             for (uint32_t frameSlot = 0;
                  frameSlot < VulkanBackend::FramesInFlight;
                  ++frameSlot)
             {
-                std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][VID RESTART] step=frame_fence_begin slot=%u\n",
-                    frameSlot);
-                Switch_LogWrite(trace);
                 const bool fenceOk = backend->WaitForFrameSlot(frameSlot);
-                std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][VID RESTART] step=frame_fence_done slot=%u ok=%u\n",
-                    frameSlot, fenceOk ? 1u : 0u);
-                Switch_LogWrite(trace);
                 if (!fenceOk)
                 {
                     R_FatalInitError("Couldn't retire Vulkan frame resources before video restart");
@@ -227,7 +206,6 @@ void R_ShutdownDirect3D()
             }
 
             backend->ClearPresentSource();
-            Switch_LogWrite("[KisakCOD][VID RESTART] step=present_source_cleared\n");
         }
     }
 
@@ -238,27 +216,19 @@ void R_ShutdownDirect3D()
     // next R_LoadGraphicsAssets() rebuilds assets against the new renderer.
     if (IsFastFileLoad())
     {
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=db_shutdown_xassets_begin\n");
         DB_ShutdownXAssets();
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=db_shutdown_xassets_done\n");
     }
 
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
     // shutdown ordering and prevents dangling GPU resources after device loss.
     g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_shutdown_begin\n");
     R_Cinematic_Shutdown();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_shutdown_done\n");
-    g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_resources_release_begin\n");
+        g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
     R_ReleaseForShutdownOrReset();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_resources_release_done\n");
 
     g_switchFrameStage = "frame/r_shutdown/direct3d/device";
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_delete_begin\n");
     delete dx.device;
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_delete_done\n");
     dx.device = nullptr;
     dx.d3d9 = nullptr;
 
@@ -357,8 +327,7 @@ static void R_ApplySwitchWorkerThreadSettings()
 }
 
 void R_Init() {
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_begin\n");
-    // Match CoD4's renderer bootstrap. Swap_Init() selects the endian helpers
+        // Match CoD4's renderer bootstrap. Swap_Init() selects the endian helpers
     // before renderer registration; the process also calls it at startup, but
     // the original renderer re-establishes this state on every full restart.
     Swap_Init();
@@ -381,13 +350,9 @@ void R_Init() {
     // Unlike the Windows bootstrap, Switch enters renderer initialization
     // directly through R_Init(); initialize the scene draw-surface lists here
     // before any BSP camera pass can use scene.drawSurfs[stage].
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_scene_begin\n");
-    R_InitScene();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_scene_done\n");
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_systems_begin\n");
-    R_InitSystems();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_systems_done\n");
-
+        R_InitScene();
+            R_InitSystems();
+    
     // These are part of the original R_Init() tail and must be rebuilt on a
     // full vid_restart as well as on the initial renderer startup.
     RB_RegisterBackendAssets();
@@ -395,8 +360,7 @@ void R_Init() {
     RB_ProfileInit();
 
     R_ApplySwitchWorkerThreadSettings();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_complete\n");
-}
+    }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
 HWND R_CreateSwapChains(int, GfxWindowParms *, int) { return nullptr; }
 char R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd) { return R_InitHardware(wnd); }
@@ -493,8 +457,7 @@ static void R_EnsureSwitchVideoConfig()
 }
 
 void R_InitGraphicsApi() {
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_graphics_api_begin\n");
-    R_EnsureSwitchVideoConfig();
+        R_EnsureSwitchVideoConfig();
     // A map restart preserves both the Vulkan backend and the compatibility
     // device, so its existing targets/buffers/queries can be reused. A video
     // restart preserves only the native Vulkan backend: R_ShutdownDirect3D()
@@ -535,10 +498,8 @@ void R_InitGraphicsApi() {
     // a null dx.device in R_AllocStaticVertexBuffer().
     if (!dx.device)
     {
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_create_begin\n");
-        dx.device = new IDirect3DDevice9;
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_create_done\n");
-    }
+                dx.device = new IDirect3DDevice9;
+            }
 
     if (s_switchVulkanRecoveryInProgress)
     {
@@ -558,10 +519,8 @@ void R_InitGraphicsApi() {
 
     // Match the original R_InitHardware bootstrap: queue code_post_gfx, ui and
     // common fastfiles before R_InitSystems starts resolving default assets.
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=load_graphics_assets_begin\n");
-    R_LoadGraphicsAssets();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=load_graphics_assets_done\n");
-
+        R_LoadGraphicsAssets();
+    
     // RB_InitImages() runs before RB_SetInitialState() in the shared bootstrap.
     // Its sampler binding path still needs the device pointer in the command state.
     gfxCmdBufState.prim.device = dx.device;
@@ -594,23 +553,19 @@ void R_InitGraphicsApi() {
     // Windows R_InitHardware path is not entered. Initialize the same
     // device-dependent render resources before R_InitSystems() registers the
     // runtime renderer state.
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=create_renderer_resources_begin\n");
-    if (!R_CreateForInitOrReset())
+        if (!R_CreateForInitOrReset())
     {
         if (s_switchVulkanRecoveryInProgress)
             s_switchVulkanRecoveryFailed = true;
         R_FatalInitError("Couldn't initialize renderer resources");
         return;
     }
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=create_renderer_resources_done\n");
-
+    
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] before R_Cinematic_Init\n");
 #endif
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_init_begin\n");
-    R_Cinematic_Init();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_init_done\n");
-#ifdef __SWITCH__
+        R_Cinematic_Init();
+    #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_Cinematic_Init\n");
 #endif
 
@@ -650,27 +605,21 @@ void R_InitGraphicsApi() {
 }
 void R_InitSystems()
 {
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_images_begin\n");
-#ifdef __SWITCH__
+    #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] before R_InitImages\n");
 #endif
     R_InitImages();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_images_done\n");
-#ifdef __SWITCH__
+    #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_InitImages\n");
     Switch_LogWrite("[KisakCOD][RINIT] before Material_Init\n");
 #endif
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=material_init_begin\n");
-    Material_Init();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=material_init_done\n");
-#ifdef __SWITCH__
+        Material_Init();
+    #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after Material_Init\n");
     Switch_LogWrite("[KisakCOD][RINIT] before R_InitFonts\n");
 #endif
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=fonts_init_begin\n");
-    R_InitFonts();
-    Switch_LogWrite("[KisakCOD][VID RESTART] step=fonts_init_done\n");
-#ifdef __SWITCH__
+        R_InitFonts();
+    #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_InitFonts\n");
 
     // UI window backgrounds may store a material-name alias in the original
@@ -1255,10 +1204,8 @@ void R_Shutdown(int destroyWindow)
     if (rg.registered)
     {
         g_switchFrameStage = "frame/r_shutdown/sync_render_thread";
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_sync_begin\n");
-        R_SyncRenderThread();
-        Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_sync_done\n");
-        rg.registered = 0;
+                R_SyncRenderThread();
+                rg.registered = 0;
         iassert(r_glob.haveThreadOwnership);
         r_glob.startedRenderThread = 0;
 
@@ -1309,18 +1256,14 @@ void R_Shutdown(int destroyWindow)
         if (g_gfxBackend || dx.device)
         {
             g_switchFrameStage = "frame/r_shutdown/direct3d";
-            Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_direct3d_begin\n");
-            R_ShutdownDirect3D();
-            Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_direct3d_done\n");
-        }
+                        R_ShutdownDirect3D();
+                    }
 
         if (s_switchRenderCommandsInitialized)
         {
-            Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_render_commands_begin\n");
-            R_ShutdownRenderCommands();
+                        R_ShutdownRenderCommands();
             s_switchRenderCommandsInitialized = false;
-            Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_render_commands_done\n");
-        }
+                    }
         // If shutdown had no live device/backend, R_ShutdownDirect3D() did not
         // consume the one-shot restart request.
         s_switchPreserveVulkanBackendForVideoRestart = false;
