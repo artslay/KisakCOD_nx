@@ -171,14 +171,6 @@ void R_ShutdownDirect3D()
         s_switchPreserveVulkanBackendForVideoRestart;
     s_switchPreserveVulkanBackendForVideoRestart = false;
 
-    // CoD4 unloads the renderer's fastfile zones before releasing its device
-    // when shutdown is part of an active fastfile load. The Switch loader
-    // deliberately retains already-loaded code/UI/common zones on a normal
-    // map restart, but a full vid_restart during loading must drop them so the
-    // next R_LoadGraphicsAssets() rebuilds assets against the new renderer.
-    if (IsFastFileLoad())
-        DB_ShutdownXAssets();
-
     // A Switch backend frame can remain acquired and recording after D3D9
     // EndScene: CoD4 only calls Present for draw types that include bit 1.
     // vkQueueWaitIdle cannot retire commands that have not been submitted, so
@@ -199,7 +191,17 @@ void R_ShutdownDirect3D()
         // EndFrame submits and presents the pending frame. Wait for that work
         // to complete before releasing renderer-owned resources below.
         R_SyncGpu(nullptr);
+        if (backend)
+            backend->ClearPresentSource();
     }
+
+    // CoD4 unloads the renderer's fastfile zones before releasing its device
+    // when shutdown is part of an active fastfile load. The Switch loader
+    // deliberately retains already-loaded code/UI/common zones on a normal
+    // map restart, but a full vid_restart during loading must drop them so the
+    // next R_LoadGraphicsAssets() rebuilds assets against the new renderer.
+    if (IsFastFileLoad())
+        DB_ShutdownXAssets();
 
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
