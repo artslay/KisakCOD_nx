@@ -2146,8 +2146,18 @@ void __cdecl CL_Snd_Restart_f()
 
 void __cdecl CL_ShutdownRef()
 {
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_ref_sync_begin\n");
+#endif
     R_SyncRenderThread();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_ref_sync_done\n");
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_renderer_begin\n");
+#endif
 	CL_ShutdownRenderer(1);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_renderer_done\n");
+#endif
 
     //Con_ShutdownClientAssets(); // nullsub
     track_shutdown(3);
