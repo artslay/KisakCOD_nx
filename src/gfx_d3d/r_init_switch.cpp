@@ -1250,13 +1250,17 @@ void R_Shutdown(int destroyWindow)
         if (g_gfxBackend || dx.device)
         {
             g_switchFrameStage = "frame/r_shutdown/direct3d";
+            Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_direct3d_begin\n");
             R_ShutdownDirect3D();
+            Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_direct3d_done\n");
         }
 
         if (s_switchRenderCommandsInitialized)
         {
+            Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_render_commands_begin\n");
             R_ShutdownRenderCommands();
             s_switchRenderCommandsInitialized = false;
+            Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_render_commands_done\n");
         }
         // If shutdown had no live device/backend, R_ShutdownDirect3D() did not
         // consume the one-shot restart request.
