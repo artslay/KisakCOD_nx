@@ -552,7 +552,9 @@ void R_InitGraphicsApi() {
 
     // Match the original R_InitHardware bootstrap: queue code_post_gfx, ui and
     // common fastfiles before R_InitSystems starts resolving default assets.
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=load_graphics_assets_begin\n");
     R_LoadGraphicsAssets();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=load_graphics_assets_done\n");
 
     // RB_InitImages() runs before RB_SetInitialState() in the shared bootstrap.
     // Its sampler binding path still needs the device pointer in the command state.
