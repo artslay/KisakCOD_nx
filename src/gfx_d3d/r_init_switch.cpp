@@ -745,6 +745,23 @@ char R_CreateForInitOrReset()
 
     R_CreateDynamicBuffers();
 
+    // R_ConfigureRenderer() selects frontEndDataOut before R_InitGraphicsApi()
+    // reaches this point. R_CreateDynamicBuffers() then resets the dynamic and
+    // pre-tess ring indices to zero and creates their new device buffers.
+    // Rebind the active frontend frame to those newly-created pool entries;
+    // otherwise it can retain the pre-restart skinned-cache slot and a stale
+    // preTessIb pointer from the device that was just destroyed.
+    if (frontEndDataOut)
+    {
+        iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
+        frontEndDataOut->skinnedCacheVb =
+            &gfxBuf.skinnedCacheVbPool[gfxBuf.dynamicBufferFrame];
+        gfxBuf.preTessIndexBuffer =
+            &gfxBuf.preTessIndexBufferPool[gfxBuf.preTessBufferFrame];
+        frontEndDataOut->preTessIb =
+            gfxBuf.preTessIndexBufferPool[gfxBuf.preTessBufferFrame].buffer;
+    }
+
     if (!g_allocateMinimalResources)
         R_CreateParticleCloudBuffer();
 
