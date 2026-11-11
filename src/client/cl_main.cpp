@@ -2147,6 +2147,7 @@ void __cdecl CL_Snd_Restart_f()
 void __cdecl CL_ShutdownRef()
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/vid_restart/cl_shutdown_ref_sync";
     Switch_LogWrite("[KisakCOD][VID RESTART] step=cl_shutdown_ref_sync_begin\n");
 #endif
     R_SyncRenderThread();
