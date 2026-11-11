@@ -18,6 +18,7 @@
 #include "r_cinematic.h"
 #include "rb_state.h"
 #include "rb_backend.h"
+#include "rb_drawprofile.h"
 #include "r_draw_method.h"
 #include "r_dvars.h"
 #include <qcommon/threads.h>
@@ -260,26 +261,38 @@ static void R_ApplySwitchWorkerThreadSettings()
 }
 
 void R_Init() {
-    // Match the original renderer bootstrap order: renderer dvars/commands must
-    // exist before R_InitImages()->R_SetPicmip() accesses them.
+    // Match CoD4's renderer bootstrap. Swap_Init() selects the endian helpers
+    // before renderer registration; the process also calls it at startup, but
+    // the original renderer re-establishes this state on every full restart.
+    Swap_Init();
+
+    // Renderer dvars/commands must exist before R_InitImages()->R_SetPicmip()
+    // accesses them.
     R_Register();
 
     // A newly registered dvar starts with modified=0, so the normal
     // R_GpuSyncModified() path never copies the adaptive default into dx.
-    // Apply the effective value immediately after both GPU-sync dvars exist.
     R_UpdateGpuSyncType();
 
     R_InitGlobalStructs();
-
     R_InitDrawMethod();
-
     R_InitGraphicsApi();
+
+    // R_InitHardware() performs gamma setup before scene/system registration.
+    R_InitGamma();
 
     // Unlike the Windows bootstrap, Switch enters renderer initialization
     // directly through R_Init(); initialize the scene draw-surface lists here
     // before any BSP camera pass can use scene.drawSurfs[stage].
     R_InitScene();
     R_InitSystems();
+
+    // These are part of the original R_Init() tail and must be rebuilt on a
+    // full vid_restart as well as on the initial renderer startup.
+    RB_RegisterBackendAssets();
+    R_InitWater();
+    RB_ProfileInit();
+
     R_ApplySwitchWorkerThreadSettings();
 }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
