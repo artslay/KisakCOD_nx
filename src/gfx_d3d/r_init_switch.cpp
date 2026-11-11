@@ -357,6 +357,7 @@ static void R_ApplySwitchWorkerThreadSettings()
 }
 
 void R_Init() {
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_begin\n");
     // Match CoD4's renderer bootstrap. Swap_Init() selects the endian helpers
     // before renderer registration; the process also calls it at startup, but
     // the original renderer re-establishes this state on every full restart.
