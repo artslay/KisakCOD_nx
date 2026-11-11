@@ -2074,6 +2074,12 @@ void __cdecl CL_Vid_Restart_f()
     {
         SND_StopSounds(SND_STOP_ALL);
         CL_ShutdownHunkUsers();
+#ifdef __SWITCH__
+        // The Switch display mode and native VI surface do not change when
+        // CoD4 applies graphics dvars. Keep the Vulkan WSI/device alive while
+        // rebuilding the engine renderer and its device-dependent resources.
+        R_PreserveSwitchVulkanBackendForVideoRestart();
+#endif
         CL_ShutdownRef();
         cls.rendererStarted = 0;
         Com_Restart();

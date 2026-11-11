@@ -397,6 +397,9 @@ void __cdecl R_ShutdownStreams();
 void __cdecl R_ShutdownMaterialUsage();
 void __cdecl R_Shutdown(int destroyWindow);
 void R_ShutdownDirect3D();
+#ifdef __SWITCH__
+void R_PreserveSwitchVulkanBackendForVideoRestart();
+#endif
 void R_ReleaseForShutdownOrReset();
 void __cdecl R_UnloadWorld();
 void __cdecl R_BeginRegistration(vidConfig_t *vidConfigOut);

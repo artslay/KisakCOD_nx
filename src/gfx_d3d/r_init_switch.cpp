@@ -62,6 +62,9 @@ const dvar_t *vid_ypos = nullptr;
 const dvar_t *r_fullscreen = nullptr;
 
 static bool s_registered = false;
+// A video restart rebuilds CoD4's renderer resources but preserves the native
+// Switch Vulkan device/surface/swapchain, which are independent of those dvars.
+static bool s_switchPreserveVulkanBackendForVideoRestart = false;
 // Render-command allocations survive R_Shutdown(false), but an explicit
 // destroyWindow=true may arrive later after rg.registered has already been
 // cleared (for example disconnect -> vid_restart). Track their lifetime
@@ -152,8 +155,22 @@ void R_ShutdownMaterialUsage()
     }
 }
 
+void R_PreserveSwitchVulkanBackendForVideoRestart()
+{
+    s_switchPreserveVulkanBackendForVideoRestart = true;
+}
+
 void R_ShutdownDirect3D()
 {
+    // A Switch vid_restart rebuilds CoD4's renderer resources and compatibility
+    // device, but the console's native VI surface and Vulkan device do not
+    // change when graphics dvars are applied. Preserve only that platform
+    // backend; R_InitGraphicsApi() will see dx.device == nullptr and rebuild
+    // render targets, dynamic buffers, queries and cinematic resources on it.
+    const bool preserveVulkanBackend =
+        s_switchPreserveVulkanBackendForVideoRestart;
+    s_switchPreserveVulkanBackendForVideoRestart = false;
+
     // CoD4 unloads the renderer's fastfile zones before releasing its device
     // when shutdown is part of an active fastfile load. The Switch loader
     // deliberately retains already-loaded code/UI/common zones on a normal
@@ -175,10 +192,13 @@ void R_ShutdownDirect3D()
     dx.device = nullptr;
     dx.d3d9 = nullptr;
 
-    g_switchFrameStage = "frame/r_shutdown/direct3d/backend";
-    // VulkanBackend's destructor owns backend shutdown. Calling Shutdown()
-    // here and then reset() would shut down the same Vulkan device twice.
-    g_gfxBackend.reset();
+    if (!preserveVulkanBackend)
+    {
+        g_switchFrameStage = "frame/r_shutdown/direct3d/backend";
+        // VulkanBackend's destructor owns backend shutdown. Calling Shutdown()
+        // here and then reset() would shut down the same Vulkan device twice.
+        g_gfxBackend.reset();
+    }
     g_switchFrameStage = "frame/r_shutdown/direct3d/done";
 }
 
@@ -398,11 +418,11 @@ static void R_EnsureSwitchVideoConfig()
 
 void R_InitGraphicsApi() {
     R_EnsureSwitchVideoConfig();
-    // The shared renderer's R_InitGraphicsApi() calls R_InitSystems() directly
-    // when the device already exists. R_Init() handles that final systems
-    // initialization after this function returns. Do not recreate render
-    // targets, static buffers, dynamic buffers, queries, or cinematic state on
-    // a map restart where R_Shutdown(false) preserved the devices.
+    // A map restart preserves both the Vulkan backend and the compatibility
+    // device, so its existing targets/buffers/queries can be reused. A video
+    // restart preserves only the native Vulkan backend: R_ShutdownDirect3D()
+    // deletes dx.device after releasing CoD4 resources, forcing this path to
+    // recreate the compatibility device and all renderer-owned allocations.
     if (g_gfxBackend && dx.device)
     {
         gfxCmdBufState.prim.device = dx.device;
@@ -1202,6 +1222,9 @@ void R_Shutdown(int destroyWindow)
             R_ShutdownRenderCommands();
             s_switchRenderCommandsInitialized = false;
         }
+        // If shutdown had no live device/backend, R_ShutdownDirect3D() did not
+        // consume the one-shot restart request.
+        s_switchPreserveVulkanBackendForVideoRestart = false;
     }
 
     s_registered = false;
