@@ -237,18 +237,28 @@ void R_ShutdownDirect3D()
     // map restart, but a full vid_restart during loading must drop them so the
     // next R_LoadGraphicsAssets() rebuilds assets against the new renderer.
     if (IsFastFileLoad())
+    {
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=db_shutdown_xassets_begin\n");
         DB_ShutdownXAssets();
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=db_shutdown_xassets_done\n");
+    }
 
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
     // shutdown ordering and prevents dangling GPU resources after device loss.
     g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_shutdown_begin\n");
     R_Cinematic_Shutdown();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=cinematic_shutdown_done\n");
     g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_resources_release_begin\n");
     R_ReleaseForShutdownOrReset();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_resources_release_done\n");
 
     g_switchFrameStage = "frame/r_shutdown/direct3d/device";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_delete_begin\n");
     delete dx.device;
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=compat_device_delete_done\n");
     dx.device = nullptr;
     dx.d3d9 = nullptr;
 
