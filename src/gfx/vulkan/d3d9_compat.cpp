@@ -5258,6 +5258,12 @@ uint32_t KisakVkTexture::Release()
     {
         if (resolveImage || resolveMemory || resolveView)
             backend->DeferDestroyImage(resolveImage, resolveMemory, resolveView);
+        if (baseMipSampledView && baseMipSampledView != baseMipView)
+            backend->DeferDestroyImage(
+                VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipSampledView);
+        if (sampledView && sampledView != view)
+            backend->DeferDestroyImage(
+                VK_NULL_HANDLE, VK_NULL_HANDLE, sampledView);
         if (baseMipView)
             backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipView);
         if (image || memory || view)
@@ -5266,6 +5272,8 @@ uint32_t KisakVkTexture::Release()
     resolveImage = VK_NULL_HANDLE;
     resolveView = VK_NULL_HANDLE;
     resolveMemory = VK_NULL_HANDLE;
+    baseMipSampledView = VK_NULL_HANDLE;
+    sampledView = VK_NULL_HANDLE;
     baseMipView = VK_NULL_HANDLE;
     image = VK_NULL_HANDLE;
     view = VK_NULL_HANDLE;
@@ -8002,7 +8010,8 @@ bool IDirect3DDevice9::BindSamplerSet(
             continue;
         if (!samplerTypeMatchesTexture(texture, activeSamplers[slot]))
             continue;
-        if (!texture->image || !texture->view)
+        if (!texture->image || !texture->view ||
+            !texture->sampledView || !texture->baseMipSampledView)
         {
             if (activeSamplers[slot])
                 return failActiveSampler(slot, "invalid_image_or_view");
@@ -8152,7 +8161,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
         else
         {
-            if (!texture->image || !texture->view)
+            if (!texture->image || !texture->view ||
+                !texture->sampledView || !texture->baseMipSampledView)
                 return false;
 
             bool baseMipInitialized = false;
@@ -8280,13 +8290,13 @@ bool IDirect3DDevice9::BindSamplerSet(
                     false,
                     VK_COMPARE_OP_LESS_OR_EQUAL);
                 images[i].imageView = allSubresourcesInitialized
-                    ? texture->view : texture->baseMipView;
+                    ? texture->sampledView : texture->baseMipSampledView;
                 if (!sampler && activeSamplers[i])
                     return failActiveSampler(i, "vk_sampler_creation_failed");
                 images[i].sampler = sampler ? sampler : m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 descriptorSelection[i] =
-                    images[i].imageView == texture->view ? 1u : 2u;
+                    images[i].imageView == texture->sampledView ? 1u : 2u;
             }
         }
 
