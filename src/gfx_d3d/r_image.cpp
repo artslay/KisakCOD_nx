@@ -396,6 +396,60 @@ bool R_VulkanAllocTexture(
         return false;
     }
 
+    const VkImageAspectFlags depthStencilAspect =
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    if ((info.aspect & depthStencilAspect) == depthStencilAspect)
+    {
+        // Do not use the combined depth|stencil attachment view in a sampled-image
+        // descriptor. Vulkan requires exactly one aspect for descriptor image views.
+        VkImageViewCreateInfo sampledViewInfo = baseViewInfo;
+        sampledViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        sampledViewInfo.subresourceRange.levelCount = levels;
+        const VkResult sampledViewResult = vkCreateImageView(
+            backend->Device(), &sampledViewInfo, nullptr, &texture->sampledView);
+        if (sampledViewResult == VK_SUCCESS)
+        {
+            sampledViewInfo.subresourceRange.levelCount = 1;
+            const VkResult baseSampledViewResult = vkCreateImageView(
+                backend->Device(), &sampledViewInfo, nullptr,
+                &texture->baseMipSampledView);
+            if (baseSampledViewResult != VK_SUCCESS)
+            {
+                vkDestroyImageView(
+                    backend->Device(), texture->sampledView, nullptr);
+                texture->sampledView = VK_NULL_HANDLE;
+            }
+        }
+
+        if (!texture->sampledView || !texture->baseMipSampledView)
+        {
+            if (texture->baseMipSampledView)
+                vkDestroyImageView(
+                    backend->Device(), texture->baseMipSampledView, nullptr);
+            if (texture->sampledView)
+                vkDestroyImageView(
+                    backend->Device(), texture->sampledView, nullptr);
+            if (texture->baseMipView)
+                vkDestroyImageView(
+                    backend->Device(), texture->baseMipView, nullptr);
+            backend->DestroyImage(
+                texture->image, texture->memory, texture->view);
+            texture->image = VK_NULL_HANDLE;
+            texture->memory = VK_NULL_HANDLE;
+            texture->view = VK_NULL_HANDLE;
+            texture->baseMipView = VK_NULL_HANDLE;
+            texture->sampledView = VK_NULL_HANDLE;
+            texture->baseMipSampledView = VK_NULL_HANDLE;
+            return false;
+        }
+    }
+    else
+    {
+        // Color and depth-only formats already have a single valid view aspect.
+        texture->sampledView = texture->view;
+        texture->baseMipSampledView = texture->baseMipView;
+    }
+
     return true;
 }
 
