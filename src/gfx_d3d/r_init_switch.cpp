@@ -181,20 +181,45 @@ void R_ShutdownDirect3D()
         VulkanBackend *backend = GetVulkanBackend();
         if (backend)
         {
-            if (backend->IsFrameActive() && !backend->EndFrame())
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VID RESTART] step=direct3d_begin active=%u slot=%u\n",
+                backend->IsFrameActive() ? 1u : 0u,
+                backend->CurrentFrameSlot());
+            Switch_LogWrite(trace);
+
+            if (backend->IsFrameActive())
             {
-                R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
-                return;
+                Switch_LogWrite("[KisakCOD][VID RESTART] step=end_frame_begin\n");
+                const bool endFrameOk = backend->EndFrame();
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VID RESTART] step=end_frame_done ok=%u active=%u\n",
+                    endFrameOk ? 1u : 0u,
+                    backend->IsFrameActive() ? 1u : 0u);
+                Switch_LogWrite(trace);
+                if (!endFrameOk)
+                {
+                    R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
+                    return;
+                }
             }
 
             // Wait for both renderer frame submissions through their fences.
-            // vkQueueWaitIdle also waits for WSI presentation operations and can
-            // block a video restart even after all render-target work has ended.
+            // Log each fence boundary so a shutdown stall can be localized.
             for (uint32_t frameSlot = 0;
                  frameSlot < VulkanBackend::FramesInFlight;
                  ++frameSlot)
             {
-                if (!backend->WaitForFrameSlot(frameSlot))
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VID RESTART] step=frame_fence_begin slot=%u\n",
+                    frameSlot);
+                Switch_LogWrite(trace);
+                const bool fenceOk = backend->WaitForFrameSlot(frameSlot);
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VID RESTART] step=frame_fence_done slot=%u ok=%u\n",
+                    frameSlot, fenceOk ? 1u : 0u);
+                Switch_LogWrite(trace);
+                if (!fenceOk)
                 {
                     R_FatalInitError("Couldn't retire Vulkan frame resources before video restart");
                     return;
@@ -202,6 +227,7 @@ void R_ShutdownDirect3D()
             }
 
             backend->ClearPresentSource();
+            Switch_LogWrite("[KisakCOD][VID RESTART] step=present_source_cleared\n");
         }
     }
 
