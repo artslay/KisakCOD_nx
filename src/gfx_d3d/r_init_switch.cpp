@@ -1115,6 +1115,9 @@ void R_Shutdown(int destroyWindow)
         {
             R_ShutdownLoadWater();
             R_ShutdownFonts();
+            // Match CoD4's renderer teardown: clear material registrations and
+            // built-in material state before the image system is destroyed.
+            Material_Shutdown();
             if (s_registered)
             {
                 g_switchFrameStage = "frame/r_shutdown/images";
@@ -1138,6 +1141,10 @@ void R_Shutdown(int destroyWindow)
             R_ShutdownRenderCommands();
         }
 
+        // The original renderer unregisters its command set before the next
+        // R_Register()/R_Init() cycle. Leaving these registered across
+        // vid_restart leaks renderer command ownership into the new instance.
+        R_UnregisterCmds();
     }
 
     s_registered = false;
