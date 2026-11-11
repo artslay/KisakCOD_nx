@@ -308,6 +308,25 @@ void __cdecl R_ShutdownRenderCommands()
     }
     R_FreeGlobalVariable(g_debugFrontEndCmds.cmds);
     R_ShutdownSceneBuffers();
+
+#ifdef __SWITCH__
+    // A full renderer/device teardown invalidates the old frontend frame state.
+    // R_ConfigureRenderer() runs R_InitRenderCommands() before the new renderer
+    // is registered; it must see a null frontend pointer so that it calls
+    // R_ToggleSmpFrame() and rebuilds commands/viewInfo/skinning references.
+    // Map restarts use R_Shutdown(false) and never enter this function.
+    frontEndDataOut = nullptr;
+
+    // These slot associations belong to the VulkanBackend that was just
+    // destroyed. Reusing them with the next backend could wait on unrelated
+    // frame fences while selecting the first frontend pools.
+    for (uint32_t poolIndex = 0; poolIndex < 2; ++poolIndex)
+    {
+        s_switchGpuSlotForSmpPool[poolIndex].store(-1, std::memory_order_release);
+        s_switchGpuSlotForBackEndData[poolIndex].store(-1, std::memory_order_release);
+        s_switchGpuSlotForViewInfo[poolIndex].store(-1, std::memory_order_release);
+    }
+#endif
 }
 
 void __cdecl R_ShutdownRenderBuffers()
