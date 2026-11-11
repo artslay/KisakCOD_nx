@@ -301,12 +301,18 @@ void __cdecl CL_ShutdownHunkUsers()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/sync_threads";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=sync_threads_begin\n");
 #endif
     Com_SyncThreads();
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=sync_threads_done\n");
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/cgame";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_cgame_begin\n");
 #endif
     CL_ShutdownCGame();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_cgame_done\n");
+#endif
     if (cls.devGuiStarted)
     {
         CL_DestroyDevGui();
@@ -318,9 +324,11 @@ void __cdecl CL_ShutdownHunkUsers()
     }
  #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui";
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_ui_begin\n");
 #endif
     CL_ShutdownUI();
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=shutdown_ui_done\n");
     g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui_done";
 #endif
     if (cls.uiStarted)
