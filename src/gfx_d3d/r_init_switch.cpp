@@ -381,8 +381,12 @@ void R_Init() {
     // Unlike the Windows bootstrap, Switch enters renderer initialization
     // directly through R_Init(); initialize the scene draw-surface lists here
     // before any BSP camera pass can use scene.drawSurfs[stage].
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_scene_begin\n");
     R_InitScene();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_scene_done\n");
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_systems_begin\n");
     R_InitSystems();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_systems_done\n");
 
     // These are part of the original R_Init() tail and must be rebuilt on a
     // full vid_restart as well as on the initial renderer startup.
