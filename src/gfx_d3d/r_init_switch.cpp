@@ -667,7 +667,9 @@ void R_InitSystems()
     Switch_LogWrite("[KisakCOD][RINIT] after Material_Init\n");
     Switch_LogWrite("[KisakCOD][RINIT] before R_InitFonts\n");
 #endif
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=fonts_init_begin\n");
     R_InitFonts();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=fonts_init_done\n");
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_InitFonts\n");
 
