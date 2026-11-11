@@ -179,20 +179,30 @@ void R_ShutdownDirect3D()
     if (preserveVulkanBackend)
     {
         VulkanBackend *backend = GetVulkanBackend();
-        if (backend && backend->IsFrameActive())
+        if (backend)
         {
-            if (!backend->EndFrame() && backend->IsFrameActive())
+            if (backend->IsFrameActive() && !backend->EndFrame())
             {
                 R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
                 return;
             }
-        }
 
-        // EndFrame submits and presents the pending frame. Wait for that work
-        // to complete before releasing renderer-owned resources below.
-        R_SyncGpu(nullptr);
-        if (backend)
+            // Wait for both renderer frame submissions through their fences.
+            // vkQueueWaitIdle also waits for WSI presentation operations and can
+            // block a video restart even after all render-target work has ended.
+            for (uint32_t frameSlot = 0;
+                 frameSlot < VulkanBackend::FramesInFlight;
+                 ++frameSlot)
+            {
+                if (!backend->WaitForFrameSlot(frameSlot))
+                {
+                    R_FatalInitError("Couldn't retire Vulkan frame resources before video restart");
+                    return;
+                }
+            }
+
             backend->ClearPresentSource();
+        }
     }
 
     // CoD4 unloads the renderer's fastfile zones before releasing its device
