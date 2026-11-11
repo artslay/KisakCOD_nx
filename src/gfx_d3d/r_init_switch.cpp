@@ -179,17 +179,33 @@ void R_ShutdownDirect3D()
     if (IsFastFileLoad())
         DB_ShutdownXAssets();
 
+    // A Switch backend frame can remain acquired and recording after D3D9
+    // EndScene: CoD4 only calls Present for draw types that include bit 1.
+    // vkQueueWaitIdle cannot retire commands that have not been submitted, so
+    // finish that frame through the normal Vulkan present path before any
+    // renderer-owned image or buffer it references is released.
+    if (preserveVulkanBackend)
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        if (backend && backend->IsFrameActive())
+        {
+            if (!backend->EndFrame() && backend->IsFrameActive())
+            {
+                R_FatalInitError("Couldn't finish active Vulkan frame before video restart");
+                return;
+            }
+        }
+
+        // EndFrame submits and presents the pending frame. Wait for that work
+        // to complete before releasing renderer-owned resources below.
+        R_SyncGpu(nullptr);
+    }
+
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
     // shutdown ordering and prevents dangling GPU resources after device loss.
     g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
     R_Cinematic_Shutdown();
-    if (preserveVulkanBackend)
-    {
-        // The backend remains alive, so wait for the render thread's submitted
-        // work before releasing renderer-owned resources from its live device.
-        R_SyncGpu(nullptr);
-    }
     g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
     R_ReleaseForShutdownOrReset();
 
