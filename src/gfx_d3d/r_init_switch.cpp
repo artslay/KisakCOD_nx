@@ -650,10 +650,12 @@ void R_InitGraphicsApi() {
 }
 void R_InitSystems()
 {
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_images_begin\n");
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] before R_InitImages\n");
 #endif
     R_InitImages();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_images_done\n");
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_InitImages\n");
     Switch_LogWrite("[KisakCOD][RINIT] before Material_Init\n");
