@@ -2105,10 +2105,27 @@ void __cdecl CL_Vid_Restart_f()
             FS_Restart(0, 0);
         SEH_UpdateLanguageInfo();
         Dvar_SetInt(cl_paused, 0);
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_xassets\n");
+#endif
         Com_InitXAssets();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_xassets\n");
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_ref\n");
+#endif
         CL_InitRef();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_ref\n");
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=before_init_renderer\n");
+#endif
         CL_InitRenderer();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=after_init_renderer\n");
+#endif
         CL_StartHunkUsers();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=complete\n");
+#endif
     }
 }
 
