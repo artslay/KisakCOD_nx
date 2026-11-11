@@ -487,6 +487,7 @@ static void R_EnsureSwitchVideoConfig()
 }
 
 void R_InitGraphicsApi() {
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=init_graphics_api_begin\n");
     R_EnsureSwitchVideoConfig();
     // A map restart preserves both the Vulkan backend and the compatibility
     // device, so its existing targets/buffers/queries can be reused. A video
