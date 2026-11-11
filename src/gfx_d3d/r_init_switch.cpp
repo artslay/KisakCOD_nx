@@ -184,6 +184,12 @@ void R_ShutdownDirect3D()
     // shutdown ordering and prevents dangling GPU resources after device loss.
     g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
     R_Cinematic_Shutdown();
+    if (preserveVulkanBackend)
+    {
+        // The backend remains alive, so wait for the render thread's submitted
+        // work before releasing renderer-owned resources from its live device.
+        R_SyncGpu(nullptr);
+    }
     g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
     R_ReleaseForShutdownOrReset();
 
