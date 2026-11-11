@@ -993,7 +993,15 @@ void __cdecl Material_Init()
 
 void __cdecl Material_Shutdown()
 {
+#ifdef __SWITCH__
+    // The Switch target excludes the legacy load-obj material parser, which
+    // owns Material_FreeAll(). Fastfile technique sets are database-owned;
+    // release their device-dependent pass resources through the shared
+    // renderer path before the Vulkan device is destroyed.
+    Material_ReleaseAll();
+#else
     Material_FreeAll();
+#endif
     memset((uint8_t *)&materialGlobals, 0, sizeof(materialGlobals));
     memset((uint8_t *)rg.materialHashTable, 0, sizeof(rg.materialHashTable));
     rgp.materialCount = 0;
