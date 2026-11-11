@@ -37,6 +37,8 @@ void __cdecl R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext c
     // cascades, so R_ChangeState_1 may not reapply the current dvars. Force the
     // sun-shadow polygon offset for every cascade before its draw list.
     R_ForceSetPolygonOffset(context.state->prim.device, 0x30);
+    context.state->activeStateBits[1] =
+        (context.state->activeStateBits[1] & ~0x30u) | 0x30u;
 
     R_DrawSurfs(context, 0, &partition->info);
 
