@@ -1196,7 +1196,9 @@ void R_Shutdown(int destroyWindow)
     if (rg.registered)
     {
         g_switchFrameStage = "frame/r_shutdown/sync_render_thread";
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_sync_begin\n");
         R_SyncRenderThread();
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=r_shutdown_sync_done\n");
         rg.registered = 0;
         iassert(r_glob.haveThreadOwnership);
         r_glob.startedRenderThread = 0;
