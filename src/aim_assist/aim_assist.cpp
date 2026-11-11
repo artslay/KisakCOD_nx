@@ -252,16 +252,29 @@ void AimAssist_RegisterDvars()
         minj,
         DVAR_CHEAT,
         "The horizontal aim assist slowdown ratio when aiming down the sight");
+#ifdef KISAK_SWITCH
+    aim_autoaim_enabled = Dvar_RegisterBool("aim_autoaim_enabled", 1, 0x80u, "Turn on auto aim");
+#else
     aim_autoaim_enabled = Dvar_RegisterBool("aim_autoaim_enabled", 0, 0x80u, "Turn on auto aim");
+#endif
     aim_autoaim_debug = Dvar_RegisterBool("aim_autoaim_debug", 0, 0x80u, "Turn on auto aim debugging");
     mink.value.max = 100.0f;
     mink.value.min = 0.0f;
+#ifdef KISAK_SWITCH
+    aim_autoaim_lerp = Dvar_RegisterFloat(
+        "aim_autoaim_lerp",
+        80.0f,
+        mink,
+        DVAR_CHEAT,
+        "The rate in degrees per second that the auto aim will converge to its target");
+#else
     aim_autoaim_lerp = Dvar_RegisterFloat(
         "aim_autoaim_lerp",
         40.0f,
         mink,
         DVAR_CHEAT,
         "The rate in degrees per second that the auto aim will converge to its target");
+#endif
     minl.value.max = 640.0f;
     minl.value.min = 0.0f;
     aim_autoaim_region_width = Dvar_RegisterFloat(
@@ -1264,15 +1277,23 @@ static void AimAssist_ApplyGamepadAutoAim(
         return;
     }
 
-    if (!aaGlob->autoAimPressed)
+    // Keep looking while ADS is held until a valid enemy enters the
+    // acquisition region. The old edge-only check permanently missed a target
+    // when the reticle was between enemies on the first ADS frame.
+    if (!aaGlob->autoAimActive)
     {
         const AimScreenTarget *target = AimAssist_GetBestTarget(
             aaGlob,
             autoAimRange,
             aaGlob->tweakables.autoAimRegionWidth,
             aaGlob->tweakables.autoAimRegionHeight);
-        if (target)
-            AimAssist_SetGamepadAutoAimTarget(aaGlob, target);
+        if (!target)
+        {
+            aaGlob->autoAimPressed = true;
+            return;
+        }
+
+        AimAssist_SetGamepadAutoAimTarget(aaGlob, target);
         aaGlob->autoAimPressed = true;
     }
 
@@ -1281,7 +1302,6 @@ static void AimAssist_ApplyGamepadAutoAim(
 
     if (!AimAssist_UpdateGamepadAutoAimTarget(aaGlob))
     {
-        // Do not acquire a different enemy while ADS remains held.
         AimAssist_ClearGamepadAutoAimTarget(aaGlob);
         return;
     }
