@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <cstring>
 #include <setjmp.h>
 
 // libnx exports these routines with the C ABI. Its kernel headers do not
@@ -41,6 +42,7 @@ struct SwitchEvent {
 };
 
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
 
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
@@ -840,16 +842,27 @@ void __cdecl Sys_FrontEndSleep()
     // uses that signal to return from its main-thread wait and call Sys_StartRenderer.
     // Resetting ownership before rendererRunning is signaled can deadlock the two
     // threads during a loading-screen handoff.
+    const bool traceVideoRestart =
+        g_switchFrameStage &&
+        (std::strcmp(g_switchFrameStage, "frame/vid_restart/cl_shutdown_ref_sync") == 0 ||
+         std::strcmp(g_switchFrameStage, "frame/r_shutdown/sync_render_thread") == 0);
+    if (traceVideoRestart)
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=frontend_sleep_ownership_check\n");
+
     {
         std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
         iassert(g_noThreadOwnershipEvent.signaled);
     }
 
+    if (traceVideoRestart)
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=wait_renderer_running_begin\n");
     {
         std::unique_lock<std::mutex> lock(g_rendererRunningEvent.mutex);
         g_rendererRunningEvent.cv.wait(
             lock, [] { return g_rendererRunningEvent.signaled; });
     }
+    if (traceVideoRestart)
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=wait_renderer_running_done\n");
 
     {
         std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
@@ -858,7 +871,11 @@ void __cdecl Sys_FrontEndSleep()
 
     SetSwitchEvent(g_backendEvent[1]);
     --g_renderPausedCount;
+    if (traceVideoRestart)
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=wait_render_paused_begin\n");
     WaitSwitchEvent(g_renderPausedEvent, UINT32_MAX - 1);
+    if (traceVideoRestart)
+        Switch_LogWrite("[KisakCOD][VID RESTART] step=wait_render_paused_done\n");
 }
 void __cdecl Sys_WakeRenderer(void *data)
 {
