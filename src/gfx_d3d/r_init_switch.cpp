@@ -62,6 +62,12 @@ const dvar_t *vid_ypos = nullptr;
 const dvar_t *r_fullscreen = nullptr;
 
 static bool s_registered = false;
+// Render-command allocations survive R_Shutdown(false), but an explicit
+// destroyWindow=true may arrive later after rg.registered has already been
+// cleared (for example disconnect -> vid_restart). Track their lifetime
+// independently from renderer registration so the final shutdown can free
+// them exactly once.
+static bool s_switchRenderCommandsInitialized = false;
 static bool s_switchVulkanRecoveryInProgress = false;
 static bool s_switchVulkanRecoveryFailed = false;
 static bool s_switchVulkanRecoveryFatal = false;
@@ -998,6 +1004,7 @@ void R_ConfigureRenderer(const GfxConfiguration *config) {
     // Match the shared renderer bootstrap: this allocates the double-buffered
     // front-end command lists before the first frame is submitted.
     R_InitRenderCommands();
+    s_switchRenderCommandsInitialized = true;
 }
 void R_ComErrorCleanup()
 {
@@ -1156,15 +1163,28 @@ void R_Shutdown(int destroyWindow)
         // device and its dynamic buffers alive for that path; releasing them
         // here leaves frontEndDataOut->skinnedCacheVb pointing at a null buffer
         // when the next remote-screen frame begins.
-        if (destroyWindow)
+        // Renderer commands live in the excluded D3D9 r_cmds.cpp module;
+        // this Switch target does not register that module's command set.
+    }
+
+    // A disconnect during an in-game vid_restart first performs
+    // R_Shutdown(false), which clears rg.registered but intentionally keeps
+    // the Vulkan device and render-command allocations alive. The subsequent
+    // R_Shutdown(true) must still complete the device teardown even though the
+    // registration block above is no longer entered.
+    if (destroyWindow)
+    {
+        if (g_gfxBackend || dx.device)
         {
             g_switchFrameStage = "frame/r_shutdown/direct3d";
             R_ShutdownDirect3D();
-            R_ShutdownRenderCommands();
         }
 
-        // Renderer commands live in the excluded D3D9 r_cmds.cpp module;
-        // this Switch target does not register that module's command set.
+        if (s_switchRenderCommandsInitialized)
+        {
+            R_ShutdownRenderCommands();
+            s_switchRenderCommandsInitialized = false;
+        }
     }
 
     s_registered = false;
