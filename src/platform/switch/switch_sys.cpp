@@ -3916,12 +3916,6 @@ static bool Switch_LogIsVerboseTrace(const char *msg)
     return false;
 }
 
-static bool Switch_LogIsVideoRestartDiagnostic(const char *msg)
-{
-    static constexpr const char *prefix = "[KisakCOD][VID RESTART]";
-    return msg && std::strncmp(msg, prefix, std::strlen(prefix)) == 0;
-}
-
 static bool Switch_LogIsScriptDiagnostic(const char *msg)
 {
     if (!msg || !*msg)
@@ -4108,7 +4102,6 @@ void Switch_LogWrite(const char *msg)
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
-        !Switch_LogIsVideoRestartDiagnostic(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
