@@ -1123,9 +1123,10 @@ void R_Shutdown(int destroyWindow)
         {
             R_ShutdownLoadWater();
             R_ShutdownFonts();
-            // Switch materials are fastfile-owned. The original loose-file
-            // Material_Shutdown() path calls Material_FreeAll(), which belongs
-            // to the excluded D3D9 load-obj implementation and must not run here.
+            // Release each fastfile technique set's device-dependent pass
+            // resources and clear the renderer material registries before the
+            // Vulkan device is torn down, matching CoD4's Material_Shutdown().
+            Material_Shutdown();
             if (s_registered)
             {
                 g_switchFrameStage = "frame/r_shutdown/images";
