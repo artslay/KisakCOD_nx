@@ -395,6 +395,7 @@ void R_Init() {
     RB_ProfileInit();
 
     R_ApplySwitchWorkerThreadSettings();
+    Switch_LogWrite("[KisakCOD][VID RESTART] step=renderer_init_complete\n");
 }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
 HWND R_CreateSwapChains(int, GfxWindowParms *, int) { return nullptr; }
