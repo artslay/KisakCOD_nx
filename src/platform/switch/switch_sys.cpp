@@ -4027,7 +4027,6 @@ static bool Switch_LogIsSuppressedDiagnostic(const char *msg)
 
     static constexpr const char *const kSuppressedPrefixes[] =
     {
-        "[KisakCOD][VK FRAME TIMING]",
         "[KisakCOD][CPU SCENE TIMING]",
         "[KisakCOD][PLAYER ANGLES PRE]",
         "[KisakCOD][PLAYER INPUT]",
@@ -4092,16 +4091,26 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
+    const bool isVkFrameTiming =
+        msg && std::strncmp(
+                   msg,
+                   "[KisakCOD][VK FRAME TIMING]",
+                   std::strlen("[KisakCOD][VK FRAME TIMING]")) == 0;
+
     // Keep transient render timing, selected player-angle and DVAR
-    // and HUD diagnostics out of the persistent log. Errors and level boundaries
-    // use separate paths.
-    if (!msg || !*msg || Switch_LogIsSuppressedDiagnostic(msg) ||
-        Switch_LogIsHudDiagnostic(msg) || Switch_LogIsPerformanceDiagnostic(msg))
+    // and HUD diagnostics out of the persistent log, except for the bounded
+    // Vulkan frame summary used to identify CPU/GPU stalls.
+    if (!msg || !*msg ||
+        (!isVkFrameTiming &&
+         (Switch_LogIsSuppressedDiagnostic(msg) ||
+          Switch_LogIsHudDiagnostic(msg) ||
+          Switch_LogIsPerformanceDiagnostic(msg))))
         return;
 
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!Switch_LogIsImportant(msg) &&
+        !isVkFrameTiming &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
