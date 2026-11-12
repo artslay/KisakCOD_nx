@@ -36,9 +36,13 @@ void __cdecl R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext c
     // The active material state can retain the sun-shadow offset bits across
     // cascades, so R_ChangeState_1 may not reapply the current dvars. Force the
     // sun-shadow polygon offset for every cascade before its draw list.
-    R_ForceSetPolygonOffset(context.state->prim.device, 0x30);
+    R_ForceSetPolygonOffset(context.state->prim.device, GFXS1_POLYGON_OFFSET_SHADOWMAP);
     context.state->activeStateBits[1] =
-        (context.state->activeStateBits[1] & ~0x30u) | 0x30u;
+        (context.state->activeStateBits[1] & ~GFXS1_POLYGON_OFFSET_MASK) |
+        GFXS1_POLYGON_OFFSET_SHADOWMAP;
+    context.state->refStateBits[1] =
+        (context.state->refStateBits[1] & ~GFXS1_POLYGON_OFFSET_MASK) |
+        GFXS1_POLYGON_OFFSET_SHADOWMAP;
 
     R_DrawSurfs(context, 0, &partition->info);
 
