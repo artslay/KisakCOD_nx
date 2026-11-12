@@ -1549,7 +1549,15 @@
          defaultState = 0;
          helpString = "Worker thread always disabled; not enough hardware threads";
      }
-     return Dvar_RegisterBool(name, defaultState, flags, helpString);
+     const dvar_t *workerThread =
+         Dvar_RegisterBool(name, defaultState, flags, helpString);
+#ifdef __SWITCH__
+     // Worker threads are created suspended. Apply their initial enabled state
+     // through R_UpdateActiveWorkerThreads() on the first normal frame handoff,
+     // just like a runtime dvar change.
+     Dvar_SetModified((dvar_s *)workerThread);
+#endif
+     return workerThread;
  }
 
  char __cdecl R_CheckDvarModified(const dvar_s *dvar)
