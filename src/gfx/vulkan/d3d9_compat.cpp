@@ -10605,6 +10605,8 @@ void IDirect3DDevice9::ResetCachedCommandState()
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
     m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
+    m_cachedBoundDynamicOffsets.fill(0);
+    m_cachedBoundDynamicOffsetValid.fill(false);
     m_cachedBoundVertexBuffers.fill(VK_NULL_HANDLE);
     m_cachedBoundVertexOffsets.fill(0);
     m_cachedBoundVertexStreamMask = 0;
@@ -10627,7 +10629,11 @@ void IDirect3DDevice9::BindDescriptorSetIfChanged(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
     if (setIndex < m_cachedBoundDescriptorSets.size())
+    {
         m_cachedBoundDescriptorSets[setIndex] = set;
+        m_cachedBoundDynamicOffsetValid[setIndex] = false;
+        m_cachedBoundDynamicOffsets[setIndex] = 0;
+    }
 }
 
 void IDirect3DDevice9::BindPipelineIfChanged(VkPipeline pipeline)
