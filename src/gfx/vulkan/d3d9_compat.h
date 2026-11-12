@@ -604,6 +604,7 @@ private:
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         VkImageView defaultDummyImageView = VK_NULL_HANDLE;
+        std::array<VkImageView, 3> typedDummyImageViews{};
         VkSampler dummySampler = VK_NULL_HANDLE;
         const MOJOSHADER_parseData *parse = nullptr;
         VkDescriptorSet set = VK_NULL_HANDLE;
