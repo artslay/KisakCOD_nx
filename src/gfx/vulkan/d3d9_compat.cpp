@@ -7835,12 +7835,44 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
+    const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
+    KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
+        for (uint32_t slot=0; slot<16u; ++slot)
+        {
+            m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
+            m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
+            m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
+        }
+        m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
+            activeShader ? activeShader->serial : 0u;
+        m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
+    }
+    const MOJOSHADER_parseData *activeParse =
+        activeShader ? activeShader->parseData : nullptr;
+    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
+    if (activeParse && activeParse->samplers)
+    {
+        const int samplerCount = std::max(0, activeParse->sampler_count);
+        for (int i = 0; i < samplerCount; ++i)
+        {
+            const int samplerIndex = activeParse->samplers[i].index;
+            if (samplerIndex >= 0 &&
+                samplerIndex < static_cast<int>(activeSamplers.size()))
+                activeSamplers[static_cast<size_t>(samplerIndex)] =
+                    &activeParse->samplers[i];
+        }
+    }
+
     // Image reloads can replace GfxImage::texture.basemap while a previous
-    // D3D texture reference remains cached in m_textures. Rebind that slot to
-    // the owner's current resource before checking upload state or building
-    // descriptors; otherwise the stale object can appear permanently blank.
+    // D3D texture reference remains cached in m_textures. Rebind only slots
+    // consumed by this shader; inactive slots cannot affect its descriptors.
     for (uint32_t slot = 0; slot < 16; ++slot)
     {
+        if (!activeSamplers[slot])
+            continue;
+
         auto *boundTexture = static_cast<KisakVkTexture *>(textures[slot]);
         if (!boundTexture || !boundTexture->sourceImage)
             continue;
@@ -7870,7 +7902,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\n",
+                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\\n",
                 slot,
                 boundTexture->sourceImage->name
                     ? boundTexture->sourceImage->name : boundTexture->debugName,
@@ -7879,36 +7911,6 @@ bool IDirect3DDevice9::BindSamplerSet(
                 static_cast<void *>(currentVkTexture),
                 static_cast<unsigned>(currentVkTexture->GetSubresourceLayout(0, 0)));
             Switch_LogWrite(trace);
-        }
-    }
-
-    const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
-    KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
-    if (Switch_IsVkGpuDrawTraceEnabled())
-    {
-        for (uint32_t slot=0; slot<16u; ++slot)
-        {
-            m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
-            m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
-            m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
-        }
-        m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
-            activeShader ? activeShader->serial : 0u;
-        m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
-    }
-    const MOJOSHADER_parseData *activeParse =
-        activeShader ? activeShader->parseData : nullptr;
-    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
-    if (activeParse && activeParse->samplers)
-    {
-        const int samplerCount = std::max(0, activeParse->sampler_count);
-        for (int i = 0; i < samplerCount; ++i)
-        {
-            const int samplerIndex = activeParse->samplers[i].index;
-            if (samplerIndex >= 0 &&
-                samplerIndex < static_cast<int>(activeSamplers.size()))
-                activeSamplers[static_cast<size_t>(samplerIndex)] =
-                    &activeParse->samplers[i];
         }
     }
 
