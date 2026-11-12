@@ -1378,8 +1378,18 @@ void __cdecl R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1)
         }
         if ((changedBits & 0xC) != 0)
             R_HW_SetDepthTestFunction(device, stateBits1);
-        if ((changedBits & 0x30) != 0)
-            R_ForceSetPolygonOffset(device, stateBits1);
+        if ((changedBits & GFXS1_POLYGON_OFFSET_MASK) != 0)
+        {
+            // Every sun-shadow caster must use the shadow-map bias, even when
+            // its material's ordinary state bits request decal/no polygon offset.
+            // Keep the material bit caches unchanged; only override the hardware
+            // bias while the sun-shadow depth target is active.
+            const char polygonOffsetBits =
+                state->renderTargetId == R_RENDERTARGET_SHADOWMAP_SUN
+                    ? static_cast<char>(GFXS1_POLYGON_OFFSET_SHADOWMAP)
+                    : static_cast<char>(stateBits1);
+            R_ForceSetPolygonOffset(device, polygonOffsetBits);
+        }
         if ((stateBits1 & 0x40) != 0)
         {
             if ((changedBits & 0x40) != 0)
