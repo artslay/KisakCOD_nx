@@ -33,12 +33,12 @@ void __cdecl R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext c
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1);
     context.state->prim.device->SetScissorRect(&rect);
 
-    // The active material state can retain the sun-shadow offset bits across
-    // cascades, so R_ChangeState_1 may not reapply the current dvars. Force the
-    // sun-shadow polygon offset for every cascade before its draw list.
-    R_ForceSetPolygonOffset(context.state->prim.device, 0x30);
-    context.state->activeStateBits[1] =
-        (context.state->activeStateBits[1] & ~0x30u) | 0x30u;
+    // Refresh the currently active polygon-offset mode before this cascade.
+    // Preserve the mode selected by the material state: forcing 0x30 here would
+    // apply the sun-shadow bias even to draws that do not request that mode.
+    R_ForceSetPolygonOffset(
+        context.state->prim.device,
+        static_cast<char>(context.state->activeStateBits[1]));
 
     R_DrawSurfs(context, 0, &partition->info);
 
