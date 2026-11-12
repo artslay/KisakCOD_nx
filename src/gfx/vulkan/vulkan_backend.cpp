@@ -502,7 +502,7 @@ VkDescriptorSetLayout CreateUniformSetLayout(VkDevice device, VkShaderStageFlags
 {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     binding.descriptorCount = 1;
     binding.stageFlags = stage;
 
@@ -1858,7 +1858,7 @@ bool VulkanBackend::CreateDescriptorResources()
     // (two 16-sampler sets and two uniform sets per draw).
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 262144 * FramesInFlight},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16384 * FramesInFlight}
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 16384 * FramesInFlight}
     };
     VkDescriptorPoolCreateInfo pool{};
     pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
