@@ -6879,8 +6879,11 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
         tex->AddRef();
     IDirect3DBaseTexture9 *old = m_textures[stage];
     m_textures[stage] = tex;
-    m_pipelineDirty = true;
-    m_cachedPipelineFastPathValid = false;
+    // Texture descriptors are rebound independently in BindSamplerSet. Texture
+    // handles do not participate in the graphics-pipeline key; EnsurePipeline
+    // separately checks the sun-shadow render-target image used by its shader
+    // variant, so ordinary material texture changes must preserve the pipeline
+    // fast path.
     if (old)
         old->Release();
 #ifdef __SWITCH__
