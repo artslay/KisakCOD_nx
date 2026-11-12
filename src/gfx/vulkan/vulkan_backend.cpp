@@ -3435,6 +3435,7 @@ bool VulkanBackend::CreateImage2D(
     // attachment slot, so the same view can still back both attachments.
     const bool sampledDepthStencil =
         (usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0 &&
+        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0 &&
         (aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0 &&
         (aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
     viewInfo.subresourceRange.aspectMask = sampledDepthStencil
