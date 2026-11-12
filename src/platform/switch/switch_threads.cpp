@@ -180,11 +180,10 @@ static int32_t Switch_GetThreadAffinityCoreIndex(
         return 1;
 
     // On a three-core Switch process mask, MAIN and BACKEND occupy the
-    // first two logical cores. Pin both frontend workers to the remaining
-    // core so neither can migrate onto those latency-sensitive threads.
-    if (s_cpuCount == 3u &&
-        (context == THREAD_CONTEXT_WORKER0 ||
-         context == THREAD_CONTEXT_WORKER1))
+    // first two logical cores. Keep WORKER0 on the remaining core, but leave
+    // WORKER1 unrestricted so the scheduler can use spare time on any core
+    // instead of forcing both workers to compete on one core.
+    if (s_cpuCount == 3u && context == THREAD_CONTEXT_WORKER0)
         return 2;
 
     if (threadLock != THREAD_LOCK_ALL)
