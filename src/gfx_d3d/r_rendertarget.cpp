@@ -503,24 +503,11 @@ void __cdecl R_InitShadowmapRenderTarget(
             totalHeight);
     usage = (RenderTargetUsage)(gfxMetrics.shadowmapBuildTechType != TECHNIQUE_BUILD_SHADOWMAP_DEPTH);
 
-    _D3DFORMAT shadowMapPrimaryFormat = gfxMetrics.shadowmapFormatPrimary;
-#ifdef __SWITCH__
-    // Keep the general depth target format unchanged. Test the sun shadow atlas
-    // with D32S8 when NVK exposes the complete sampled/linear-filtered target
-    // usage; this isolates D24S8 depth sampling without changing spot shadows.
-    if (renderTarget == &gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN] &&
-        shadowMapPrimaryFormat == D3DFMT_D24S8 &&
-        SwitchDepthFormatSupportsRenderTarget(D3DFMT_D24FS8, true))
-    {
-        shadowMapPrimaryFormat = D3DFMT_D24FS8;
-    }
-#endif
-
     R_InitAndTrackRenderTargetImage(
         imageProgType,
         tileRes,
         totalHeight,
-        shadowMapPrimaryFormat,
+        gfxMetrics.shadowmapFormatPrimary,
         usage,
         renderTarget);
     if (usage)
