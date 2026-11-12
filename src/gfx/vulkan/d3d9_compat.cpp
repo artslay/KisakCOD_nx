@@ -7462,10 +7462,28 @@ bool IDirect3DDevice9::BindUniformSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
+        m_uniformShaderDescriptorFrameCache[frameSlot][0].clear();
+        m_uniformShaderDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
     const size_t cacheIndex = setIndex == 1u ? 0u : 1u;
+    auto bindUniformSetWithDynamicOffset =
+        [&](VkDescriptorSet descriptorSet, uint32_t dynamicOffset)
+    {
+        ResetCachedCommandState();
+        if (m_cachedBoundDescriptorSets[setIndex] == descriptorSet &&
+            m_cachedBoundDynamicOffsetValid[setIndex] &&
+            m_cachedBoundDynamicOffsets[setIndex] == dynamicOffset)
+            return;
+
+        vkCmdBindDescriptorSets(
+            m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+            setIndex, 1, &descriptorSet, 1, &dynamicOffset);
+        m_cachedBoundDescriptorSets[setIndex] = descriptorSet;
+        m_cachedBoundDynamicOffsets[setIndex] = dynamicOffset;
+        m_cachedBoundDynamicOffsetValid[setIndex] = true;
+    };
     KisakVkShader *uniformShader =
         setIndex == 1u ? m_vertexShader :
         (setIndex == 3u ? m_pixelShader : nullptr);
@@ -7491,7 +7509,8 @@ bool IDirect3DDevice9::BindUniformSet(
         uniformBindCache.set != VK_NULL_HANDLE)
     {
         g_switchFrameStage = "frame/render/vulkan/uniform/revision_cache_hit";
-        BindDescriptorSetIfChanged(bindPoint, setIndex, uniformBindCache.set);
+        bindUniformSetWithDynamicOffset(
+            uniformBindCache.set, uniformBindCache.dynamicOffset);
         return true;
     }
 
@@ -7744,66 +7763,85 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
-    const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
-    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
+    const uint32_t dynamicOffset = static_cast<uint32_t>(bufferInfo.offset);
+    auto &shaderDescriptorSets =
+        m_uniformShaderDescriptorFrameCache[frameSlot][cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
-    if (cursor < cachedSets.size())
+    const auto shaderSet = shaderDescriptorSets.find(shaderSerial);
+    if (shaderSet != shaderDescriptorSets.end())
     {
-        set = cachedSets[cursor];
+        set = shaderSet->second;
+        traceUniformBindStage("descriptor_reused", bytes, size, 1);
     }
     else
     {
-        VkDescriptorSetAllocateInfo alloc{};
-        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        alloc.descriptorPool = m_backend->DescriptorPool();
-        VkDescriptorSetLayout descriptorLayout = setIndex == 1
-            ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
-        alloc.descriptorSetCount = 1;
-        alloc.pSetLayouts = &descriptorLayout;
-        const VkResult allocResult =
-            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
-        if (allocResult != VK_SUCCESS)
+        auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
+        const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
+        g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
+        if (cursor < cachedSets.size())
         {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
-                setIndex,
-                static_cast<unsigned long long>(frameSerial),
-                cursor,
-                cachedSets.size(),
-                size,
-                static_cast<int>(allocResult));
-            Switch_LogWrite(trace);
-            traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
-            return false;
+            set = cachedSets[cursor];
         }
-        traceUniformBindStage("descriptor_allocated", bytes, size, 1);
-        cachedSets.push_back(set);
-        traceUniformBindStage("descriptor_cached", bytes, size, 1);
-    }
-    ++m_uniformSetCursor[frameSlot][cacheIndex];
+        else
+        {
+            VkDescriptorSetAllocateInfo alloc{};
+            alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            alloc.descriptorPool = m_backend->DescriptorPool();
+            VkDescriptorSetLayout descriptorLayout = setIndex == 1
+                ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
+            alloc.descriptorSetCount = 1;
+            alloc.pSetLayouts = &descriptorLayout;
+            const VkResult allocResult =
+                vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+            if (allocResult != VK_SUCCESS)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
+                    setIndex,
+                    static_cast<unsigned long long>(frameSerial),
+                    cursor,
+                    cachedSets.size(),
+                    size,
+                    static_cast<int>(allocResult));
+                Switch_LogWrite(trace);
+                traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
+                return false;
+            }
+            traceUniformBindStage("descriptor_allocated", bytes, size, 1);
+            cachedSets.push_back(set);
+            traceUniformBindStage("descriptor_cached", bytes, size, 1);
+        }
+        ++m_uniformSetCursor[frameSlot][cacheIndex];
 
-    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = set;
-    write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write.pBufferInfo = &bufferInfo;
-    vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
-    traceUniformBindStage("descriptor_updated", bytes, size, 1);
+        VkDescriptorBufferInfo descriptorBufferInfo{};
+        descriptorBufferInfo.buffer = bufferInfo.buffer;
+        descriptorBufferInfo.offset = 0;
+        descriptorBufferInfo.range = size;
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = set;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        write.pBufferInfo = &descriptorBufferInfo;
+        g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
+        vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
+        traceUniformBindStage("descriptor_updated", bytes, size, 1);
+        shaderDescriptorSets.emplace(shaderSerial, set);
+    }
+
     uniformBindCache.frameSerial = frameSerial;
     uniformBindCache.revision = uniformRevision;
     uniformBindCache.shaderSerial = shaderSerial;
     uniformBindCache.device = m_backend->Device();
     uniformBindCache.parse = parse;
     uniformBindCache.set = set;
+    uniformBindCache.dynamicOffset = dynamicOffset;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
-    BindDescriptorSetIfChanged(bindPoint, setIndex, set);
+    bindUniformSetWithDynamicOffset(set, dynamicOffset);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
 #ifdef __SWITCH__
     if (setIndex == 1u && g_switchModelTransformDraw.active &&
@@ -8017,6 +8055,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
+        m_uniformShaderDescriptorFrameCache[frameSlot][0].clear();
+        m_uniformShaderDescriptorFrameCache[frameSlot][1].clear();
         m_samplerBindFastCache[frameSlot][0].valid = false;
         m_samplerBindFastCache[frameSlot][1].valid = false;
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
