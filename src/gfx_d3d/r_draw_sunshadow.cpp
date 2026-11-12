@@ -42,6 +42,13 @@ void __cdecl R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext c
 
     R_DrawSurfs(context, 0, &partition->info);
 
+    // Shadow-map bias is a temporary render-target state. Restore the offset
+    // selected by the final caster material before the same command-buffer
+    // state is reused by the regular scene pass.
+    R_ForceSetPolygonOffset(
+        context.state->prim.device,
+        static_cast<char>(context.state->activeStateBits[1]));
+
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
 }
 
