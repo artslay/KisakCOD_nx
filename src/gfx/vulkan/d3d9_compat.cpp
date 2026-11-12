@@ -8043,8 +8043,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         !Switch_IsVkGpuDrawTraceEnabled() &&
         !Switch_IsModelTransformTraceEnabled() &&
         !Switch_IsFloorAuditContextActive() &&
-        SwitchPsS0UvTestTargetSerial() == 0u &&
-        SwitchPsColorDebugTargetSerial() == 0u &&
+        SwitchPsS0UvTestTargetSerial() == UINT64_MAX &&
+        SwitchPsColorDebugTargetSerial() == UINT64_MAX &&
         !(setIndex == 2u && g_switchLitSamplerTraceActive);
 #endif
 
@@ -8628,8 +8628,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     allowPipelineFastPath =
         !m_drawPrimitiveUPActive &&
         !g_switchFxCodeMeshDrawActive &&
-        fastPathS0Target == 0u &&
-        fastPathColorTarget == 0u &&
+        fastPathS0Target == UINT64_MAX &&
+        fastPathColorTarget == UINT64_MAX &&
         !fastPathFloorAudit;
 
     // All ordinary D3D state that contributes to the pipeline key marks
