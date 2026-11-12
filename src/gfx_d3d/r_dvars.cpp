@@ -1531,9 +1531,18 @@
      flags = 0;
      defaultState = 1;
      helpString = "Enable worker thread";
-     // Match the original renderer's thread-context limit. Contexts 0 and 1
-     // are the main and render threads; workers start at context 2.
-     const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
+     // Contexts 0 and 1 are the main and render threads; workers start at
+     // context 2. On Switch with three available cores, both frontend workers
+     // share the third core instead of leaving it underused.
+     const uint32_t cpuCount = Sys_GetCpuCount();
+#ifdef __SWITCH__
+     const bool switchThirdCoreWorker =
+         cpuCount == 3u && workerIndex < 2u;
+#else
+     const bool switchThirdCoreWorker = false;
+#endif
+     const bool insufficientThreads =
+         workerIndex + 2u >= cpuCount && !switchThirdCoreWorker;
      if (insufficientThreads || !sys_smp_allowed->current.enabled)
      {
          flags = 64;
