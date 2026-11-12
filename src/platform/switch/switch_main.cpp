@@ -650,6 +650,31 @@ static void SwitchLogVulkanRuntime()
         properties.driverVersion);
     SwitchBootLog(line);
 
+    // Driver properties expose the version of the Mesa build actually loaded
+    // by the Vulkan runtime, rather than a version baked into the game binary.
+    VkPhysicalDeviceDriverProperties driverProperties{};
+    driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+    VkPhysicalDeviceProperties2 properties2{};
+    properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    properties2.pNext = &driverProperties;
+    vkGetPhysicalDeviceProperties2(device, &properties2);
+
+    if (driverProperties.driverInfo[0] != '\0')
+    {
+        std::snprintf(line, sizeof(line),
+            "Mesa version: %s (driver=%s)",
+            driverProperties.driverInfo,
+            driverProperties.driverName[0] != '\0'
+                ? driverProperties.driverName
+                : "unknown");
+    }
+    else
+    {
+        std::snprintf(line, sizeof(line),
+            "Mesa version: unavailable (Vulkan driver properties not reported)");
+    }
+    SwitchBootLog(line);
+
     vkDestroyInstance(instance, nullptr);
 }
 
