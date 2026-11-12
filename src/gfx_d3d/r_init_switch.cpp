@@ -671,7 +671,7 @@ void R_SetShadowmapFormats_DX(uint32_t) {
     gfxMetrics.shadowmapBuildTechType = TECHNIQUE_BUILD_SHADOWMAP_DEPTH;
     gfxMetrics.hasHardwareShadowmap = 1;
     gfxMetrics.shadowmapSamplerState =
-        SAMPLER_CLAMP_V | SAMPLER_CLAMP_U | SAMPLER_FILTER_LINEAR;
+        SAMPLER_CLAMP_V | SAMPLER_CLAMP_U | SAMPLER_FILTER_NEAREST;
 }
 uint32_t R_ChooseAdapter() { return 0; }
 void Sys_HideSplashWindow() {}
