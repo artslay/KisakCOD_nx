@@ -8518,21 +8518,28 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_cachedPipelineDepthSamples == depthSamples)
     {
         g_switchFrameStage = "frame/render/vulkan/pipeline/state_cache_hit";
-        RecordSwitchVkPipelineTrace(
-            2u, this, &m_pipelines, m_pipelines.size(),
-            m_cachedPipelineStateKey, m_backend->Device(), m_decl,
-            m_vertexShader, m_pixelShader, m_cachedPipelineState);
-        g_switchLastBoundPipelineKey.store(
-            m_cachedPipelineStateKey, std::memory_order_relaxed);
-        g_switchLastBoundVertexShaderSerial.store(
-            m_vertexShader->serial, std::memory_order_relaxed);
-        g_switchLastBoundPixelShaderSerial.store(
-            m_pixelShader->serial, std::memory_order_relaxed);
-        BindPipelineIfChanged(m_cachedPipelineState);
-        RecordSwitchVkPipelineTrace(
-            4u, this, &m_pipelines, m_pipelines.size(),
-            m_cachedPipelineStateKey, m_backend->Device(), m_decl,
-            m_vertexShader, m_pixelShader, m_cachedPipelineState);
+        // Cache-hit draws reuse the pipeline already bound to this command
+        // buffer. Publish crash-trace state only when a Vulkan bind is needed;
+        // rewriting the full TLS snapshot for every world surface adds work to
+        // the hottest path without changing GPU state.
+        if (m_cachedBoundPipeline != m_cachedPipelineState)
+        {
+            RecordSwitchVkPipelineTrace(
+                2u, this, &m_pipelines, m_pipelines.size(),
+                m_cachedPipelineStateKey, m_backend->Device(), m_decl,
+                m_vertexShader, m_pixelShader, m_cachedPipelineState);
+            g_switchLastBoundPipelineKey.store(
+                m_cachedPipelineStateKey, std::memory_order_relaxed);
+            g_switchLastBoundVertexShaderSerial.store(
+                m_vertexShader->serial, std::memory_order_relaxed);
+            g_switchLastBoundPixelShaderSerial.store(
+                m_pixelShader->serial, std::memory_order_relaxed);
+            BindPipelineIfChanged(m_cachedPipelineState);
+            RecordSwitchVkPipelineTrace(
+                4u, this, &m_pipelines, m_pipelines.size(),
+                m_cachedPipelineStateKey, m_backend->Device(), m_decl,
+                m_vertexShader, m_pixelShader, m_cachedPipelineState);
+        }
         return true;
     }
 #endif
