@@ -179,14 +179,12 @@ static int32_t Switch_GetThreadAffinityCoreIndex(
     if (context == THREAD_CONTEXT_BACKEND)
         return 1;
 
-    // With the Switch process mask (normally three available cores), the
-    // renderer enables WORKER0 and disables WORKER1 because there is no fourth
-    // hardware thread. MINIMAL already reserves cores 0 and 1 for MAIN and
-    // BACKEND; leaving the only active frontend worker unrestricted lets it
-    // contend with both. Keep that worker on the remaining logical core.
-    if (threadLock == THREAD_LOCK_MINIMAL &&
-        s_cpuCount == 3u &&
-        context == THREAD_CONTEXT_WORKER0)
+    // On a three-core Switch process mask, MAIN and BACKEND occupy the
+    // first two logical cores. Pin both frontend workers to the remaining
+    // core so neither can migrate onto those latency-sensitive threads.
+    if (s_cpuCount == 3u &&
+        (context == THREAD_CONTEXT_WORKER0 ||
+         context == THREAD_CONTEXT_WORKER1))
         return 2;
 
     if (threadLock != THREAD_LOCK_ALL)
