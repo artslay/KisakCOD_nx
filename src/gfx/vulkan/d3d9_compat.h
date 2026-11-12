@@ -595,6 +595,32 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
         std::array<VkDescriptorImageInfo, 16> images{};
     };
+    struct SamplerBindFastCacheEntry
+    {
+        bool valid = false;
+        uint64_t frameSerial = 0;
+        uint64_t shaderSerial = 0;
+        uint64_t samplerStateRevision = 0;
+        VkDevice device = VK_NULL_HANDLE;
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        VkImageView defaultDummyImageView = VK_NULL_HANDLE;
+        VkSampler dummySampler = VK_NULL_HANDLE;
+        const MOJOSHADER_parseData *parse = nullptr;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        std::array<IDirect3DBaseTexture9 *, 16> textures{};
+        std::array<VkImage, 16> images{};
+        std::array<VkImageView, 16> views{};
+        std::array<VkImageView, 16> baseMipViews{};
+        std::array<VkImageView, 16> sampledViews{};
+        std::array<VkImageView, 16> baseMipSampledViews{};
+        std::array<VkFormat, 16> formats{};
+        std::array<VkImageViewType, 16> viewTypes{};
+        std::array<VkImageLayout, 16> layouts{};
+        std::array<uint64_t, 16> layoutRevisions{};
+        std::array<uint32_t, 16> mipLevels{};
+        std::array<uint32_t, 16> arrayLayers{};
+        std::array<uint32_t, 16> sourceFormats{};
+    };
     struct UniformBindCacheEntry
     {
         uint64_t frameSerial = 0;
@@ -628,6 +654,7 @@ private:
     std::array<std::array<int32_t,4>,256> m_vsInt{}, m_psInt{};
     std::array<int32_t,256> m_vsBool{}, m_psBool{};
     uint32_t m_samplerState[16][16]{};
+    uint64_t m_samplerStateRevision = 1;
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
     bool m_markMeshPassActive=false;
@@ -667,6 +694,8 @@ private:
     std::array<std::array<
         std::unordered_map<uint64_t, std::vector<SamplerDescriptorCacheEntry>>,2>,2>
         m_samplerDescriptorFrameCache{};
+    std::array<std::array<SamplerBindFastCacheEntry,2>,2>
+        m_samplerBindFastCache{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
