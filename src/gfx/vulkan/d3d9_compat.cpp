@@ -7202,7 +7202,12 @@ HRESULT IDirect3DDevice9::SetSamplerState(uint32_t stage, uint32_t state, uint32
 {
     if (stage >= 16 || state >= 16)
         return E_FAIL;
-    m_samplerState[stage][state] = value;
+    uint32_t &current = m_samplerState[stage][state];
+    if (current != value)
+    {
+        current = value;
+        ++m_samplerStateRevision;
+    }
     return S_OK;
 }
 
@@ -7994,7 +7999,134 @@ bool IDirect3DDevice9::BindSamplerSet(
         Switch_LogWrite(trace);
     };
 
-    
+    const size_t cacheIndex = setIndex == 0u ? 0u : 1u;
+    const uint32_t frameSlot = m_backend->CurrentFrameSlot();
+    if (frameSlot >= VulkanBackend::FramesInFlight)
+        return false;
+    const uint64_t frameSerial = m_backend->FrameSerial();
+
+    // Descriptor pools and descriptor snapshots are isolated per in-flight
+    // frame slot. Retire only this slot's CPU-side cache after its fence passed.
+    if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
+    {
+        m_samplerSetCursor[frameSlot][0] = 0;
+        m_samplerSetCursor[frameSlot][1] = 0;
+        m_uniformSetCursor[frameSlot][0] = 0;
+        m_uniformSetCursor[frameSlot][1] = 0;
+        m_samplerDescriptorFrameCache[frameSlot][0].clear();
+        m_samplerDescriptorFrameCache[frameSlot][1].clear();
+        m_samplerBindFastCache[frameSlot][0].valid = false;
+        m_samplerBindFastCache[frameSlot][1].valid = false;
+        m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
+    }
+
+    SamplerBindFastCacheEntry fastCacheKey{};
+    fastCacheKey.frameSerial = frameSerial;
+    fastCacheKey.shaderSerial = activeShader ? activeShader->serial : 0u;
+    fastCacheKey.samplerStateRevision = m_samplerStateRevision;
+    fastCacheKey.device = m_backend->Device();
+    fastCacheKey.descriptorPool = m_backend->DescriptorPool();
+    fastCacheKey.defaultDummyImageView = m_backend->DummyImageView();
+    fastCacheKey.dummySampler = m_backend->DummySampler();
+    fastCacheKey.parse = activeParse;
+
+    bool fastCacheEligible = true;
+#ifdef __SWITCH__
+    // Diagnostic modes inspect the descriptor construction itself. Keep them
+    // on the full path so a fast cache hit cannot hide their observations.
+    fastCacheEligible =
+        !Switch_IsVkGpuDrawTraceEnabled() &&
+        !Switch_IsModelTransformTraceEnabled() &&
+        !Switch_IsFloorAuditContextActive() &&
+        SwitchPsS0UvTestTargetSerial() == 0u &&
+        SwitchPsColorDebugTargetSerial() == 0u &&
+        !(setIndex == 2u && g_switchLitSamplerTraceActive);
+#endif
+
+    for (uint32_t slot = 0; slot < 16u; ++slot)
+    {
+        if (!activeSamplers[slot])
+            continue;
+
+        fastCacheKey.textures[slot] = textures[slot];
+        auto *texture = static_cast<KisakVkTexture *>(textures[slot]);
+        if (!texture)
+            continue;
+
+        fastCacheKey.images[slot] = texture->image;
+        fastCacheKey.views[slot] = texture->view;
+        fastCacheKey.baseMipViews[slot] = texture->baseMipView;
+        fastCacheKey.sampledViews[slot] = texture->sampledView;
+        fastCacheKey.baseMipSampledViews[slot] = texture->baseMipSampledView;
+        fastCacheKey.formats[slot] = texture->format;
+        fastCacheKey.viewTypes[slot] = texture->viewType;
+        fastCacheKey.layouts[slot] = texture->layout;
+        fastCacheKey.layoutRevisions[slot] = texture->subresourceLayoutRevision;
+        fastCacheKey.mipLevels[slot] = texture->mipLevels;
+        fastCacheKey.arrayLayers[slot] = texture->arrayLayers;
+        fastCacheKey.sourceFormats[slot] =
+            static_cast<uint32_t>(texture->sourceFormat);
+
+        // The cached summary decides whether the descriptor uses the full
+        // mip view, the base-mip view, or a type-correct dummy. Only skip the
+        // scan when that summary is already known to describe this exact
+        // texture layout revision and dimensions.
+        if (texture->subresourceLayoutSummaryRevision !=
+                texture->subresourceLayoutRevision ||
+            texture->subresourceLayoutSummaryFallback != texture->layout ||
+            texture->subresourceLayoutSummaryMipLevels != texture->mipLevels ||
+            texture->subresourceLayoutSummaryArrayLayers != texture->arrayLayers)
+        {
+            fastCacheEligible = false;
+        }
+    }
+
+    const auto sameSamplerBindKey = [](
+        const SamplerBindFastCacheEntry &cached,
+        const SamplerBindFastCacheEntry &key) -> bool
+    {
+        return cached.valid &&
+            cached.frameSerial == key.frameSerial &&
+            cached.shaderSerial == key.shaderSerial &&
+            cached.samplerStateRevision == key.samplerStateRevision &&
+            cached.device == key.device &&
+            cached.descriptorPool == key.descriptorPool &&
+            cached.defaultDummyImageView == key.defaultDummyImageView &&
+            cached.dummySampler == key.dummySampler &&
+            cached.parse == key.parse &&
+            cached.textures == key.textures &&
+            cached.images == key.images &&
+            cached.views == key.views &&
+            cached.baseMipViews == key.baseMipViews &&
+            cached.sampledViews == key.sampledViews &&
+            cached.baseMipSampledViews == key.baseMipSampledViews &&
+            cached.formats == key.formats &&
+            cached.viewTypes == key.viewTypes &&
+            cached.layouts == key.layouts &&
+            cached.layoutRevisions == key.layoutRevisions &&
+            cached.mipLevels == key.mipLevels &&
+            cached.arrayLayers == key.arrayLayers &&
+            cached.sourceFormats == key.sourceFormats;
+    };
+
+    auto rememberSamplerSet = [&](VkDescriptorSet descriptorSet)
+    {
+        if (!fastCacheEligible)
+            return;
+        fastCacheKey.set = descriptorSet;
+        fastCacheKey.valid = true;
+        m_samplerBindFastCache[frameSlot][cacheIndex] = fastCacheKey;
+    };
+
+    const SamplerBindFastCacheEntry &lastSamplerBind =
+        m_samplerBindFastCache[frameSlot][cacheIndex];
+    if (fastCacheEligible && sameSamplerBindKey(lastSamplerBind, fastCacheKey))
+    {
+        g_switchFrameStage = "frame/render/vulkan/sampler/fast_cache_hit";
+        BindDescriptorSetIfChanged(bindPoint, setIndex, lastSamplerBind.set);
+        g_switchFrameStage = "frame/render/vulkan/sampler/return";
+        return true;
+    }
 
     // Determine whether any sampled subresource needs a layout transition.
     // Vulkan image barriers are forbidden inside dynamic rendering, including
@@ -8066,24 +8198,11 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (needsSampledLayoutTransition)
         m_backend->EndRendering();
 
-    // Each in-flight frame slot owns a separate descriptor-set cache. The
-    // slot's fence has completed before its cursor is rewound or its sets updated.
-    const uint32_t frameSlot = m_backend->CurrentFrameSlot();
-    if (frameSlot >= VulkanBackend::FramesInFlight)
-        return false;
-    const uint64_t frameSerial = m_backend->FrameSerial();
-    if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
-    {
-        m_samplerSetCursor[frameSlot][0] = 0;
-        m_samplerSetCursor[frameSlot][1] = 0;
-        m_uniformSetCursor[frameSlot][0] = 0;
-        m_uniformSetCursor[frameSlot][1] = 0;
-        m_samplerDescriptorFrameCache[frameSlot][0].clear();
-        m_samplerDescriptorFrameCache[frameSlot][1].clear();
-        m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
-    }
+    // A layout transition changes the cache key while the full path is
+    // recording the required barriers. Do not publish the pre-transition key.
+    if (needsSampledLayoutTransition)
+        fastCacheEligible = false;
 
-    const size_t cacheIndex = setIndex == 0 ? 0 : 1;
     auto &cachedSets = m_samplerDescriptorSets[frameSlot][cacheIndex];
     auto &frameCache = m_samplerDescriptorFrameCache[frameSlot][cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
@@ -8404,6 +8523,7 @@ bool IDirect3DDevice9::BindSamplerSet(
 
             if (sameDescriptors)
             {
+                rememberSamplerSet(cached.set);
                 g_switchFrameStage = "frame/render/vulkan/sampler/cache_hit";
                 BindDescriptorSetIfChanged(bindPoint, setIndex, cached.set);
                 g_switchFrameStage = "frame/render/vulkan/sampler/return";
@@ -8461,6 +8581,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     // and hits. A raw vkCmdBindDescriptorSets here left the cached set index
     // unchanged, allowing a later cache hit to skip a required material bind.
     BindDescriptorSetIfChanged(bindPoint, setIndex, set);
+    rememberSamplerSet(set);
     g_switchFrameStage = "frame/render/vulkan/sampler/return";
     return true;
 }
