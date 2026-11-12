@@ -8675,18 +8675,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_ccwStencilPass);
 
     g_switchFrameStage = "frame/render/vulkan/pipeline/cache_lookup";
-    RecordSwitchVkPipelineTrace(
-        2u, this, &m_pipelines, m_pipelines.size(), key,
-        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     const auto existing = m_pipelines.find(key);
     if (existing != m_pipelines.end())
     {
-        RecordSwitchVkPipelineTrace(
-            3u, this, &m_pipelines, m_pipelines.size(), key,
-            m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
-        g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
-        g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
-        g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
         m_pipelineDirty = false;
         m_cachedPipelineStateKey = key;
         m_cachedPipelineState = existing->second;
@@ -8697,14 +8688,33 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_cachedPipelineColorSamples = colorSamples;
         m_cachedPipelineDepthSamples = depthSamples;
         m_cachedPipelineFastPathValid = allowPipelineFastPath;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
-        BindPipelineIfChanged(existing->second);
-        RecordSwitchVkPipelineTrace(
-            4u, this, &m_pipelines, m_pipelines.size(), key,
-            m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
+
+        // A cache hit often reuses the pipeline already bound for adjacent
+        // surfaces. Preserve the last-bind crash snapshot and skip its TLS and
+        // atomic writes unless this command buffer actually needs a new bind.
+        if (m_cachedBoundPipeline != existing->second)
+        {
+            RecordSwitchVkPipelineTrace(
+                2u, this, &m_pipelines, m_pipelines.size(), key,
+                m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
+            RecordSwitchVkPipelineTrace(
+                3u, this, &m_pipelines, m_pipelines.size(), key,
+                m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
+            g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
+            g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
+            g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
+            g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
+            BindPipelineIfChanged(existing->second);
+            RecordSwitchVkPipelineTrace(
+                4u, this, &m_pipelines, m_pipelines.size(), key,
+                m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
+        }
         g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_return";
         return true;
     }
+    RecordSwitchVkPipelineTrace(
+        2u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     RecordSwitchVkPipelineTrace(
         5u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
