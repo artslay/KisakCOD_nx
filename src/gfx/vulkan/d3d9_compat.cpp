@@ -7902,7 +7902,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\\n",
+                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\n",
                 slot,
                 boundTexture->sourceImage->name
                     ? boundTexture->sourceImage->name : boundTexture->debugName,
