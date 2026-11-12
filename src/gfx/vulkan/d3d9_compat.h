@@ -625,6 +625,7 @@ private:
     struct UniformBindCacheEntry
     {
         uint64_t frameSerial = 0;
+        uint64_t recordingSerial = 0;
         uint64_t revision = 0;
         uint64_t shaderSerial = 0;
         VkDevice device = VK_NULL_HANDLE;
