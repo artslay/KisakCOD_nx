@@ -1579,29 +1579,33 @@ bool VulkanBackend::CreateSwapchain()
     const bool mailboxImageCountSupported =
         !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
 #ifdef __SWITCH__
-    // FIFO is the only present mode that guarantees display-paced presentation
-    // and back-pressure when VSync is enabled. MAILBOX can keep accepting newer
-    // frames while the display is scanning out the previous one.
+    // Prefer MAILBOX with VSync enabled when the surface supports it. It still
+    // presents only at display refresh boundaries (no tearing), but replaces
+    // stale queued frames instead of back-pressuring the CPU at FIFO cadence.
+    // Keep FIFO as the guaranteed fallback when MAILBOX is unavailable.
     const bool vsyncEnabled = !r_vsync || r_vsync->current.enabled;
-    if (vsyncEnabled)
+    if (vsyncEnabled &&
+        mailboxImageCountSupported &&
+        hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
     {
-        // FIFO is guaranteed by Vulkan for every presentation-capable surface.
+        m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    }
+    else if (vsyncEnabled)
+    {
         m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    else if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
+    {
+        m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     }
     else if (hasPresentMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
     {
         m_presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     }
-    else if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
-    {
-        // No immediate mode: MAILBOX avoids tearing but does not throttle the
-        // producer to the display refresh rate.
-        m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-    }
     else
     {
-        // FIFO is the required final fallback; disabling VSync cannot be
-        // honored on a surface that exposes no non-vsynced presentation mode.
+        // FIFO is the required final fallback when the surface exposes no
+        // non-vsynced presentation mode.
         m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
     }
 #else
