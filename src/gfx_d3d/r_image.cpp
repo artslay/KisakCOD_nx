@@ -350,15 +350,8 @@ bool R_VulkanAllocTexture(
     else
     {
         const VkComponentMapping components = R_VulkanComponentMapping(sourceFormat);
-        // A depth/stencil image view used by a sampled-image descriptor must
-        // select exactly one aspect. Keep the underlying image depth+stencil
-        // format for attachment use, but expose its depth aspect to shaders.
-        // Vulkan ignores the view aspect mask for depth/stencil attachment
-        // slots, so the same view remains valid for the depth/stencil target.
-        const VkImageAspectFlags viewAspect =
-            info.depth ? VK_IMAGE_ASPECT_DEPTH_BIT : info.aspect;
         created = backend->CreateImage2D(
-            width, height, levels, info.format, usage, viewAspect,
+            width, height, levels, info.format, usage, info.aspect,
             &texture->image, &texture->memory, &texture->view, components);
     }
 
