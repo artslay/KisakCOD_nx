@@ -7454,6 +7454,8 @@ bool IDirect3DDevice9::BindUniformSet(
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
+    const uint64_t recordingSerial =
+        m_backend->CommandBufferRecordingSerial();
     if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
     {
         m_samplerSetCursor[frameSlot][0] = 0;
@@ -7502,6 +7504,7 @@ bool IDirect3DDevice9::BindUniformSet(
 #endif
     if (allowUniformRevisionCache &&
         uniformBindCache.frameSerial == frameSerial &&
+        uniformBindCache.recordingSerial == recordingSerial &&
         uniformBindCache.revision == uniformRevision &&
         uniformBindCache.shaderSerial == shaderSerial &&
         uniformBindCache.device == m_backend->Device() &&
@@ -7834,6 +7837,7 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 
     uniformBindCache.frameSerial = frameSerial;
+    uniformBindCache.recordingSerial = recordingSerial;
     uniformBindCache.revision = uniformRevision;
     uniformBindCache.shaderSerial = shaderSerial;
     uniformBindCache.device = m_backend->Device();
