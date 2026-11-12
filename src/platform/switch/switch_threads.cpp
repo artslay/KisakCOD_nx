@@ -179,17 +179,11 @@ static int32_t Switch_GetThreadAffinityCoreIndex(
     if (context == THREAD_CONTEXT_BACKEND)
         return 1;
 
-    // On a three-core Switch process mask, keep the latency-sensitive
-    // backend isolated on logical core 1. WORKER0 uses the third core, while
-    // WORKER1 shares the main core (logical core 0), which has more spare
-    // capacity than the backend core on the Switch workload.
-    if (s_cpuCount == 3u)
-    {
-        if (context == THREAD_CONTEXT_WORKER0)
-            return 2;
-        if (context == THREAD_CONTEXT_WORKER1)
-            return 0;
-    }
+    // On a three-core Switch process mask, keep WORKER0 on the
+    // remaining core. WORKER1 stays unrestricted so the scheduler can
+    // place it without forcing it onto the main or backend core.
+    if (s_cpuCount == 3u && context == THREAD_CONTEXT_WORKER0)
+        return 2;
 
     if (threadLock != THREAD_LOCK_ALL)
         return -1;
