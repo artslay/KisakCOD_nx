@@ -212,15 +212,44 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
     const uint32_t backendDataPool = (s_smpFrame + 1u) % 2u;
     const uint32_t viewInfoPool = g_frameIndex;
 
+    VulkanBackend *backend = GetVulkanBackend();
+    int frameSlotsToWait[3] = {-1, -1, -1};
     if (Switch_PoolNeedsPreWait(
             s_switchGpuSlotForSmpPool, smpPool, frameSlot, drainAll))
-        Switch_WaitForSmpPoolGpuUse(smpPool);
+        frameSlotsToWait[0] =
+            s_switchGpuSlotForSmpPool[smpPool].exchange(-1, std::memory_order_acq_rel);
     if (Switch_PoolNeedsPreWait(
             s_switchGpuSlotForBackEndData, backendDataPool, frameSlot, drainAll))
-        Switch_WaitForFrontEndDataGpuUse(backendDataPool);
+        frameSlotsToWait[1] =
+            s_switchGpuSlotForBackEndData[backendDataPool].exchange(-1, std::memory_order_acq_rel);
     if (Switch_PoolNeedsPreWait(
             s_switchGpuSlotForViewInfo, viewInfoPool, frameSlot, drainAll))
-        Switch_WaitForViewInfoGpuUse(viewInfoPool);
+        frameSlotsToWait[2] =
+            s_switchGpuSlotForViewInfo[viewInfoPool].exchange(-1, std::memory_order_acq_rel);
+
+    // Multiple frontend pools commonly belong to the same frame slot. One
+    // completed fence protects all of them, so avoid locking/waiting that
+    // identical fence once for each pool.
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        const int previousSlot = frameSlotsToWait[i];
+        if (previousSlot < 0)
+            continue;
+
+        bool alreadyWaited = false;
+        for (uint32_t previous = 0; previous < i; ++previous)
+        {
+            if (frameSlotsToWait[previous] == previousSlot)
+            {
+                alreadyWaited = true;
+                break;
+            }
+        }
+        if (!alreadyWaited && backend &&
+            !backend->WaitForFrameSlot(static_cast<uint32_t>(previousSlot)))
+            Com_Error(ERR_FATAL,
+                "Vulkan frame fence wait failed before reusing Switch frontend resources"); 
+    }
 }
 
 void Switch_WaitForNextFrontEndResources()
