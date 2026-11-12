@@ -1024,7 +1024,7 @@ void __cdecl XModelLoadCollData(
 
     if (model->numCollSurfs)
     {
-        model->collSurfs = (XModelCollSurf_s *)AllocColl(44 * model->numCollSurfs);
+        model->collSurfs = (XModelCollSurf_s *)AllocColl(sizeof(XModelCollSurf_s) * model->numCollSurfs);
         for (int i = 0; i < model->numCollSurfs; ++i)
         {
             XModelCollSurf_s *surf = &model->collSurfs[i];
