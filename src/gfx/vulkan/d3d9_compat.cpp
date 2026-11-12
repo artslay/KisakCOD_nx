@@ -8027,6 +8027,11 @@ bool IDirect3DDevice9::BindSamplerSet(
     fastCacheKey.device = m_backend->Device();
     fastCacheKey.descriptorPool = m_backend->DescriptorPool();
     fastCacheKey.defaultDummyImageView = m_backend->DummyImageView();
+    for (uint32_t samplerType = 0; samplerType < 3u; ++samplerType)
+    {
+        fastCacheKey.typedDummyImageViews[samplerType] =
+            m_backend->DummyImageViewForSamplerType(samplerType);
+    }
     fastCacheKey.dummySampler = m_backend->DummySampler();
     fastCacheKey.parse = activeParse;
 
@@ -8092,6 +8097,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             cached.device == key.device &&
             cached.descriptorPool == key.descriptorPool &&
             cached.defaultDummyImageView == key.defaultDummyImageView &&
+            cached.typedDummyImageViews == key.typedDummyImageViews &&
             cached.dummySampler == key.dummySampler &&
             cached.parse == key.parse &&
             cached.textures == key.textures &&
