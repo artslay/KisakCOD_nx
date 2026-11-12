@@ -444,6 +444,15 @@ void R_InitWorkerThreads()
             if (!Sys_SpawnWorkerThread((void(__cdecl *)(uint32_t))R_WorkerThread, workerThreadIndexa))
                 Com_Error(ERR_FATAL, "Failed to create thread");
         }
+
+        // Switch creates worker threads suspended. Their dvars start with
+        // modified == 0, so R_UpdateActiveWorkerThreads() will not issue the
+        // first resume unless startup applies the enabled values explicitly.
+        for (workerThreadIndexa = 0; workerThreadIndexa < 2; ++workerThreadIndexa)
+        {
+            if (r_smp_worker_thread[workerThreadIndexa]->current.enabled)
+                Sys_ResumeThread(static_cast<ThreadContext_t>(workerThreadIndexa + 2u));
+        }
     }
 }
 
