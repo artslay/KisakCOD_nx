@@ -7454,8 +7454,6 @@ bool IDirect3DDevice9::BindUniformSet(
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
-    const uint64_t recordingSerial =
-        m_backend->CommandBufferRecordingSerial();
     if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
     {
         m_samplerSetCursor[frameSlot][0] = 0;
@@ -7464,28 +7462,10 @@ bool IDirect3DDevice9::BindUniformSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
-        m_uniformShaderDescriptorFrameCache[frameSlot][0].clear();
-        m_uniformShaderDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
     const size_t cacheIndex = setIndex == 1u ? 0u : 1u;
-    auto bindUniformSetWithDynamicOffset =
-        [&](VkDescriptorSet descriptorSet, uint32_t dynamicOffset)
-    {
-        ResetCachedCommandState();
-        if (m_cachedBoundDescriptorSets[setIndex] == descriptorSet &&
-            m_cachedBoundDynamicOffsetValid[setIndex] &&
-            m_cachedBoundDynamicOffsets[setIndex] == dynamicOffset)
-            return;
-
-        vkCmdBindDescriptorSets(
-            m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-            setIndex, 1, &descriptorSet, 1, &dynamicOffset);
-        m_cachedBoundDescriptorSets[setIndex] = descriptorSet;
-        m_cachedBoundDynamicOffsets[setIndex] = dynamicOffset;
-        m_cachedBoundDynamicOffsetValid[setIndex] = true;
-    };
     KisakVkShader *uniformShader =
         setIndex == 1u ? m_vertexShader :
         (setIndex == 3u ? m_pixelShader : nullptr);
@@ -7504,7 +7484,6 @@ bool IDirect3DDevice9::BindUniformSet(
 #endif
     if (allowUniformRevisionCache &&
         uniformBindCache.frameSerial == frameSerial &&
-        uniformBindCache.recordingSerial == recordingSerial &&
         uniformBindCache.revision == uniformRevision &&
         uniformBindCache.shaderSerial == shaderSerial &&
         uniformBindCache.device == m_backend->Device() &&
@@ -7512,8 +7491,7 @@ bool IDirect3DDevice9::BindUniformSet(
         uniformBindCache.set != VK_NULL_HANDLE)
     {
         g_switchFrameStage = "frame/render/vulkan/uniform/revision_cache_hit";
-        bindUniformSetWithDynamicOffset(
-            uniformBindCache.set, uniformBindCache.dynamicOffset);
+        BindDescriptorSetIfChanged(bindPoint, setIndex, uniformBindCache.set);
         return true;
     }
 
@@ -7766,86 +7744,66 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    const uint32_t dynamicOffset = static_cast<uint32_t>(bufferInfo.offset);
-    auto &shaderDescriptorSets =
-        m_uniformShaderDescriptorFrameCache[frameSlot][cacheIndex];
+    auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
+    const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
+    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
     VkDescriptorSet set = VK_NULL_HANDLE;
-    const auto shaderSet = shaderDescriptorSets.find(shaderSerial);
-    if (shaderSet != shaderDescriptorSets.end())
+    if (cursor < cachedSets.size())
     {
-        set = shaderSet->second;
-        traceUniformBindStage("descriptor_reused", bytes, size, 1);
+        set = cachedSets[cursor];
     }
     else
     {
-        auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
-        const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
-        g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
-        if (cursor < cachedSets.size())
+        VkDescriptorSetAllocateInfo alloc{};
+        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc.descriptorPool = m_backend->DescriptorPool();
+        VkDescriptorSetLayout descriptorLayout = setIndex == 1
+            ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
+        alloc.descriptorSetCount = 1;
+        alloc.pSetLayouts = &descriptorLayout;
+        const VkResult allocResult =
+            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+        if (allocResult != VK_SUCCESS)
         {
-            set = cachedSets[cursor];
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
+                setIndex,
+                static_cast<unsigned long long>(frameSerial),
+                cursor,
+                cachedSets.size(),
+                size,
+                static_cast<int>(allocResult));
+            Switch_LogWrite(trace);
+            traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
+            return false;
         }
-        else
-        {
-            VkDescriptorSetAllocateInfo alloc{};
-            alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            alloc.descriptorPool = m_backend->DescriptorPool();
-            VkDescriptorSetLayout descriptorLayout = setIndex == 1
-                ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
-            alloc.descriptorSetCount = 1;
-            alloc.pSetLayouts = &descriptorLayout;
-            const VkResult allocResult =
-                vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
-            if (allocResult != VK_SUCCESS)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
-                    setIndex,
-                    static_cast<unsigned long long>(frameSerial),
-                    cursor,
-                    cachedSets.size(),
-                    size,
-                    static_cast<int>(allocResult));
-                Switch_LogWrite(trace);
-                traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
-                return false;
-            }
-            traceUniformBindStage("descriptor_allocated", bytes, size, 1);
-            cachedSets.push_back(set);
-            traceUniformBindStage("descriptor_cached", bytes, size, 1);
-        }
-        ++m_uniformSetCursor[frameSlot][cacheIndex];
-
-        VkDescriptorBufferInfo descriptorBufferInfo{};
-        descriptorBufferInfo.buffer = bufferInfo.buffer;
-        descriptorBufferInfo.offset = 0;
-        descriptorBufferInfo.range = size;
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = set;
-        write.dstBinding = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        write.pBufferInfo = &descriptorBufferInfo;
-        g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
-        vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
-        traceUniformBindStage("descriptor_updated", bytes, size, 1);
-        shaderDescriptorSets.emplace(shaderSerial, set);
+        traceUniformBindStage("descriptor_allocated", bytes, size, 1);
+        cachedSets.push_back(set);
+        traceUniformBindStage("descriptor_cached", bytes, size, 1);
     }
+    ++m_uniformSetCursor[frameSlot][cacheIndex];
 
+    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.pBufferInfo = &bufferInfo;
+    vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
+    traceUniformBindStage("descriptor_updated", bytes, size, 1);
     uniformBindCache.frameSerial = frameSerial;
-    uniformBindCache.recordingSerial = recordingSerial;
     uniformBindCache.revision = uniformRevision;
     uniformBindCache.shaderSerial = shaderSerial;
     uniformBindCache.device = m_backend->Device();
     uniformBindCache.parse = parse;
     uniformBindCache.set = set;
-    uniformBindCache.dynamicOffset = dynamicOffset;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
-    bindUniformSetWithDynamicOffset(set, dynamicOffset);
+    BindDescriptorSetIfChanged(bindPoint, setIndex, set);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
 #ifdef __SWITCH__
     if (setIndex == 1u && g_switchModelTransformDraw.active &&
@@ -7877,44 +7835,12 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
-    const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
-    KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
-    if (Switch_IsVkGpuDrawTraceEnabled())
-    {
-        for (uint32_t slot=0; slot<16u; ++slot)
-        {
-            m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
-            m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
-            m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
-        }
-        m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
-            activeShader ? activeShader->serial : 0u;
-        m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
-    }
-    const MOJOSHADER_parseData *activeParse =
-        activeShader ? activeShader->parseData : nullptr;
-    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
-    if (activeParse && activeParse->samplers)
-    {
-        const int samplerCount = std::max(0, activeParse->sampler_count);
-        for (int i = 0; i < samplerCount; ++i)
-        {
-            const int samplerIndex = activeParse->samplers[i].index;
-            if (samplerIndex >= 0 &&
-                samplerIndex < static_cast<int>(activeSamplers.size()))
-                activeSamplers[static_cast<size_t>(samplerIndex)] =
-                    &activeParse->samplers[i];
-        }
-    }
-
     // Image reloads can replace GfxImage::texture.basemap while a previous
-    // D3D texture reference remains cached in m_textures. Rebind only slots
-    // consumed by this shader; inactive slots cannot affect its descriptors.
+    // D3D texture reference remains cached in m_textures. Rebind that slot to
+    // the owner's current resource before checking upload state or building
+    // descriptors; otherwise the stale object can appear permanently blank.
     for (uint32_t slot = 0; slot < 16; ++slot)
     {
-        if (!activeSamplers[slot])
-            continue;
-
         auto *boundTexture = static_cast<KisakVkTexture *>(textures[slot]);
         if (!boundTexture || !boundTexture->sourceImage)
             continue;
@@ -7953,6 +7879,36 @@ bool IDirect3DDevice9::BindSamplerSet(
                 static_cast<void *>(currentVkTexture),
                 static_cast<unsigned>(currentVkTexture->GetSubresourceLayout(0, 0)));
             Switch_LogWrite(trace);
+        }
+    }
+
+    const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
+    KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
+        for (uint32_t slot=0; slot<16u; ++slot)
+        {
+            m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
+            m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
+            m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
+        }
+        m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
+            activeShader ? activeShader->serial : 0u;
+        m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
+    }
+    const MOJOSHADER_parseData *activeParse =
+        activeShader ? activeShader->parseData : nullptr;
+    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
+    if (activeParse && activeParse->samplers)
+    {
+        const int samplerCount = std::max(0, activeParse->sampler_count);
+        for (int i = 0; i < samplerCount; ++i)
+        {
+            const int samplerIndex = activeParse->samplers[i].index;
+            if (samplerIndex >= 0 &&
+                samplerIndex < static_cast<int>(activeSamplers.size()))
+                activeSamplers[static_cast<size_t>(samplerIndex)] =
+                    &activeParse->samplers[i];
         }
     }
 
@@ -8059,8 +8015,6 @@ bool IDirect3DDevice9::BindSamplerSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
-        m_uniformShaderDescriptorFrameCache[frameSlot][0].clear();
-        m_uniformShaderDescriptorFrameCache[frameSlot][1].clear();
         m_samplerBindFastCache[frameSlot][0].valid = false;
         m_samplerBindFastCache[frameSlot][1].valid = false;
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
@@ -10609,8 +10563,6 @@ void IDirect3DDevice9::ResetCachedCommandState()
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
     m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
-    m_cachedBoundDynamicOffsets.fill(0);
-    m_cachedBoundDynamicOffsetValid.fill(false);
     m_cachedBoundVertexBuffers.fill(VK_NULL_HANDLE);
     m_cachedBoundVertexOffsets.fill(0);
     m_cachedBoundVertexStreamMask = 0;
@@ -10633,11 +10585,7 @@ void IDirect3DDevice9::BindDescriptorSetIfChanged(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
     if (setIndex < m_cachedBoundDescriptorSets.size())
-    {
         m_cachedBoundDescriptorSets[setIndex] = set;
-        m_cachedBoundDynamicOffsetValid[setIndex] = false;
-        m_cachedBoundDynamicOffsets[setIndex] = 0;
-    }
 }
 
 void IDirect3DDevice9::BindPipelineIfChanged(VkPipeline pipeline)
