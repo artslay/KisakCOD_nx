@@ -652,7 +652,6 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
         uint32_t dynamicOffset = 0;
     };
-    static constexpr size_t UniformDynamicRangeClassCount = 32;
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
@@ -713,7 +712,7 @@ private:
     std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_samplerDescriptorSets{};
     // Uniform descriptor sets are immutable and shared by both frame slots.
     // Dynamic offsets select each draw's data in the frame-fenced uniform ring.
-    std::array<std::array<VkDescriptorSet, UniformDynamicRangeClassCount>,2>
+    std::array<std::unordered_map<VkDeviceSize, VkDescriptorSet>,2>
         m_uniformDynamicDescriptorSets{};
     VkDevice m_uniformDynamicDescriptorDevice = VK_NULL_HANDLE;
     VkDescriptorPool m_uniformDynamicDescriptorPool = VK_NULL_HANDLE;
