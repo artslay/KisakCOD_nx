@@ -125,7 +125,11 @@ int __cdecl R_SetupMaterial(
             {
                 return 0;
             }
-            R_SetShadowableLight(context.source, drawSurf.fields.primaryLightIndex, info->viewInfo);
+            // R_SetShadowableLight returns immediately when this index is
+            // already active. Avoid the repeated cross-function call for
+            // consecutive lit draw-surfaces using the same primary light.
+            if (context.source->shadowableLightIndex != drawSurf.fields.primaryLightIndex)
+                R_SetShadowableLight(context.source, drawSurf.fields.primaryLightIndex, info->viewInfo);
         }
         else if (baseTechType == TECHNIQUE_DEBUG_BUMPMAP && (surfType == SF_STATICMODEL_CACHED || surfType == SF_STATICMODEL_PRETESS))
         {
