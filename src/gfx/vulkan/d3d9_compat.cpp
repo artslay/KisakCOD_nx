@@ -10670,12 +10670,37 @@ bool IDirect3DDevice9::BindDescriptorSets()
     if (g_switchDescriptorPoolBatchLockDepth == 0)
         descriptorPoolLock = std::unique_lock<std::mutex>(m_backend->DescriptorPoolMutex());
 
-    // Image reloads can replace GfxImage::texture.basemap while a previous
-    // D3D texture reference remains cached in m_textures. Rebind that slot to
-    // the owner's current resource before checking upload state or building
-    // descriptors; otherwise the stale object can appear permanently blank.
-    for (uint32_t slot = 0; slot < 16; ++slot)
+    // Only refresh resources sampled by the currently selected shaders.
+    // BindSamplerSet uses the same parsed sampler declarations; an inactive
+    // slot is refreshed before the first draw whose shader actually samples it.
+    uint32_t activeSamplerMask = 0u;
+    const auto includeShaderSamplers =
+        [&activeSamplerMask](const MOJOSHADER_parseData *parse)
     {
+        if (!parse || !parse->samplers)
+            return;
+
+        const int samplerCount = std::max(0, parse->sampler_count);
+        for (int i = 0; i < samplerCount; ++i)
+        {
+            const int samplerIndex = parse->samplers[i].index;
+            if (samplerIndex >= 0 && samplerIndex < 16)
+                activeSamplerMask |= 1u << static_cast<uint32_t>(samplerIndex);
+        }
+    };
+    includeShaderSamplers(m_vertexShader->parseData);
+    includeShaderSamplers(m_pixelShader->parseData);
+
+    // Image reloads can replace GfxImage::texture.basemap while a previous
+    // D3D texture reference remains cached in m_textures. Rebind every active
+    // slot to its owner's current resource before building shader descriptors.
+    uint32_t slot = 0u;
+    while (activeSamplerMask)
+    {
+        while ((activeSamplerMask & (1u << slot)) == 0u)
+            ++slot;
+        activeSamplerMask &= ~(1u << slot);
+
         auto *boundTexture = static_cast<KisakVkTexture *>(m_textures[slot]);
         if (!boundTexture || !boundTexture->sourceImage)
             continue;
@@ -10705,7 +10730,7 @@ bool IDirect3DDevice9::BindDescriptorSets()
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\n",
+                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\\n",
                 slot,
                 boundTexture->sourceImage->name
                     ? boundTexture->sourceImage->name : boundTexture->debugName,
@@ -10716,7 +10741,6 @@ bool IDirect3DDevice9::BindDescriptorSets()
             Switch_LogWrite(trace);
         }
     }
-
     g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
     if (!BindSamplerSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_textures))
