@@ -385,22 +385,10 @@ void __cdecl R_DrawStaticModelDrawSurfPlacement(
     GfxCmdBufSourceState *matrix; // [esp+5Ch] [ebp-38h]
     float origin[3]; // [esp+60h] [ebp-34h] BYREF
     float scale; // [esp+6Ch] [ebp-28h]
-    mat3x3 axis; // [esp+70h] [ebp-24h] BYREF
-
-    axis[0][0] = smodelDrawInst->placement.axis[0][0]; // LWSS: is it really necessary to copy this? prob not. remove later when working
-    axis[0][1] = smodelDrawInst->placement.axis[0][1];
-    axis[0][2] = smodelDrawInst->placement.axis[0][2];
-    axis[1][0] = smodelDrawInst->placement.axis[1][0];
-    axis[1][1] = smodelDrawInst->placement.axis[1][1];
-    axis[1][2] = smodelDrawInst->placement.axis[1][2];
-    axis[2][0] = smodelDrawInst->placement.axis[2][0];
-    axis[2][1] = smodelDrawInst->placement.axis[2][1];
-    axis[2][2] = smodelDrawInst->placement.axis[2][2];
-
     scale = smodelDrawInst->placement.scale;
     matrix = R_GetActiveWorldMatrix(source);
     Vec3Sub(smodelDrawInst->placement.origin, source->eyeOffset, origin);
-    MatrixSet44(*(mat4x4*)matrix, origin, axis, scale);
+    MatrixSet44(*(mat4x4*)matrix, origin, smodelDrawInst->placement.axis, scale);
 }
 
 void __cdecl R_SetupCachedStaticModelLighting(GfxCmdBufSourceState *source)
