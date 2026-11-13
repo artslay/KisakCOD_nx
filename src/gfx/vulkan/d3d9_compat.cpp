@@ -12310,7 +12310,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
 bool IDirect3DDevice9::SupportsMultiDrawIndirect() const
 {
-    return m_backend && m_backend->SupportsMultiDrawIndirect();
+    return m_backend && m_backend->SupportsMultiDrawIndirect() &&
+        !Switch_IsVkGpuDrawTraceEnabled();
 }
 
 HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
@@ -12364,7 +12365,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
         for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
         {
             if (element.Stream >= 16u)
-                return E_FAIL;
+                continue;
             if (element.Stream != 0u)
                 return E_FAIL;
 
