@@ -5053,6 +5053,15 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
     if (m_pendingBufferUpdates.empty())
         return true;
 
+    // Retain these arrays across frames; PrepareDraw can flush frequently.
+    const size_t scratchCapacity = m_pendingBufferUpdates.size() + 1u;
+    if (m_bufferUpdateBeforeBarriers.capacity() < scratchCapacity)
+        m_bufferUpdateBeforeBarriers.reserve(scratchCapacity);
+    if (m_bufferUpdateAfterBarriers.capacity() < m_pendingBufferUpdates.size())
+        m_bufferUpdateAfterBarriers.reserve(m_pendingBufferUpdates.size());
+    if (m_bufferUpdateCopies.capacity() < m_pendingBufferUpdates.size())
+        m_bufferUpdateCopies.reserve(m_pendingBufferUpdates.size());
+
     const auto requeueRemaining = [this](size_t first)
     {
         std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
@@ -5215,12 +5224,14 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             }
 
             const size_t runCount = runEnd - runBegin;
-            std::vector<VkBufferMemoryBarrier> beforeCopy;
-            std::vector<VkBufferMemoryBarrier> afterCopy;
-            std::vector<VkBufferCopy> copies;
-            beforeCopy.reserve(runCount + 1u);
-            afterCopy.reserve(runCount);
-            copies.reserve(runCount);
+            std::vector<VkBufferMemoryBarrier> &beforeCopy =
+                m_bufferUpdateBeforeBarriers;
+            std::vector<VkBufferMemoryBarrier> &afterCopy =
+                m_bufferUpdateAfterBarriers;
+            std::vector<VkBufferCopy> &copies = m_bufferUpdateCopies;
+            beforeCopy.clear();
+            afterCopy.clear();
+            copies.clear();
 
             VkBufferMemoryBarrier sourceWrite{};
             sourceWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;

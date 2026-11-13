@@ -468,6 +468,11 @@ private:
     std::vector<uint8_t> m_queuedBufferUpdateData;
     std::vector<QueuedBufferUpdate> m_pendingBufferUpdates;
     std::vector<uint8_t> m_pendingBufferUpdateData;
+    // Reused scratch storage for recording queued VkBuffer copies. Keeping
+    // capacity across frames avoids allocator traffic in the draw hot path.
+    std::vector<VkBufferMemoryBarrier> m_bufferUpdateBeforeBarriers;
+    std::vector<VkBufferMemoryBarrier> m_bufferUpdateAfterBarriers;
+    std::vector<VkBufferCopy> m_bufferUpdateCopies;
     std::atomic<bool> m_hasQueuedBufferUpdates{false};
 
     std::atomic<uint64_t> m_completedFrameSerial{0};
