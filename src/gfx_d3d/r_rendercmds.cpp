@@ -3,6 +3,7 @@
 
 #ifdef __SWITCH__
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
 extern thread_local const char *g_switchFrameStage;
@@ -73,6 +74,149 @@ std::atomic<int> s_switchGpuSlotForViewInfo[2] = {-1, -1};
 // advance its frame state before the frontend finishes rotating its CPU pools.
 uint32_t s_switchPendingFrontendFrameSlot = UINT32_MAX;
 VkDevice s_switchPendingFrontendDevice = VK_NULL_HANDLE;
+
+enum class SwitchFrontendWaitPhase : uint32_t
+{
+    BeforeRendererWake = 0,
+    AfterRendererWake = 1
+};
+
+struct SwitchFrontendFenceWaitStat
+{
+    uint64_t calls = 0;
+    uint64_t totalNs = 0;
+    uint64_t maxNs = 0;
+};
+
+// Pool bits: 0 = skinning/pre-tess, 1 = backend-data mesh, 2 = view-info mesh.
+// A shared fence is measured once and attributed to the exact set of pools it protects.
+SwitchFrontendFenceWaitStat
+    s_switchFrontendFenceWaitStats[2][VulkanBackend::FramesInFlight][8]{};
+uint32_t s_switchFrontendFenceWaitFrames = 0;
+
+void Switch_RecordFrontendFenceWait(
+    SwitchFrontendWaitPhase phase, uint32_t frameSlot, uint32_t poolMask, uint64_t elapsedNs)
+{
+    const uint32_t phaseIndex = static_cast<uint32_t>(phase);
+    if (phaseIndex >= 2u ||
+        frameSlot >= VulkanBackend::FramesInFlight ||
+        poolMask == 0u || poolMask >= 8u)
+        return;
+
+    SwitchFrontendFenceWaitStat &stat =
+        s_switchFrontendFenceWaitStats[phaseIndex][frameSlot][poolMask];
+    ++stat.calls;
+    stat.totalNs += elapsedNs;
+    if (stat.maxNs < elapsedNs)
+        stat.maxNs = elapsedNs;
+}
+
+bool Switch_WaitForFrontendFrameSlot(
+    VulkanBackend *backend,
+    uint32_t frameSlot,
+    SwitchFrontendWaitPhase phase,
+    uint32_t poolMask)
+{
+    const auto waitStart = std::chrono::steady_clock::now();
+    const bool waitSucceeded = backend->WaitForFrameSlot(frameSlot);
+    const auto elapsed = std::chrono::steady_clock::now() - waitStart;
+    const uint64_t elapsedNs = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
+    Switch_RecordFrontendFenceWait(phase, frameSlot, poolMask, elapsedNs);
+    return waitSucceeded;
+}
+
+void Switch_FormatFrontendPoolMask(uint32_t poolMask, char *text, size_t textSize)
+{
+    size_t used = 0;
+    text[0] = '\0';
+    const char *names[3] = {"smp", "backend", "view"};
+    for (uint32_t bit = 0; bit < 3; ++bit)
+    {
+        if (!(poolMask & (1u << bit)))
+            continue;
+        const int written = std::snprintf(
+            text + used, textSize - used, "%s%s", used ? "+" : "", names[bit]);
+        if (written < 0 || static_cast<size_t>(written) >= textSize - used)
+        {
+            text[textSize - 1u] = '\0';
+            return;
+        }
+        used += static_cast<size_t>(written);
+    }
+}
+
+void Switch_ReportFrontendFenceWaitWindow()
+{
+    char line[2048];
+    size_t used = 0;
+    auto append = [&](const char *format, auto... args)
+    {
+        if (used >= sizeof(line))
+            return;
+        const int written = std::snprintf(
+            line + used, sizeof(line) - used, format, args...);
+        if (written < 0)
+            return;
+        if (static_cast<size_t>(written) >= sizeof(line) - used)
+        {
+            used = sizeof(line) - 1u;
+            line[used] = '\0';
+            return;
+        }
+        used += static_cast<size_t>(written);
+    };
+
+    append("[KisakCOD][VK FRAME TIMING] frontend_fence_split frames=60");
+    for (uint32_t phase = 0; phase < 2; ++phase)
+    {
+        append(" %s{", phase == 0 ? "pre_wake" : "post_wake");
+        for (uint32_t slot = 0; slot < VulkanBackend::FramesInFlight; ++slot)
+        {
+            append("%ss%u{", slot ? "," : "", slot);
+            bool firstMask = true;
+            for (uint32_t poolMask = 1; poolMask < 8; ++poolMask)
+            {
+                const SwitchFrontendFenceWaitStat &stat =
+                    s_switchFrontendFenceWaitStats[phase][slot][poolMask];
+                if (!stat.calls)
+                    continue;
+
+                char poolNames[48];
+                Switch_FormatFrontendPoolMask(poolMask, poolNames, sizeof(poolNames));
+                const double averageMs =
+                    static_cast<double>(stat.totalNs) /
+                    static_cast<double>(stat.calls) / 1.0e6;
+                const double maximumMs = static_cast<double>(stat.maxNs) / 1.0e6;
+                append("%s%s=%llu/%.3f/%.3fms",
+                    firstMask ? "" : ",",
+                    poolNames,
+                    static_cast<unsigned long long>(stat.calls),
+                    averageMs,
+                    maximumMs);
+                firstMask = false;
+            }
+            append("}");
+        }
+        append("}");
+    }
+    append("\\n");
+    Switch_LogWrite(line);
+
+    for (uint32_t phase = 0; phase < 2; ++phase)
+        for (uint32_t slot = 0; slot < VulkanBackend::FramesInFlight; ++slot)
+            for (uint32_t poolMask = 0; poolMask < 8; ++poolMask)
+                s_switchFrontendFenceWaitStats[phase][slot][poolMask] = {};
+}
+
+void Switch_EndFrontendFenceWaitFrame()
+{
+    if (++s_switchFrontendFenceWaitFrames >= 60u)
+    {
+        Switch_ReportFrontendFenceWaitWindow();
+        s_switchFrontendFenceWaitFrames = 0;
+    }
+}
 
 void Switch_AssociateGpuPool(std::atomic<int> (&slotMap)[2],
     uint32_t poolIndex, uint32_t frameSlot)
@@ -288,27 +432,32 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
             s_switchGpuSlotForViewInfo[viewInfoPool].exchange(-1, std::memory_order_acq_rel);
 
     // Multiple frontend pools commonly belong to the same frame slot. One
-    // completed fence protects all of them, so avoid locking/waiting that
-    // identical fence once for each pool.
+    // completed fence protects all of them. Keep one wait, but record the full
+    // pool mask so the diagnostic does not multiply a shared wait across pools.
     for (uint32_t i = 0; i < 3; ++i)
     {
         const int previousSlot = frameSlotsToWait[i];
         if (previousSlot < 0)
             continue;
 
-        bool alreadyWaited = false;
-        for (uint32_t previous = 0; previous < i; ++previous)
+        uint32_t poolMask = 1u << i;
+        for (uint32_t next = i + 1u; next < 3; ++next)
         {
-            if (frameSlotsToWait[previous] == previousSlot)
+            if (frameSlotsToWait[next] == previousSlot)
             {
-                alreadyWaited = true;
-                break;
+                poolMask |= 1u << next;
+                frameSlotsToWait[next] = -1;
             }
         }
-        if (!alreadyWaited && backend &&
-            !backend->WaitForFrameSlot(static_cast<uint32_t>(previousSlot)))
+
+        if (backend &&
+            !Switch_WaitForFrontendFrameSlot(
+                backend,
+                static_cast<uint32_t>(previousSlot),
+                SwitchFrontendWaitPhase::BeforeRendererWake,
+                poolMask))
             Com_Error(ERR_FATAL,
-                "Vulkan frame fence wait failed before reusing Switch frontend resources"); 
+                "Vulkan frame fence wait failed before reusing Switch frontend resources");
     }
 }
 
@@ -332,17 +481,21 @@ void Switch_WaitForNextFrontEndResources()
         if (frameSlot < 0)
             continue;
 
-        bool alreadyWaited = false;
-        for (uint32_t previous = 0; previous < i; ++previous)
+        uint32_t poolMask = 1u << i;
+        for (uint32_t next = i + 1u; next < 3; ++next)
         {
-            if (frameSlots[previous] == frameSlot)
+            if (frameSlots[next] == frameSlot)
             {
-                alreadyWaited = true;
-                break;
+                poolMask |= 1u << next;
+                frameSlots[next] = -1;
             }
         }
-        if (!alreadyWaited &&
-            !backend->WaitForFrameSlot(static_cast<uint32_t>(frameSlot)))
+
+        if (!Switch_WaitForFrontendFrameSlot(
+                backend,
+                static_cast<uint32_t>(frameSlot),
+                SwitchFrontendWaitPhase::AfterRendererWake,
+                poolMask))
         {
             Com_Error(ERR_FATAL,
                 "Vulkan frame fence wait failed before reusing Switch frontend GPU resources");
@@ -939,6 +1092,7 @@ DebugGlobals *R_ToggleSmpFrame()
     // backend-data meshes, and view-info meshes. In the asynchronous path this
     // runs after the renderer was woken on the other Vulkan slot.
     Switch_WaitForNextFrontEndResources();
+    Switch_EndFrontendFenceWaitFrame();
 #endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
     iassert( rg.frontEndFrameCount > 0 );
