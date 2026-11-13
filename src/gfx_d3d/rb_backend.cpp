@@ -1135,7 +1135,11 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
 #ifdef __SWITCH__
         const auto switchPassSetupStart = Switch_RendererTimingStart();
 #endif
-        R_UpdateMaterialTime(listArgs->context.source, 0.0);
+        // R_UpdateMaterialTime immediately returns when the source is
+        // already at this value. Keep that exact condition here to avoid a
+        // function call for every subsequent pass of the same draw surface.
+        if (listArgs->context.source->materialTime != 0.0f)
+            R_UpdateMaterialTime(listArgs->context.source, 0.0f);
         R_SetupPass(listArgs->context, passIndex);
 #ifdef __SWITCH__
         Switch_RecordBackendTimingElapsed(
