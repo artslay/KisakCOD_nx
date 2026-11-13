@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
@@ -519,16 +520,32 @@ void __cdecl R_SetModelGroundLighting(uint32_t entryIndex, const uint8_t *ground
     *(uint32_t *)patch->groundLighting = *(uint32_t *)groundLighting;
 }
 
+static void R_SetModelLightingCoordsForSourceIfChanged(
+    uint16_t handle, GfxCmdBufSourceState *source)
+{
+    float coords[4];
+    float *current = source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS];
+    R_SetModelLightingCoords(handle, coords);
+
+    // Uniform revisions are used by the Vulkan backend to reuse an existing
+    // per-frame UBO descriptor. Do not invalidate that cache when consecutive
+    // objects resolve to the same model-lighting atlas coordinates.
+    if (std::memcmp(current, coords, sizeof(coords)) == 0)
+        return;
+
+    std::memcpy(current, coords, sizeof(coords));
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
+}
+
 void __cdecl R_SetModelLightingCoordsForSource(uint16_t handle, GfxCmdBufSourceState *source)
 {
-    R_SetModelLightingCoords(handle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
-    R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
+    R_SetModelLightingCoordsForSourceIfChanged(handle, source);
 }
 
 void __cdecl R_SetStaticModelLightingCoordsForSource(uint32_t smodelIndex, GfxCmdBufSourceState *source)
 {
-    R_SetModelLightingCoords(rgp.world->dpvs.smodelDrawInsts[smodelIndex].lightingHandle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
-    R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
+    R_SetModelLightingCoordsForSourceIfChanged(
+        rgp.world->dpvs.smodelDrawInsts[smodelIndex].lightingHandle, source);
 }
 
 
