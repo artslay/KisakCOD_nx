@@ -334,14 +334,41 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
     else
     {
         iassert( !g_cmdExecFailed[type] );
-        if (InterlockedExchangeAdd((LONG*)&workerCmds->outSize, -9) < 9)
+        uint32_t batchCount = 10;
+#ifdef __SWITCH__
+        // DPVS and skinning commands have highly variable per-item cost.
+        // Smaller claims let the other worker steal the next items sooner,
+        // reducing tail imbalance while keeping cheap FX commands batched.
+        switch (type)
         {
-            InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 9);
+        case WRKCMD_DPVS_CELL_STATIC:
+        case WRKCMD_DPVS_CELL_SCENE_ENT:
+        case WRKCMD_DPVS_CELL_DYN_MODEL:
+        case WRKCMD_DPVS_CELL_DYN_BRUSH:
+        case WRKCMD_DPVS_ENTITY:
+        case WRKCMD_BOUNDS_ENT_DELAYED:
+        case WRKCMD_SKIN_ENT_DELAYED:
+        case WRKCMD_SKIN_CACHED_STATICMODEL:
+        case WRKCMD_SKIN_XMODEL:
+            batchCount = 2;
+            break;
+        default:
+            break;
+        }
+#endif
+        const LONG additionalBatchCount = static_cast<LONG>(batchCount - 1u);
+        if (additionalBatchCount > 0 &&
+            InterlockedExchangeAdd(
+                (LONG*)&workerCmds->outSize, -additionalBatchCount) <
+                additionalBatchCount)
+        {
+            InterlockedExchangeAdd(
+                (LONG*)&workerCmds->outSize, additionalBatchCount);
             count = 1;
         }
         else
         {
-            count = 10;
+            count = batchCount;
         }
         do
         {
