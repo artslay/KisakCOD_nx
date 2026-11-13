@@ -152,8 +152,14 @@ int __cdecl R_SetupMaterial(
         // The regular material resolve above already validated and loaded this
         // draw-surface's source Material. Reuse it for the depth prepass rather
         // than re-reading and re-validating the same sorted-material entry.
-        if (baseTechType > TECHNIQUE_BUILD_FLOAT_Z &&
-            pixelCostMode <= GFX_PIXEL_COST_MODE_MEASURE_MSEC)
+        // The non-lit prepass path above has already resolved the source
+        // material into context.state. Reuse that validated pointer as well;
+        // resolving the same sorted-material index again only repeats the
+        // bounds/pointer checks and table load.
+        const bool canReuseResolvedMaterial =
+            baseTechType <= TECHNIQUE_BUILD_FLOAT_Z ||
+            pixelCostMode <= GFX_PIXEL_COST_MODE_MEASURE_MSEC;
+        if (canReuseResolvedMaterial)
         {
             if (!R_SetPrepassMaterialFromResolved(
                     *prepassContext, drawSurf, context.state->material,
