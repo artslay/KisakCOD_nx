@@ -673,7 +673,11 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
             context.state->prim.device &&
             context.state->prim.device->SupportsMultiDrawIndirect() &&
             context.state->prim.vertDeclType < ARRAY_COUNT(g_layerDataStride) &&
-            g_layerDataStride[context.state->prim.vertDeclType] == 0)
+            g_layerDataStride[context.state->prim.vertDeclType] == 0 &&
+            !r_drawPrimFloor->current.integer &&
+            !r_drawPrimCap->current.integer &&
+            !r_skipDrawTris->current.enabled &&
+            !(r_logFile && r_logFile->current.integer))
         {
             static thread_local std::vector<VkDrawIndexedIndirectCommand>
                 switchIndirectCommands;
