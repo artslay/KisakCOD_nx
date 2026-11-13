@@ -355,6 +355,16 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
         default:
             break;
         }
+        if (batchCount == 2)
+        {
+            // Keep small tails available to other consumers; larger queues
+            // retain two-item claims to reduce atomic queue traffic.
+            const LONG remainingReadyCommands =
+                InterlockedCompareExchange(
+                    (LONG*)&workerCmds->outSize, 0, 0);
+            if (remainingReadyCommands <= 2)
+                batchCount = 1;
+        }
 #endif
         const LONG additionalBatchCount = static_cast<LONG>(batchCount - 1u);
         if (additionalBatchCount > 0 &&
