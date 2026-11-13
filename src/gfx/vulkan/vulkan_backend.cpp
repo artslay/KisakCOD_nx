@@ -4350,10 +4350,16 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
         const VulkanImageUpload2D &upload = uploads[i];
         if (!upload.image || !upload.data || !upload.bytes ||
             !upload.width || !upload.height || !upload.depth ||
-            stagingSize > std::numeric_limits<VkDeviceSize>::max() - 3u)
+            upload.bufferOffsetAlignment == 0)
             return false;
 
-        const VkDeviceSize offset = (stagingSize + 3u) & ~VkDeviceSize(3u);
+        VkDeviceSize alignment = std::max<VkDeviceSize>(
+            4u, upload.bufferOffsetAlignment);
+        if ((alignment & (alignment - 1u)) != 0 ||
+            stagingSize > std::numeric_limits<VkDeviceSize>::max() - (alignment - 1u))
+            return false;
+        const VkDeviceSize offset =
+            (stagingSize + alignment - 1u) & ~(alignment - 1u);
         if (upload.bytes > std::numeric_limits<VkDeviceSize>::max() - offset)
             return false;
         offsets[i] = offset;
