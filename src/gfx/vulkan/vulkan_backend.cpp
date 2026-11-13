@@ -1450,6 +1450,7 @@ bool VulkanBackend::CreateDevice()
     // texture images can be sampled by shaders.
     const bool textureCompressionBC =
         features2.features.textureCompressionBC == VK_TRUE;
+    m_multiDrawIndirect = features2.features.multiDrawIndirect == VK_TRUE;
     bool depthBiasControlEnabled = false;
     bool depthBiasForceUnormSupported = false;
     bool depthBiasFloatSupported = false;
@@ -1519,6 +1520,7 @@ bool VulkanBackend::CreateDevice()
     // has legacy buffer ranges that must not be allowed to fault the GPU.
     features.robustBufferAccess = robustBufferAccess ? VK_TRUE : VK_FALSE;
     features.textureCompressionBC = textureCompressionBC ? VK_TRUE : VK_FALSE;
+    features.multiDrawIndirect = m_multiDrawIndirect ? VK_TRUE : VK_FALSE;
     m_samplerAnisotropy = features2.features.samplerAnisotropy == VK_TRUE;
     features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceProperties properties{};
@@ -1528,13 +1530,17 @@ bool VulkanBackend::CreateDevice()
 #endif
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
+    m_maxDrawIndirectCount = m_multiDrawIndirect
+        ? std::max(1u, properties.limits.maxDrawIndirectCount) : 1u;
     char featureMsg[384];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u texture_compression_bc=%u depth_bias_header=%u depth_bias_ext=%u depth_bias_control=%u depth_bias_enabled=%u force_unorm=%u float=%u exact=%u\n",
+        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u texture_compression_bc=%u multi_draw_indirect=%u max_draw_indirect_count=%u depth_bias_header=%u depth_bias_ext=%u depth_bias_control=%u depth_bias_enabled=%u force_unorm=%u float=%u exact=%u\n",
         m_fillModeNonSolid ? 1u : 0u,
         m_shaderDemoteToHelperInvocation ? 1u : 0u,
         robustBufferAccess ? 1u : 0u,
         textureCompressionBC ? 1u : 0u,
+        m_multiDrawIndirect ? 1u : 0u,
+        static_cast<unsigned>(m_maxDrawIndirectCount),
         depthBiasExtensionCompiled ? 1u : 0u,
         depthBiasControlExtensionAvailable ? 1u : 0u,
         depthBiasControlEnabled ? 1u : 0u,
@@ -2031,7 +2037,8 @@ bool VulkanBackend::CreateUniformRing()
     return CreateBuffer(
         m_uniformCapacity * FramesInFlight,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+            VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &m_uniformRing, &m_uniformRingMemory,
         reinterpret_cast<void **>(&m_uniformMapped));
