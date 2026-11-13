@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <gfx/vulkan/vulkan_backend.h>
+#include <platform/switch/switch_perf_diag.h>
 extern void Switch_LogWrite(const char *msg);
 extern volatile uint32_t g_switchLitSamplerTraceActive;
 #ifdef CINEMA
@@ -863,15 +864,21 @@ void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrim
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("device->DrawIndexedPrimitive( D3DPT_TRIANGLELIST, 0, 0, args->vertexCount, args->baseIndex, triCount )\n");
 #ifdef __SWITCH__
-            const auto switchDrawIndexedStart = std::chrono::steady_clock::now();
+            const bool switchPerfDiag = Switch_PerfDiagEnabled();
+            const auto switchDrawIndexedStart = switchPerfDiag
+                ? std::chrono::steady_clock::now()
+                : std::chrono::steady_clock::time_point{};
 #endif
             hr = device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, args->vertexCount, args->baseIndex, triCount);
 #ifdef __SWITCH__
-            const auto switchDrawIndexedElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - switchDrawIndexedStart).count();
-            Switch_RecordBackendTiming(
-                SwitchBackendTimingStage::DrawIndexedSubmit,
-                static_cast<uint64_t>(switchDrawIndexedElapsed));
+            if (switchPerfDiag)
+            {
+                const auto switchDrawIndexedElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - switchDrawIndexedStart).count();
+                Switch_RecordBackendTiming(
+                    SwitchBackendTimingStage::DrawIndexedSubmit,
+                    static_cast<uint64_t>(switchDrawIndexedElapsed));
+            }
 #endif
             if (hr < 0)
             {
