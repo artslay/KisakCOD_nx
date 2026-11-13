@@ -165,6 +165,14 @@ uint16_t *__cdecl R_AllocPreTessIndices(int count)
 void __cdecl R_EndPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices != NULL );
+#ifdef __SWITCH__
+    // Pre-tess indices are a linear per-frame allocation. Publish only the
+    // prefix reserved by R_AllocPreTessIndices, not the whole 2 MiB buffer.
+    gfxBuf.preTessIndexBuffer->buffer->MarkWrittenRange(
+        0u,
+        static_cast<uint32_t>(
+            gfxBuf.preTessIndexBuffer->used * sizeof(uint16_t)));
+#endif
     R_UnlockIndexBuffer(gfxBuf.preTessIndexBuffer->buffer);
     gfxBuf.preTessIndexBuffer->indices = 0;
 }
@@ -172,6 +180,11 @@ void __cdecl R_EndPreTess()
 void __cdecl R_BeginPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices == NULL );
+#ifdef __SWITCH__
+    // The buffer is discarded as a whole, but only the allocated index prefix
+    // is consumed by this frame. Keep that exact span for the upload on unlock.
+    gfxBuf.preTessIndexBuffer->buffer->BeginMeshWriteTracking();
+#endif
     gfxBuf.preTessIndexBuffer->indices = (uint16_t *)R_LockIndexBuffer(
         gfxBuf.preTessIndexBuffer->buffer,
         0,
