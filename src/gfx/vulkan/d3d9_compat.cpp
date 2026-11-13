@@ -393,19 +393,24 @@ static const std::string &Switch_RenderObjectAuditFilter()
 
 bool Switch_IsRenderObjectAuditEnabled()
 {
-    const std::string &filter = Switch_RenderObjectAuditFilter();
-    return filter != "off" && filter != "0" && filter != "none";
+    // The environment filter is immutable after renderer startup. Cache the
+    // enabled bit so every draw does not repeat string comparisons.
+    static const bool enabled = []()
+    {
+        const std::string &filter = Switch_RenderObjectAuditFilter();
+        return filter != "off" && filter != "0" && filter != "none";
+    }();
+    return enabled;
 }
 
 static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
 {
-    const std::string &filter = Switch_RenderObjectAuditFilter();
-    // Keep the disabled default on the shortest path: this function is
-    // queried from material setup and GPU draw handling, so even a diagnostic
-    // one-time atomic exchange here would otherwise run for every draw.
+    // This is queried from material setup and GPU draw handling. Avoid even
+    // retrieving the filter string on the normal disabled path.
     if (!Switch_IsRenderObjectAuditEnabled())
         return false;
 
+    const std::string &filter = Switch_RenderObjectAuditFilter();
     static std::atomic<bool> filterLogged{false};
     if (!filterLogged.exchange(true, std::memory_order_relaxed))
     {
