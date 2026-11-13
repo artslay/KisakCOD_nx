@@ -7267,7 +7267,11 @@ HRESULT IDirect3DDevice9::SetSamplerState(uint32_t stage, uint32_t state, uint32
     if (stage >= 16 || state >= 16)
         return E_FAIL;
     uint32_t &current = m_samplerState[stage][state];
-    current = value;
+    if (current != value)
+    {
+        current = value;
+        ++m_samplerStateRevision[stage];
+    }
     return S_OK;
 }
 
@@ -8076,12 +8080,9 @@ bool IDirect3DDevice9::BindSamplerSet(
             continue;
 
         fastCacheKey.textures[slot] = textures[slot];
-        // Descriptor identity depends only on the sampler parameters used by
-        // this active shader slot, not on unrelated D3D sampler stages.
-        std::memcpy(
-            fastCacheKey.samplerStates[slot].data(),
-            m_samplerState[slot],
-            sizeof(m_samplerState[slot]));
+        // Only this active slot's revision affects its descriptor sampler.
+        fastCacheKey.samplerStateRevisions[slot] =
+            m_samplerStateRevision[slot];
         auto *texture = static_cast<KisakVkTexture *>(textures[slot]);
         if (!texture)
             continue;
@@ -8121,7 +8122,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         return cached.valid &&
             cached.frameSerial == key.frameSerial &&
             cached.shaderSerial == key.shaderSerial &&
-            cached.samplerStates == key.samplerStates &&
+            cached.samplerStateRevisions == key.samplerStateRevisions &&
             cached.device == key.device &&
             cached.descriptorPool == key.descriptorPool &&
             cached.defaultDummyImageView == key.defaultDummyImageView &&
