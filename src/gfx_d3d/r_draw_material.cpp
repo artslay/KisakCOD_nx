@@ -77,7 +77,7 @@ static bool SwitchResolveDrawSurfMaterial(
 static int R_SetPrepassMaterialFromResolved(
     GfxCmdBufContext context,
     GfxDrawSurf drawSurf,
-    Material *material,
+    const Material *material,
     MaterialTechniqueType techType)
 {
     const MaterialTechnique *technique;
