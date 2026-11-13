@@ -531,6 +531,11 @@ private:
     std::vector<QueuedImageUpload> m_pendingImageUploads;
     std::vector<uint8_t> m_pendingImageUploadData;
     std::vector<VulkanImageUpload2D> m_imageUploadBatch;
+    std::mutex m_imageUploadScratchMutex;
+    std::vector<VkDeviceSize> m_imageUploadOffsets;
+    std::vector<VkImageMemoryBarrier> m_imageUploadToTransfer;
+    std::vector<VkImageMemoryBarrier> m_imageUploadToFinal;
+    std::vector<VkBufferImageCopy> m_imageUploadCopyRegions;
     std::atomic<bool> m_hasQueuedImageUploads{false};
 
     // Worker threads only append owned CPU copies. The backend thread drains

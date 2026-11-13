@@ -4719,9 +4719,18 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
     if (!uploads || count == 0 || !m_device || !m_graphicsQueue || m_deviceLost)
         return false;
 
-    std::vector<VkDeviceSize> offsets(count);
-    std::vector<VkImageMemoryBarrier> toTransfer(count);
-    std::vector<VkImageMemoryBarrier> toFinal(count);
+    // UploadImages2D is used by the render thread and by synchronous
+    // image-loading fallbacks. Keep its scratch arrays backend-owned and
+    // serialize access so batches do not allocate four temporary vectors.
+    std::lock_guard<std::mutex> scratchLock(m_imageUploadScratchMutex);
+    std::vector<VkDeviceSize> &offsets = m_imageUploadOffsets;
+    std::vector<VkImageMemoryBarrier> &toTransfer = m_imageUploadToTransfer;
+    std::vector<VkImageMemoryBarrier> &toFinal = m_imageUploadToFinal;
+    std::vector<VkBufferImageCopy> &copyRegions = m_imageUploadCopyRegions;
+    offsets.resize(count);
+    toTransfer.resize(count);
+    toFinal.resize(count);
+    copyRegions.resize(count);
     VkDeviceSize stagingSize = 0;
     VkPipelineStageFlags sourceStages = 0;
     VkPipelineStageFlags finalStages = 0;
@@ -4810,6 +4819,18 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
         after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         after.image = upload.image;
         after.subresourceRange = before.subresourceRange;
+
+        // Build the VkBufferImageCopy array once. Consecutive regions for the
+        // same VkImage can be emitted with one vkCmdCopyBufferToImage call.
+        VkBufferImageCopy &copy = copyRegions[i];
+        copy = VkBufferImageCopy{};
+        copy.imageSubresource.aspectMask = upload.aspect;
+        copy.imageSubresource.mipLevel = upload.mipLevel;
+        copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
+        copy.imageSubresource.layerCount = 1;
+        copy.imageOffset = upload.imageOffset;
+        copy.imageExtent = {upload.width, upload.height, upload.depth};
+
         if (upload.finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             after.dstAccessMask =
@@ -4848,23 +4869,27 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             count, toTransfer.data());
 
         for (uint32_t i = 0; i < count; ++i)
+            copyRegions[i].bufferOffset = sourceOffset + offsets[i];
+
+        uint32_t copyBegin = 0;
+        while (copyBegin < count)
         {
-            const VulkanImageUpload2D &upload = uploads[i];
-            VkBufferImageCopy copy{};
-            copy.bufferOffset = sourceOffset + offsets[i];
-            copy.imageSubresource.aspectMask = upload.aspect;
-            copy.imageSubresource.mipLevel = upload.mipLevel;
-            copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
-            copy.imageSubresource.layerCount = 1;
-            copy.imageOffset = upload.imageOffset;
-            copy.imageExtent = {upload.width, upload.height, upload.depth};
+            const VkImage destination = uploads[copyBegin].image;
+            uint32_t copyEnd = copyBegin + 1;
+            while (copyEnd < count &&
+                uploads[copyEnd].image == destination)
+                ++copyEnd;
+
+            // Each region retains its own mip/layer/offset. Grouping is limited
+            // to adjacent entries for the same image, preserving upload order.
             vkCmdCopyBufferToImage(
                 command,
                 sourceBuffer,
-                upload.image,
+                destination,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copy);
+                copyEnd - copyBegin,
+                copyRegions.data() + copyBegin);
+            copyBegin = copyEnd;
         }
 
         vkCmdPipelineBarrier(
