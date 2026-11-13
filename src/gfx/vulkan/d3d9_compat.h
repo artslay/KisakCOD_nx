@@ -622,6 +622,12 @@ private:
         std::array<uint32_t, 16> arrayLayers{};
         std::array<uint32_t, 16> sourceFormats{};
     };
+    struct ActiveSamplerDeclarationCacheEntry
+    {
+        const MOJOSHADER_parseData *parse = nullptr;
+        uint64_t shaderSerial = 0;
+        std::array<const MOJOSHADER_sampler *, 16> samplers{};
+    };
     struct UniformBindCacheEntry
     {
         uint64_t frameSerial = 0;
@@ -697,6 +703,9 @@ private:
         m_samplerDescriptorFrameCache{};
     std::array<std::array<SamplerBindFastCacheEntry,2>,2>
         m_samplerBindFastCache{};
+    // MojoShader sampler declarations are immutable for a shader's lifetime.
+    // Cache their slot lookup so each draw does not rebuild the same 16-slot map.
+    std::array<ActiveSamplerDeclarationCacheEntry,2> m_activeSamplerDeclarations{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};

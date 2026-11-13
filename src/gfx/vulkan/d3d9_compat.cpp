@@ -7859,19 +7859,29 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
     const MOJOSHADER_parseData *activeParse =
         activeShader ? activeShader->parseData : nullptr;
-    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
-    if (activeParse && activeParse->samplers)
+    const uint64_t activeShaderSerial = activeShader ? activeShader->serial : 0u;
+    ActiveSamplerDeclarationCacheEntry &samplerDeclarations =
+        m_activeSamplerDeclarations[traceCacheIndex];
+    if (samplerDeclarations.parse != activeParse ||
+        samplerDeclarations.shaderSerial != activeShaderSerial)
     {
-        const int samplerCount = std::max(0, activeParse->sampler_count);
-        for (int i = 0; i < samplerCount; ++i)
+        samplerDeclarations.samplers.fill(nullptr);
+        if (activeParse && activeParse->samplers)
         {
-            const int samplerIndex = activeParse->samplers[i].index;
-            if (samplerIndex >= 0 &&
-                samplerIndex < static_cast<int>(activeSamplers.size()))
-                activeSamplers[static_cast<size_t>(samplerIndex)] =
-                    &activeParse->samplers[i];
+            const int samplerCount = std::max(0, activeParse->sampler_count);
+            for (int i = 0; i < samplerCount; ++i)
+            {
+                const int samplerIndex = activeParse->samplers[i].index;
+                if (samplerIndex >= 0 &&
+                    samplerIndex < static_cast<int>(samplerDeclarations.samplers.size()))
+                    samplerDeclarations.samplers[static_cast<size_t>(samplerIndex)] =
+                        &activeParse->samplers[i];
+            }
         }
+        samplerDeclarations.parse = activeParse;
+        samplerDeclarations.shaderSerial = activeShaderSerial;
     }
+    const auto &activeSamplers = samplerDeclarations.samplers;
 
     auto samplerTypeMatchesTexture = [](
         const KisakVkTexture *texture,
