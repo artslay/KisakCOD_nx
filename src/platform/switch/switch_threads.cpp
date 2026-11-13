@@ -71,7 +71,12 @@ static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
 static thread_local const char *g_switchThreadStage = "thread/bootstrap";
 static std::atomic<WinThreadLock> s_threadLock{THREAD_LOCK_NONE};
 
-extern "C" bool Switch_PerfDiagEnabled(){static const bool enabled=[](){const char*v=std::getenv("KISAK_SWITCH_PERF_DIAG");return v&&v[0]=='1'&&v[1]==0;}();return enabled;}
+extern "C" bool Switch_PerfDiagEnabled()
+{
+    // This is a diagnostic build/run mode for the Switch port. Enable it
+    // automatically so the user does not need shell environment access.
+    return true;
+}
 extern "C" void Switch_RecordMainFrameStage(uint32_t stage,uint64_t ns){if(Switch_PerfDiagEnabled()&&stage<SWITCH_MAIN_FRAME_STAGE_COUNT)g_switchMainFrameStages[stage].Add(ns);}
 extern "C" void Switch_LogThreadDiagSummary(){
  if(!Switch_PerfDiagEnabled())return;
