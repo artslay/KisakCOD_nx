@@ -722,6 +722,30 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
     {
         reflectionProbeIndex = 255;
         lightmapIndex = 31;
+#ifdef __SWITCH__
+        // The non-pre-tess BSP lit path already batches adjacent surfaces when
+        // their vertex stream, lightmap and reflection probe are unchanged.
+        // Apply the same rules here: pre-tess indices for a list are contiguous,
+        // so compatible neighboring surfaces can be submitted as one draw.
+        const srfTriangles_t *batchTris = nullptr;
+        const GfxSurface *batchBspSurf = nullptr;
+        uint32_t batchBspSurfIndex = UINT32_MAX;
+        uint32_t batchBaseIndex = baseIndex;
+        uint32_t batchTriCount = 0;
+        auto flushBatch = [&]()
+        {
+            if (!batchTris)
+                return;
+            R_SwitchDrawPreTessTrisAudited(
+                &context.state->prim, batchTris, batchBaseIndex, batchTriCount,
+                batchBspSurf, batchBspSurfIndex,
+                context.state->technique, context.state->pass);
+            batchTris = nullptr;
+            batchBspSurf = nullptr;
+            batchBspSurfIndex = UINT32_MAX;
+            batchTriCount = 0;
+        };
+#endif
         for (index = 0; index < count; ++index)
         {
             surfIndex = list[index].baseSurfIndex;
@@ -730,16 +754,25 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     ".\\r_draw_bsp.cpp",
                     623,
                     0,
-                    "surfIndex doesn't index rgp.world->surfaceCount\n\t%i not in [0, %i)",
+                    "surfIndex doesn't index rgp.world->surfaceCount\\n\\t%i not in [0, %i)",
                     surfIndex,
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = &bspSurf->tris;
 #ifdef __SWITCH__
-            // This point is reached only after a pre-tess BSP surface has made it
-            // to the draw loop. The audited draw below captures its actual bindings.
-#endif
-            if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
+            const bool sameVertexStream = batchTris &&
+                batchTris->firstVertex == tris->firstVertex &&
+                batchTris->vertexCount == tris->vertexCount &&
+                batchTris->vertexLayerData == tris->vertexLayerData;
+            const bool sameLighting = 
+                reflectionProbeIndex == bspSurf->reflectionProbeIndex &&
+                lightmapIndex == bspSurf->lightmapIndex;
+
+            // Flush before changing any state used by the pending draw.
+            if (batchTris && (!sameVertexStream || !sameLighting))
+                flushBatch();
+
+            if (!sameLighting)
             {
                 reflectionProbeIndex = bspSurf->reflectionProbeIndex;
                 lightmapIndex = bspSurf->lightmapIndex;
@@ -749,15 +782,35 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 R_SetupPassPerPrimArgs(context);
             }
 
-#ifdef __SWITCH__
-            R_SwitchQueueBspAuditSurface(bspSurf,surfIndex,list[index].totalTriCount,context.state->technique,context.state->pass,context.state->passIndex);
-            R_SwitchDrawPreTessTrisAudited(
-                &context.state->prim, tris, baseIndex, list[index].totalTriCount,
-                bspSurf, surfIndex, context.state->technique, context.state->pass);
+            if (!batchTris)
+            {
+                batchTris = tris;
+                batchBspSurf = bspSurf;
+                batchBspSurfIndex = surfIndex;
+                batchBaseIndex = baseIndex;
+            }
+
+            R_SwitchQueueBspAuditSurface(
+                bspSurf, surfIndex, list[index].totalTriCount,
+                context.state->technique, context.state->pass,
+                context.state->passIndex);
+            batchTriCount += list[index].totalTriCount;
 #else
+            if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
+            {
+                reflectionProbeIndex = bspSurf->reflectionProbeIndex;
+                lightmapIndex = bspSurf->lightmapIndex;
+                R_SetReflectionProbe(context, reflectionProbeIndex);
+                R_SetLightmap(context, lightmapIndex);
+                R_SetupPassPerObjectArgs(context);
+                R_SetupPassPerPrimArgs(context);
+            }
             R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);
 #endif
             baseIndex += 3 * list[index].totalTriCount;
         }
+#ifdef __SWITCH__
+        flushBatch();
+#endif
     }
 }
