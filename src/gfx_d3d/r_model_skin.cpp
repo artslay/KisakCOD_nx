@@ -113,6 +113,60 @@ static void R_LogModelTransformCpuSkin(
 //uint32_t const *const g_shortBoneWeightPerm__uint4 820f4950     gfx_d3d : r_model_skin.obj
 //struct __vector4 const g_shortBoneWeightPerm 85b981d0     gfx_d3d : r_model_skin.obj
 
+#ifdef __SWITCH__
+static void Switch_ConvertQuatToSkelMat(
+    const DObjAnimMat *mat,
+    DObjSkelMat *skelMat)
+{
+    iassert((!IS_NAN((mat->quat)[0]) && !IS_NAN((mat->quat)[1]) &&
+             !IS_NAN((mat->quat)[2]) && !IS_NAN((mat->quat)[3])));
+    iassert(!IS_NAN(mat->transWeight));
+
+    // Compute all products for one quaternion component in four NEON lanes.
+    // The remaining additions/subtractions preserve ConvertQuatToSkelMat's
+    // original float operation order and packing.
+    const float32x4_t quat = vld1q_f32(mat->quat);
+    const float32x4_t scaledQuat =
+        vmulq_n_f32(quat, mat->transWeight);
+    const float32x4_t xProducts =
+        vmulq_n_f32(quat, vgetq_lane_f32(scaledQuat, 0));
+    const float32x4_t yProducts =
+        vmulq_n_f32(quat, vgetq_lane_f32(scaledQuat, 1));
+    const float32x4_t zProducts =
+        vmulq_n_f32(quat, vgetq_lane_f32(scaledQuat, 2));
+
+    const float xx = vgetq_lane_f32(xProducts, 0);
+    const float xy = vgetq_lane_f32(xProducts, 1);
+    const float xz = vgetq_lane_f32(xProducts, 2);
+    const float xw = vgetq_lane_f32(xProducts, 3);
+    const float yy = vgetq_lane_f32(yProducts, 1);
+    const float yz = vgetq_lane_f32(yProducts, 2);
+    const float yw = vgetq_lane_f32(yProducts, 3);
+    const float zz = vgetq_lane_f32(zProducts, 2);
+    const float zw = vgetq_lane_f32(zProducts, 3);
+
+    skelMat->axis[0][0] = 1.0f - (yy + zz);
+    skelMat->axis[0][1] = xy + zw;
+    skelMat->axis[0][2] = xz - yw;
+    skelMat->axis[0][3] = 0.0f;
+
+    skelMat->axis[1][0] = xy - zw;
+    skelMat->axis[1][1] = 1.0f - (xx + zz);
+    skelMat->axis[1][2] = yz + xw;
+    skelMat->axis[1][3] = 0.0f;
+
+    skelMat->axis[2][0] = xz + yw;
+    skelMat->axis[2][1] = yz - xw;
+    skelMat->axis[2][2] = 1.0f - (xx + yy);
+    skelMat->axis[2][3] = 0.0f;
+
+    skelMat->origin[0] = mat->trans[0];
+    skelMat->origin[1] = mat->trans[1];
+    skelMat->origin[2] = mat->trans[2];
+    skelMat->origin[3] = 1.0f;
+}
+#endif
+
 static void __cdecl R_MultiplySkelMat(
     const DObjSkelMat *mat0,
     const DObjSkelMat *mat1,
@@ -261,7 +315,11 @@ void R_SkinXModelCmd(_WORD *data)
                 DObjSkelMat mat0, mat1;
 
                 ConvertQuatToInverseSkelMat(&baseMats[localBoneIndex], &mat0);
+#ifdef __SWITCH__
+                Switch_ConvertQuatToSkelMat(&skinCmd->mat[j], &mat1);
+#else
                 ConvertQuatToSkelMat(&skinCmd->mat[j], &mat1);
+#endif
                 R_MultiplySkelMat(&mat0, &mat1, &boneSkelMats[j]);
 
                 boneSkelMats[j].axis[0][3] = 0.0f;
