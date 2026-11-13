@@ -44,6 +44,15 @@ extern void Switch_LogWrite(const char *msg);
 extern int __cdecl Dvar_GetInt(const char *dvarName);
 extern thread_local const char *g_switchFrameStage;
 
+extern void Switch_BeginDescriptorPoolBatch();
+extern void Switch_EndDescriptorPoolBatch();
+
+struct SwitchDescriptorPoolBatchScope
+{
+    SwitchDescriptorPoolBatchScope() { Switch_BeginDescriptorPoolBatch(); }
+    ~SwitchDescriptorPoolBatchScope() { Switch_EndDescriptorPoolBatch(); }
+};
+
 extern void Switch_SetRenderAuditContext(
     const Material *material, const char *techniqueName,
     const char *vertexShaderName, const char *pixelShaderName,
@@ -885,6 +894,9 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
     uint32_t drawSurfCount; // [esp+5Ch] [ebp-4h]
 
     PROF_SCOPED("R_DrawSurfs");
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatchScope;
+#endif
 
     iassert(context.source->cameraView == info->cameraView);
     context.state->origMaterial = 0;

@@ -179,6 +179,14 @@ struct SwitchRenderAuditContext
 };
 static thread_local SwitchRenderAuditContext g_switchRenderAuditContext{};
 
+// R_DrawSurfs submits many indexed draws sequentially on the renderer thread.
+// Hold the descriptor-pool lifetime lock once for that batch instead of
+// acquiring/releasing it around every individual draw. Nested batches are
+// supported; draws outside a batch keep the original per-call lock.
+static thread_local uint32_t g_switchDescriptorPoolBatchLockDepth = 0;
+static thread_local std::unique_lock<std::mutex> g_switchDescriptorPoolBatchLock;
+
+
 struct SwitchModelTransformSurfaceInfo
 {
     char modelName[96]{};
@@ -10541,6 +10549,34 @@ void IDirect3DDevice9::BindDescriptorSetIfChanged(
         m_cachedBoundDescriptorSets[setIndex] = set;
 }
 
+void Switch_BeginDescriptorPoolBatch()
+{
+    if (g_switchDescriptorPoolBatchLockDepth != 0)
+    {
+        ++g_switchDescriptorPoolBatchLockDepth;
+        return;
+    }
+
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend)
+        return;
+
+    g_switchDescriptorPoolBatchLock =
+        std::unique_lock<std::mutex>(backend->DescriptorPoolMutex());
+    g_switchDescriptorPoolBatchLockDepth = 1;
+}
+
+void Switch_EndDescriptorPoolBatch()
+{
+    if (g_switchDescriptorPoolBatchLockDepth == 0)
+        return;
+
+    --g_switchDescriptorPoolBatchLockDepth;
+    if (g_switchDescriptorPoolBatchLockDepth == 0 &&
+        g_switchDescriptorPoolBatchLock.owns_lock())
+        g_switchDescriptorPoolBatchLock.unlock();
+}
+
 void IDirect3DDevice9::BindPipelineIfChanged(VkPipeline pipeline)
 {
     ResetCachedCommandState();
@@ -10561,7 +10597,9 @@ bool IDirect3DDevice9::BindDescriptorSets()
     // Bind both shader stages' sampler and uniform sets under one lock.
     // Descriptor-pool lifetime remains protected from concurrent shutdown,
     // without reacquiring the same mutex four times for every draw.
-    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+    std::unique_lock<std::mutex> descriptorPoolLock;
+    if (g_switchDescriptorPoolBatchLockDepth == 0)
+        descriptorPoolLock = std::unique_lock<std::mutex>(m_backend->DescriptorPoolMutex());
 
     // Image reloads can replace GfxImage::texture.basemap while a previous
     // D3D texture reference remains cached in m_textures. Rebind that slot to
