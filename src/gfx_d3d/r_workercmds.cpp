@@ -68,6 +68,7 @@ SwitchStaticDpvsPerfBucket s_switchStaticDpvsPerf[4];
 struct SwitchWorkerCommandDiag{
  std::atomic<uint64_t> queued{0},inlineExecutions{0},overflows{0},queuePeak{0};
  std::atomic<uint64_t> blocked[4]{},executed[4]{},elapsedNs[4]{},maxNs[4]{},inlineBusyWaitNs[4]{};
+ std::atomic<uint64_t> publishWaitNs{0},publishSpinIterations{0},publishSleepYields{0};
 };
 SwitchWorkerCommandDiag s_switchWorkerCommandDiag[WRKCMD_COUNT];
 static void Switch_WorkerDiagMax(std::atomic<uint64_t>&target,uint64_t value){
