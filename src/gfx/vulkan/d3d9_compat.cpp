@@ -7512,8 +7512,8 @@ bool IDirect3DDevice9::BindUniformSet(
     if (!parse || !m_backend)
         return false;
 
-    // Each in-flight frame slot owns a separate descriptor-set cache. The
-    // slot's fence has completed before its cursor is rewound or its sets updated.
+    // Uniform revision results are cached per in-flight frame slot. The
+    // underlying dynamic descriptor sets are immutable and shared across slots.
     const uint32_t frameSlot = m_backend->CurrentFrameSlot();
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
@@ -10644,14 +10644,18 @@ void IDirect3DDevice9::BindDescriptorSetIfChanged(
 {
     ResetCachedCommandState();
     if (setIndex < m_cachedBoundDescriptorSets.size() &&
-        m_cachedBoundDescriptorSets[setIndex] == set)
+        m_cachedBoundDescriptorSets[setIndex] == set &&
+        m_cachedUniformDynamicOffsets[setIndex] == UINT32_MAX)
         return;
 
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
     if (setIndex < m_cachedBoundDescriptorSets.size())
+    {
         m_cachedBoundDescriptorSets[setIndex] = set;
+        m_cachedUniformDynamicOffsets[setIndex] = UINT32_MAX;
+    }
 }
 
 void IDirect3DDevice9::BindUniformDescriptorSetIfChanged(
