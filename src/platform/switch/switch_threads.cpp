@@ -128,8 +128,8 @@ static ThreadOwner g_databaseThreadOwner = THREAD_OWNER_NONE;
 static SwitchEvent g_cinematicsThreadOutstandingRequestEvent;
 static SwitchEvent g_cinematicsHostOutstandingRequestEvent;
 
-// Worker command wake event. Workers keep a short timeout fallback because
-// dependency-blocked commands can remain queued without a new empty transition.
+// Worker command wake event. Native code waits on this for 1 ms while polling
+// the timeout predicate; use a real Switch event instead of a tight yield loop.
 static SwitchEvent g_workerCmdEvent;
 
 // Renderer synchronization mirrors the original Win32 SMP backend contract:
@@ -766,9 +766,7 @@ void __cdecl Sys_WaitForWorkerCmd()
 
     const bool measureWait=Switch_PerfDiagEnabled()&&(uint32_t)g_threadContext<4u;
     const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
-    // Retain the timeout fallback: dependency-blocked queued commands may
-    // not produce another empty-to-nonempty transition.
-    WaitSwitchEvent(g_workerCmdEvent, 1);
+    WaitSwitchEvent(g_workerCmdEvent,1);
     if(measureWait)g_switchWorkerCommandWait[(uint32_t)g_threadContext].Add(Kisak_RawTimerTicks()-waitStart);
     if(isWorker)WaitForThreadResume(g_threadContext);
 }
