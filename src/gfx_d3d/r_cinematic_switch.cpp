@@ -253,18 +253,18 @@ bool Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
         }
 
         const size_t bytes = static_cast<size_t>(width) * height;
-        uploads[uploadCount] = VulkanImageUpload2D{
-            texture->image,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            width,
-            height,
-            0,
-            pixels,
-            bytes,
-            texture->GetSubresourceLayout(0, 0),
-            0,
-            {},
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VulkanImageUpload2D upload{};
+        upload.image = texture->image;
+        upload.aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+        upload.width = width;
+        upload.height = height;
+        upload.depth = 1;
+        upload.mipLevel = 0;
+        upload.data = pixels;
+        upload.bytes = bytes;
+        upload.oldLayout = texture->GetSubresourceLayout(0, 0);
+        upload.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        uploads[uploadCount] = upload;
         uploadedTextures[uploadCount] = texture;
         ++uploadCount;
     };
