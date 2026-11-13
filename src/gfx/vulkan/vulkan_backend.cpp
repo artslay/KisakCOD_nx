@@ -380,9 +380,9 @@ void Switch_RecordFrameCpuEnd()
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]),
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]));
     static const char *const gpuStageNames[] = {
-        "sun_shadow", "spot_shadow", "setup_depth", "cookies",
-        "scene_depth", "lit", "decal", "sun", "lights",
-        "distortion", "emissive", "end_scene"
+        "sun_shadow0", "sun_shadow1", "sun_shadow", "spot_shadow",
+        "setup_depth", "cookies", "scene_depth", "lit", "decal",
+        "sun", "lights", "distortion", "emissive", "end_scene"
     };
     char gpuStageText[768];
     size_t gpuStageTextUsed = static_cast<size_t>(
