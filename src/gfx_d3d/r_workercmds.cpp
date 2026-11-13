@@ -336,9 +336,9 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
         iassert( !g_cmdExecFailed[type] );
         uint32_t batchCount = 10;
 #ifdef __SWITCH__
-        // DPVS and skinning commands have highly variable per-item cost.
-        // Smaller claims let the other worker steal the next items sooner,
-        // reducing tail imbalance while keeping cheap FX commands batched.
+        // DPVS, shadow-caster and skinning commands have highly variable
+        // per-item cost. Smaller claims let other consumers steal the tail
+        // sooner while keeping cheap FX commands batched.
         switch (type)
         {
         case WRKCMD_DPVS_CELL_STATIC:
@@ -346,6 +346,7 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
         case WRKCMD_DPVS_CELL_DYN_MODEL:
         case WRKCMD_DPVS_CELL_DYN_BRUSH:
         case WRKCMD_DPVS_ENTITY:
+        case WRKCMD_SPOT_SHADOW_ENT:
         case WRKCMD_BOUNDS_ENT_DELAYED:
         case WRKCMD_SKIN_ENT_DELAYED:
         case WRKCMD_SKIN_CACHED_STATICMODEL:
