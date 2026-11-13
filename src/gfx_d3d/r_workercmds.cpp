@@ -492,7 +492,7 @@ extern "C" void Switch_LogWorkerDiagSummary(){
    SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];
    const uint64_t q=d.queued.exchange(0,std::memory_order_acq_rel),inl=d.inlineExecutions.exchange(0,std::memory_order_acq_rel),ovf=d.overflows.exchange(0,std::memory_order_acq_rel),peak=d.queuePeak.exchange(0,std::memory_order_acq_rel);
    const uint64_t pubNs=d.publishWaitNs.exchange(0,std::memory_order_acq_rel),pubSpins=d.publishSpinIterations.exchange(0,std::memory_order_acq_rel),pubYields=d.publishSleepYields.exchange(0,std::memory_order_acq_rel);
-   const LONG currentIn=g_workerCmds[type].inSize,currentOut=g_workerCmds[type].outSize;
+   const LONG currentIn=InterlockedCompareExchange((LONG*)&g_workerCmds[type].inSize,0,0),currentOut=InterlockedCompareExchange((LONG*)&g_workerCmds[type].outSize,0,0);
    uint64_t blocked[4]={},executed[4]={},elapsed[4]={},maxNs[4]={},busyNs[4]={};
    for(uint32_t r=0;r<4;++r){blocked[r]=d.blocked[r].exchange(0,std::memory_order_acq_rel);executed[r]=d.executed[r].exchange(0,std::memory_order_acq_rel);elapsed[r]=d.elapsedNs[r].exchange(0,std::memory_order_acq_rel);maxNs[r]=d.maxNs[r].exchange(0,std::memory_order_acq_rel);busyNs[r]=d.inlineBusyWaitNs[r].exchange(0,std::memory_order_acq_rel);}
    if(!q&&!inl&&!ovf&&!executed[0]&&!executed[1]&&!executed[2]&&!executed[3]&&!pubSpins)continue;
