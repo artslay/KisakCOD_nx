@@ -7835,53 +7835,6 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
-    // Image reloads can replace GfxImage::texture.basemap while a previous
-    // D3D texture reference remains cached in m_textures. Rebind that slot to
-    // the owner's current resource before checking upload state or building
-    // descriptors; otherwise the stale object can appear permanently blank.
-    for (uint32_t slot = 0; slot < 16; ++slot)
-    {
-        auto *boundTexture = static_cast<KisakVkTexture *>(textures[slot]);
-        if (!boundTexture || !boundTexture->sourceImage)
-            continue;
-
-        IDirect3DBaseTexture9 *currentTexture =
-            boundTexture->sourceImage->texture.basemap;
-        if (currentTexture == textures[slot])
-            continue;
-
-        if (!currentTexture)
-        {
-            // The owner no longer has a live GPU resource (for example, during
-            // image reload). Do not keep sampling the previous allocation just
-            // because the D3D sampler still holds a reference to it.
-            SetTexture(slot, nullptr);
-            continue;
-        }
-
-        auto *currentVkTexture = static_cast<KisakVkTexture *>(currentTexture);
-        SetTexture(slot, currentTexture);
-
-        static std::atomic<uint32_t> rebindLogCount{0};
-        const uint32_t sequence =
-            rebindLogCount.fetch_add(1, std::memory_order_relaxed);
-        if (sequence < 16)
-        {
-            char trace[320];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\n",
-                slot,
-                boundTexture->sourceImage->name
-                    ? boundTexture->sourceImage->name : boundTexture->debugName,
-                static_cast<void *>(boundTexture),
-                static_cast<unsigned>(boundTexture->GetSubresourceLayout(0, 0)),
-                static_cast<void *>(currentVkTexture),
-                static_cast<unsigned>(currentVkTexture->GetSubresourceLayout(0, 0)));
-            Switch_LogWrite(trace);
-        }
-    }
-
     const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
     KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
     if (Switch_IsVkGpuDrawTraceEnabled())
@@ -10609,6 +10562,53 @@ bool IDirect3DDevice9::BindDescriptorSets()
     // Descriptor-pool lifetime remains protected from concurrent shutdown,
     // without reacquiring the same mutex four times for every draw.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+
+    // Image reloads can replace GfxImage::texture.basemap while a previous
+    // D3D texture reference remains cached in m_textures. Rebind that slot to
+    // the owner's current resource before checking upload state or building
+    // descriptors; otherwise the stale object can appear permanently blank.
+    for (uint32_t slot = 0; slot < 16; ++slot)
+    {
+        auto *boundTexture = static_cast<KisakVkTexture *>(m_textures[slot]);
+        if (!boundTexture || !boundTexture->sourceImage)
+            continue;
+
+        IDirect3DBaseTexture9 *currentTexture =
+            boundTexture->sourceImage->texture.basemap;
+        if (currentTexture == m_textures[slot])
+            continue;
+
+        if (!currentTexture)
+        {
+            // The owner no longer has a live GPU resource (for example, during
+            // image reload). Do not keep sampling the previous allocation just
+            // because the D3D sampler still holds a reference to it.
+            SetTexture(slot, nullptr);
+            continue;
+        }
+
+        auto *currentVkTexture = static_cast<KisakVkTexture *>(currentTexture);
+        SetTexture(slot, currentTexture);
+
+        static std::atomic<uint32_t> rebindLogCount{0};
+        const uint32_t sequence =
+            rebindLogCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 16)
+        {
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\n",
+                slot,
+                boundTexture->sourceImage->name
+                    ? boundTexture->sourceImage->name : boundTexture->debugName,
+                static_cast<void *>(boundTexture),
+                static_cast<unsigned>(boundTexture->GetSubresourceLayout(0, 0)),
+                static_cast<void *>(currentVkTexture),
+                static_cast<unsigned>(currentVkTexture->GetSubresourceLayout(0, 0)));
+            Switch_LogWrite(trace);
+        }
+    }
 
     g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
     if (!BindSamplerSet(
