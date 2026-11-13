@@ -580,6 +580,8 @@ void R_VulkanUploadTexture(
         upload.mipLevel = mipLevel;
         upload.data = source;
         upload.bytes = bytes;
+        upload.bufferOffsetAlignment = std::max<VkDeviceSize>(
+            4u, info.compressed ? info.blockBytes : info.bytesPerPixel);
         upload.oldLayout = oldLayout;
         upload.baseArrayLayer = layer;
         upload.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
