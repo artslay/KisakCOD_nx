@@ -15,22 +15,26 @@ extern thread_local const char *g_switchFrameStage;
 // A draw surface stores a sorted-material index, not a native pointer.
 // Validate the index before indexing rgp.sortedMaterials, then validate the
 // resulting pointer before Material_GetTechnique dereferences it.
-static bool SwitchValidateDrawSurfMaterial(
+static bool SwitchResolveDrawSurfMaterial(
     GfxDrawSurf drawSurf,
     const char *where,
     uint32_t materialIndex,
-    Material *material,
-    bool checkPointer)
+    Material **resolvedMaterial)
 {
     const uint32_t materialCount = static_cast<uint32_t>(rgp.materialCount);
     const bool indexValid =
         materialIndex < materialCount &&
         materialIndex < ARRAY_COUNT(rgp.sortedMaterials);
-    const bool pointerValid = !checkPointer || material != nullptr;
+    Material *material = indexValid ? rgp.sortedMaterials[materialIndex] : nullptr;
+    const bool pointerValid = material != nullptr;
 
     if (indexValid && pointerValid)
+    {
+        *resolvedMaterial = material;
         return true;
+    }
 
+    *resolvedMaterial = nullptr;
     Material *previous = nullptr;
     Material *next = nullptr;
     if (indexValid)
@@ -45,12 +49,11 @@ static bool SwitchValidateDrawSurfMaterial(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][INVALID DRAW MATERIAL] where=%s index=%u count=%u indexValid=%u pointerChecked=%u material=%p table=%p prev=%p next=%p surf=0x%016llx surfType=%u prepass=%u frameStage=%s\n",
+        "[KisakCOD][INVALID DRAW MATERIAL] where=%s index=%u count=%u indexValid=%u pointerChecked=1 material=%p table=%p prev=%p next=%p surf=0x%016llx surfType=%u prepass=%u frameStage=%s\n",
         where ? where : "<null>",
         materialIndex,
         materialCount,
         indexValid ? 1u : 0u,
-        checkPointer ? 1u : 0u,
         static_cast<void *>(material),
         static_cast<void *>(rgp.sortedMaterials),
         static_cast<void *>(previous),
@@ -68,6 +71,35 @@ static bool SwitchValidateDrawSurfMaterial(
         materialCount,
         static_cast<void *>(material));
     return false;
+}
+
+static int R_SetPrepassMaterialFromResolved(
+    GfxCmdBufContext context,
+    GfxDrawSurf drawSurf,
+    Material *material,
+    MaterialTechniqueType techType)
+{
+    const MaterialTechnique *technique;
+
+    if (drawSurf.fields.prepass == MTL_PREPASS_NONE)
+        return 0;
+
+    if (drawSurf.fields.prepass == MTL_PREPASS_STANDARD && (material->stateFlags & 1) != 0)
+        material = rgp.depthPrepassMaterial;
+
+    context.state->material = material;
+    technique = Material_GetTechnique(material, techType);
+    context.state->technique = technique;
+
+    if (!technique)
+        return 0;
+
+    iassert(!(technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_SCENE));
+    iassert(!(technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_POST_SUN));
+    iassert(material);
+
+    context.state->techType = techType;
+    return 1;
 }
 #endif
 
@@ -110,8 +142,30 @@ int __cdecl R_SetupMaterial(
         return 0;
     }
 
-    if (prepassContext->state && !R_SetPrepassMaterial(*prepassContext, drawSurf, TECHNIQUE_DEPTH_PREPASS))
+#ifdef __SWITCH__
+    if (prepassContext->state)
+    {
+        // The regular material resolve above already validated and loaded this
+        // draw-surface's source Material. Reuse it for the depth prepass rather
+        // than re-reading and re-validating the same sorted-material entry.
+        if (baseTechType > TECHNIQUE_BUILD_FLOAT_Z)
+        {
+            if (!R_SetPrepassMaterialFromResolved(
+                    *prepassContext, drawSurf, context.state->material,
+                    TECHNIQUE_DEPTH_PREPASS))
+                prepassContext->state = 0;
+        }
+        else if (!R_SetPrepassMaterial(
+                     *prepassContext, drawSurf, TECHNIQUE_DEPTH_PREPASS))
+        {
+            prepassContext->state = 0;
+        }
+    }
+#else
+    if (prepassContext->state &&
+        !R_SetPrepassMaterial(*prepassContext, drawSurf, TECHNIQUE_DEPTH_PREPASS))
         prepassContext->state = 0;
+#endif
 
     context.state->origMaterial = context.state->material;
     context.state->origTechType = context.state->techType;
@@ -130,41 +184,21 @@ int __cdecl R_SetupMaterial(
 
 int __cdecl R_SetPrepassMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
 {
-    const MaterialTechnique *technique; // [esp+8h] [ebp-Ch]
-    Material *material; // [esp+Ch] [ebp-8h]
+    Material *material;
 
     if (drawSurf.fields.prepass == MTL_PREPASS_NONE)
         return 0;
 
 #ifdef __SWITCH__
     const uint32_t materialIndex = drawSurf.fields.materialSortedIndex;
-    g_switchFrameStage = "frame/render/material_lookup/prepass_index";
-    if (!SwitchValidateDrawSurfMaterial(drawSurf, "prepass/index", materialIndex, nullptr, false))
-        return 0;
-    material = rgp.sortedMaterials[materialIndex];
-    g_switchFrameStage = "frame/render/material_lookup/prepass_pointer";
-    if (!SwitchValidateDrawSurfMaterial(drawSurf, "prepass/pointer", materialIndex, material, true))
+    g_switchFrameStage = "frame/render/material_lookup/prepass_resolve";
+    if (!SwitchResolveDrawSurfMaterial(drawSurf, "prepass", materialIndex, &material))
         return 0;
 #else
     material = rgp.sortedMaterials[drawSurf.fields.materialSortedIndex];
 #endif
 
-    if (drawSurf.fields.prepass == MTL_PREPASS_STANDARD && (material->stateFlags & 1) != 0)
-        material = rgp.depthPrepassMaterial;
-
-    context.state->material = material;
-    technique = Material_GetTechnique(material, techType);
-    context.state->technique = technique;
-
-    if (!technique)
-        return 0;
-
-    iassert(!(technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_SCENE));
-    iassert(!(technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_POST_SUN));
-    iassert(material);
-
-    context.state->techType = techType;
-    return 1;
+    return R_SetPrepassMaterialFromResolved(context, drawSurf, material, techType);
 }
 
 int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
@@ -174,12 +208,8 @@ int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, Materi
 
 #ifdef __SWITCH__
     const uint32_t materialIndex = drawSurf.fields.materialSortedIndex;
-    g_switchFrameStage = "frame/render/material_lookup/regular_index";
-    if (!SwitchValidateDrawSurfMaterial(drawSurf, "regular/index", materialIndex, nullptr, false))
-        return 0;
-    material = rgp.sortedMaterials[materialIndex];
-    g_switchFrameStage = "frame/render/material_lookup/regular_pointer";
-    if (!SwitchValidateDrawSurfMaterial(drawSurf, "regular/pointer", materialIndex, material, true))
+    g_switchFrameStage = "frame/render/material_lookup/regular_resolve";
+    if (!SwitchResolveDrawSurfMaterial(drawSurf, "regular", materialIndex, &material))
         return 0;
 #else
     material = rgp.sortedMaterials[drawSurf.fields.materialSortedIndex];
