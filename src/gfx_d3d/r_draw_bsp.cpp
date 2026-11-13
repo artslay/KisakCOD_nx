@@ -277,11 +277,17 @@ void __cdecl R_DrawTrianglesLit(
             // pending; its textures must remain bound until that batch is drawn.
             const uint32_t currentProbeIndex = bspSurf->reflectionProbeIndex;
             const uint32_t currentLightmapIndex = bspSurf->lightmapIndex;
+            // Resolve image/lightmap sources only when this pass actually samples them.
+            // The live basemap comparisons below remain active for every used sampler,
+            // so resource reloads are still observed before a new batch is bound.
             const GfxImage *currentProbeImage =
-                currentProbeIndex < drawStream->reflectionProbeCount
+                reflectionProbeFlag && currentProbeIndex < drawStream->reflectionProbeCount
                     ? rgp.world->reflectionProbes[currentProbeIndex].reflectionImage
                     : nullptr;
+            const bool needsLightmapTextures =
+                lightmapPrimaryFlag || lightmapSecondaryFlag;
             const GfxLightmapArray *currentLightmap =
+                needsLightmapTextures &&
                 currentLightmapIndex != 31u &&
                 currentLightmapIndex < drawStream->lightmapCount
                     ? &rgp.world->lightmaps[currentLightmapIndex]
