@@ -725,6 +725,78 @@ static bool SwitchConfigureNakDefaultProbe()
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
 
+// Request the official 460.8 MHz handheld GPU profile only when the system
+// still reports the stock handheld configuration. The selected profile keeps
+// EMC at 1331.2 MHz; docked mode and user-selected/custom profiles are untouched.
+static void SwitchRequestHandheldGpuPerformanceProfile()
+{
+    const char *setting = std::getenv("KISAK_SWITCH_GPU_BOOST");
+    if (setting && setting[0] == '0' && setting[1] == '\0')
+    {
+        Switch_LogWrite("[KisakCOD][POWER] handheld GPU profile request disabled by KISAK_SWITCH_GPU_BOOST=0\n");
+        return;
+    }
+
+    ApmPerformanceMode mode = ApmPerformanceMode_Invalid;
+    const Result modeResult = apmGetPerformanceMode(&mode);
+    if (R_FAILED(modeResult))
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][POWER] apmGetPerformanceMode failed result=0x%08x; keeping current clocks\n",
+            static_cast<uint32_t>(modeResult));
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    // Normal is the handheld performance mode. Boost is docked; the docked
+    // profile already supplies the higher GPU clock, so do not override it.
+    if (mode != ApmPerformanceMode_Normal)
+    {
+        Switch_LogWrite("[KisakCOD][POWER] not in handheld performance mode; keeping system GPU profile\n");
+        return;
+    }
+
+    constexpr uint32_t kStockHandheldConfig = 0x00020003u;
+    constexpr uint32_t kHandheldGpu460Config = 0x92220008u;
+    uint32_t currentConfig = 0;
+    const Result configResult =
+        apmGetPerformanceConfiguration(mode, &currentConfig);
+    if (R_FAILED(configResult))
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][POWER] apmGetPerformanceConfiguration failed result=0x%08x; keeping current clocks\n",
+            static_cast<uint32_t>(configResult));
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    if (currentConfig == kHandheldGpu460Config)
+    {
+        Switch_LogWrite("[KisakCOD][POWER] handheld GPU 460.8 MHz profile already active (0x92220008)\n");
+        return;
+    }
+    if (currentConfig != kStockHandheldConfig)
+    {
+        char trace[224];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][POWER] custom handheld profile 0x%08x detected; leaving it unchanged\n",
+            currentConfig);
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    const Result setResult =
+        apmSetPerformanceConfiguration(mode, kHandheldGpu460Config);
+    char trace[256];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][POWER] requested official handheld GPU profile 0x%08x from 0x%08x result=0x%08x (GPU 460.8 MHz, EMC 1331.2 MHz)\n",
+        kHandheldGpu460Config, currentConfig,
+        static_cast<uint32_t>(setResult));
+    Switch_LogWrite(trace);
+}
+
 // The engine runs on a dedicated stack while remaining on the original OS
 // thread, preserving applet, Vulkan and TLS ownership.
 extern "C" void Switch_RunOnStack(void *stackTop, void (*entry)(void *), void *arg);
@@ -752,6 +824,7 @@ int main()
     // NAK_DEBUG flags; this tests the compiler without either forced allocator mode.
     const bool nakDebugConfigured = SwitchConfigureNakDefaultProbe();
     Switch_LogInit();
+    SwitchRequestHandheldGpuPerformanceProfile();
     char tlsLine[224];
     std::snprintf(
         tlsLine,
