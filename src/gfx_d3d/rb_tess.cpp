@@ -29,6 +29,8 @@ extern bool Switch_IsModelTransformTraceEnabled();
 extern void Switch_SetModelTransformTraceContext(
     const char *drawKind, const char *materialName, const void *xsurf,
     uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix);
+extern void Switch_BeginDescriptorPoolBatch();
+extern void Switch_EndDescriptorPoolBatch();
 #endif
 
 #ifdef __SWITCH__
@@ -60,6 +62,20 @@ public:
 private:
     bool m_previous;
     const char *m_previousMaterialName;
+};
+
+class SwitchDescriptorPoolBatchScope
+{
+public:
+    SwitchDescriptorPoolBatchScope()
+    {
+        Switch_BeginDescriptorPoolBatch();
+    }
+
+    ~SwitchDescriptorPoolBatchScope()
+    {
+        Switch_EndDescriptorPoolBatch();
+    }
 };
 }
 #endif
@@ -145,6 +161,9 @@ void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const ch
 
 uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
 #ifdef __SWITCH__
     SwitchFxCodeMeshDrawScope switchFxCodeMeshDrawScope;
 #endif
@@ -320,6 +339,9 @@ void __cdecl R_TessCodeMeshList_AddCodeMeshArgs(
 
 uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     int objId; // eax
     bool v5; // [esp+10h] [ebp-B4h]
     bool v6; // [esp+18h] [ebp-ACh]
@@ -504,6 +526,9 @@ uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
 
 uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-5Ch]
     const GfxParticleCloud *cloud; // [esp+50h] [ebp-30h]
@@ -695,6 +720,9 @@ uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     GfxCmdBufContext context; // [esp+5Ch] [ebp-60h]
     uint32_t baseGfxEntIndex; // [esp+64h] [ebp-58h]
     uint32_t baseGfxEntIndexa; // [esp+64h] [ebp-58h]
@@ -1017,6 +1045,9 @@ uint32_t __cdecl R_TessXModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     GfxCmdBufContext context; // [esp+40h] [ebp-44h]
     const GfxDrawSurfListInfo *info; // [esp+48h] [ebp-3Ch]
     GfxDrawSurf drawSurf; // [esp+4Ch] [ebp-38h]
@@ -1120,6 +1151,9 @@ uint32_t __cdecl R_TessXModelRigidDrawSurfList(
 
 uint32_t __cdecl R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+1Ch] [ebp-34h]
     GfxCmdBufContext context; // [esp+34h] [ebp-1Ch]
@@ -1197,6 +1231,9 @@ void __cdecl R_DrawStaticModelPreTessSurf(const uint32_t *primDrawSurfPos, GfxCm
 
 uint32_t __cdecl R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+1Ch] [ebp-34h]
     GfxCmdBufContext context; // [esp+34h] [ebp-1Ch]
@@ -1239,6 +1276,9 @@ uint32_t __cdecl R_TessStaticModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+1Ch] [ebp-34h]
     GfxCmdBufContext context; // [esp+34h] [ebp-1Ch]
@@ -1280,6 +1320,9 @@ uint32_t __cdecl R_TessStaticModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     const char *v2; // eax
     GfxDepthRangeType v4; // [esp+1Ch] [ebp-38h]
     GfxDepthRangeType depthRangeType; // [esp+20h] [ebp-34h]
@@ -1348,6 +1391,9 @@ uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     GfxCmdBufContext context; // [esp+54h] [ebp-74h]
     const GfxDrawSurfListInfo *info; // [esp+5Ch] [ebp-6Ch]
     GfxDrawSurf drawSurf; // [esp+60h] [ebp-68h]
@@ -1462,6 +1508,9 @@ uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
 
 uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     IDirect3DIndexBuffer9 *ib; // [esp+1Ch] [ebp-44h]
     GfxDepthRangeType depthRangeType; // [esp+2Ch] [ebp-34h]
     GfxCmdBufContext context; // [esp+44h] [ebp-1Ch]
@@ -1502,6 +1551,9 @@ uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs,
 
 uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     GfxDepthRangeType v3; // [esp+20h] [ebp-38h]
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-34h]
     GfxCmdBufContext context; // [esp+3Ch] [ebp-1Ch]
@@ -1575,6 +1627,9 @@ void __cdecl R_SetVertexDeclTypeWorld(GfxCmdBufState *state)
 
 uint32_t __cdecl R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchDescriptorPoolBatchScope switchDescriptorPoolBatch;
+#endif
     GfxDepthRangeType v3; // [esp+34h] [ebp-88h]
     GfxDepthRangeType depthRangeType; // [esp+38h] [ebp-84h]
     GfxCmdBufContext context; // [esp+50h] [ebp-6Ch]
