@@ -7802,22 +7802,8 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    VkDeviceSize dynamicRange = 16u;
-    size_t dynamicRangeIndex = 0;
-    while (dynamicRange < static_cast<VkDeviceSize>(size))
-    {
-        if (dynamicRange >= m_uniformDynamicMaxRange ||
-            dynamicRange > m_uniformDynamicMaxRange / 2u)
-        {
-            dynamicRange = m_uniformDynamicMaxRange;
-            ++dynamicRangeIndex;
-            break;
-        }
-        dynamicRange <<= 1u;
-        ++dynamicRangeIndex;
-    }
-    if (dynamicRange < static_cast<VkDeviceSize>(size) ||
-        dynamicRangeIndex >= UniformDynamicRangeClassCount)
+    const VkDeviceSize dynamicRange = static_cast<VkDeviceSize>(size);
+    if (dynamicRange > m_uniformDynamicMaxRange)
     {
         traceUniformBindStage("uniform_range_too_large", nullptr, size, 0);
         return false;
@@ -7860,7 +7846,10 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    auto &set = m_uniformDynamicDescriptorSets[cacheIndex][dynamicRangeIndex];
+    auto &stageSets = m_uniformDynamicDescriptorSets[cacheIndex];
+    const auto cachedDescriptor = stageSets.find(dynamicRange);
+    VkDescriptorSet set = cachedDescriptor != stageSets.end()
+        ? cachedDescriptor->second : VK_NULL_HANDLE;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
     if (set == VK_NULL_HANDLE)
     {
@@ -7880,10 +7869,9 @@ bool IDirect3DDevice9::BindUniformSet(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=dynamic_uniform set=%u range=%llu class=%zu result=%d\n",
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=dynamic_uniform set=%u range=%llu result=%d\\n",
                 setIndex,
                 static_cast<unsigned long long>(dynamicRange),
-                dynamicRangeIndex,
                 static_cast<int>(allocResult));
             Switch_LogWrite(trace);
             traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
@@ -7902,6 +7890,7 @@ bool IDirect3DDevice9::BindUniformSet(
         write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         write.pBufferInfo = &descriptorInfo;
         vkUpdateDescriptorSets(descriptorDevice, 1, &write, 0, nullptr);
+        stageSets.emplace(dynamicRange, allocatedSet);
         set = allocatedSet;
         traceUniformBindStage("descriptor_allocated", bytes, size, 1);
         traceUniformBindStage("descriptor_updated", bytes, size, 1);
