@@ -228,8 +228,9 @@ struct KisakVkBuffer : IDirect3DResource9 {
     {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;
     }
-    // Dynamic buffers keep a staging copy; static buffers are written directly
-    // to their persistently mapped HOST_VISIBLE|HOST_COHERENT allocation.
+    // Dynamic buffers keep an authoritative CPU shadow for queued updates.
+    // Fence-qualified frontend ranges may copy from it to mapped memory directly;
+    // other dynamic writes use transfer staging. Static buffers write mapped data.
     std::vector<uint8_t> shadow;
     std::vector<uint8_t> recoveryShadow;
     VkBufferUsageFlags usageFlags=0;
