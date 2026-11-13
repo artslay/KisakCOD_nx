@@ -5,6 +5,16 @@
 #define SMODEL_INDEX_NONE 0xFFFF
 #define SMC_MAX_INDEX_IN_CACHE 0x100000
 
+enum class StaticModelCacheFailureReason : uint32_t
+{
+    None = 0,
+    InvalidParameters,
+    DeviceLost,
+    FrontendPatchCountLimit,
+    FrontendPatchVertexLimit,
+    AllocatorExhausted
+};
+
 struct SkinCachedStaticModelCmd // sizeof=0x4
 {                                       // ...
     uint16_t cacheIndex;        // ...
@@ -76,7 +86,8 @@ const GfxBackEndData *RB_PatchStaticModelCache();
 uint16_t __cdecl R_CacheStaticModelSurface(
     uint32_t smcIndex,
     uint32_t smodelIndex,
-    const XModelLodInfo *lodInfo);
+    const XModelLodInfo *lodInfo,
+    StaticModelCacheFailureReason *failureReason = nullptr);
 
 void __cdecl SMC_FreeCachedSurface_r(
     static_model_tree_t *tree,

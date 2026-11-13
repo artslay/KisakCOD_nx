@@ -19,11 +19,100 @@
 #include <cgame/cg_local.h>
 #ifdef __SWITCH__
 #include <arm_neon.h>
+#include <cstdio>
+#include <platform/switch/switch_perf_diag.h>
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 int g_dumpStaticModelCount;
 int g_dumpStaticModelFileHandle;
 char g_dumpStaticModelFilePath[20] = "staticModelInfo.csv";
+
+#ifdef __SWITCH__
+namespace
+{
+enum class SwitchSModelCacheFallbackReason : uint32_t
+{
+    Disabled = 0,
+    MissingLodMetadata,
+    InvalidParameters,
+    DeviceLost,
+    FrontendPatchCountLimit,
+    FrontendPatchVertexLimit,
+    AllocatorExhausted,
+    Unknown,
+    Count
+};
+
+constexpr uint32_t kSwitchSModelCacheFallbackReasonCount =
+    static_cast<uint32_t>(SwitchSModelCacheFallbackReason::Count);
+
+struct SwitchSModelCacheDiagnostics
+{
+    uint64_t candidates = 0;
+    uint64_t cacheAttempts = 0;
+    uint64_t cacheSuccesses = 0;
+    uint64_t rigidFallback[kSwitchSModelCacheFallbackReasonCount]{};
+    uint64_t skinnedFallback[kSwitchSModelCacheFallbackReasonCount]{};
+};
+
+SwitchSModelCacheDiagnostics g_switchSModelCacheDiagnostics;
+
+void Switch_LogSModelCacheDiagnostics(
+    uint32_t frame,
+    uint32_t framePatchCount,
+    uint32_t framePatchVertsUsed)
+{
+    static uint32_t lastLoggedFrame = UINT32_MAX;
+    if (!Switch_PerfDiagEnabled() || !frame || frame % 60u || frame == lastLoggedFrame)
+        return;
+
+    const auto value = [](const uint64_t *counts, SwitchSModelCacheFallbackReason reason)
+    {
+        return static_cast<unsigned long long>(
+            counts[static_cast<uint32_t>(reason)]);
+    };
+
+    char rigidText[384];
+    char skinnedText[384];
+    char message[1024];
+    std::snprintf(
+        rigidText, sizeof(rigidText),
+        "rigid{disabled=%llu,no_lod_metadata=%llu,invalid=%llu,device_lost=%llu,patch_count=%llu,patch_vertices=%llu,allocator=%llu,unknown=%llu}",
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::Disabled),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::MissingLodMetadata),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::InvalidParameters),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::DeviceLost),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::FrontendPatchCountLimit),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::FrontendPatchVertexLimit),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::AllocatorExhausted),
+        value(g_switchSModelCacheDiagnostics.rigidFallback, SwitchSModelCacheFallbackReason::Unknown));
+    std::snprintf(
+        skinnedText, sizeof(skinnedText),
+        "skinned{disabled=%llu,no_lod_metadata=%llu,invalid=%llu,device_lost=%llu,patch_count=%llu,patch_vertices=%llu,allocator=%llu,unknown=%llu}",
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::Disabled),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::MissingLodMetadata),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::InvalidParameters),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::DeviceLost),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::FrontendPatchCountLimit),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::FrontendPatchVertexLimit),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::AllocatorExhausted),
+        value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::Unknown));
+    std::snprintf(
+        message, sizeof(message),
+        "[KisakCOD][SMC DIAG] frame=%u window=60 candidates=%llu attempts=%llu successes=%llu %s %s frame_patch_count=%u frame_patch_verts=%u\n",
+        frame,
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.candidates),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAttempts),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheSuccesses),
+        rigidText, skinnedText, framePatchCount, framePatchVertsUsed);
+    Switch_LogWrite(message);
+
+    g_switchSModelCacheDiagnostics = {};
+    lastLoggedFrame = frame;
+}
+}
+#endif
 
 char __cdecl R_PreTessStaticModelCachedList(
     const XModel *model,
@@ -100,30 +189,90 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
     GfxStaticModelId staticModelIda; // [esp+1Ch] [ebp-Ch]
     XSurface *surfaces; // [esp+20h] [ebp-8h] BYREF
     XSurface *xsurf; // [esp+24h] [ebp-4h]
+#ifdef __SWITCH__
+    const bool switchPerfDiagEnabled = Switch_PerfDiagEnabled();
+    SwitchSModelCacheFallbackReason switchFallbackReason =
+        SwitchSModelCacheFallbackReason::Unknown;
+    StaticModelCacheFailureReason switchCacheFailureReason =
+        StaticModelCacheFailureReason::None;
+#endif
 
     model = rgp.world->dpvs.smodelDrawInsts[smodelIndex].model;
     iassert( R_StaticModelHasLighting( smodelIndex ) );
+#ifdef __SWITCH__
+    if (switchPerfDiagEnabled)
+        ++g_switchSModelCacheDiagnostics.candidates;
+#endif
     if (!r_smc_enable->current.enabled)
+    {
+#ifdef __SWITCH__
+        switchFallbackReason = SwitchSModelCacheFallbackReason::Disabled;
+#endif
         goto LABEL_9;
+    }
     lodInfo = XModelGetLodInfo(model, lod);
     if (!lodInfo->smcIndexPlusOne)
+    {
+#ifdef __SWITCH__
+        switchFallbackReason = SwitchSModelCacheFallbackReason::MissingLodMetadata;
+#endif
         goto LABEL_9;
+    }
     if (smodelIndex >= rgp.world->dpvs.smodelCount)
         MyAssertHandler(
             ".\\r_add_staticmodel.cpp",
             473,
             0,
-            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\n\t%i not in [0, %i)",
+            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\\n\\t%i not in [0, %i)",
             smodelIndex,
             rgp.world->dpvs.smodelCount);
-    staticModelId.objectId = R_CacheStaticModelSurface(lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo);
+#ifdef __SWITCH__
+    if (switchPerfDiagEnabled)
+        ++g_switchSModelCacheDiagnostics.cacheAttempts;
+    staticModelId.objectId = R_CacheStaticModelSurface(
+        lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo,
+        &switchCacheFailureReason);
+#else
+    staticModelId.objectId = R_CacheStaticModelSurface(
+        lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo);
+#endif
     if (staticModelId.objectId)
     {
+#ifdef __SWITCH__
+        if (switchPerfDiagEnabled)
+            ++g_switchSModelCacheDiagnostics.cacheSuccesses;
+#endif
         staticModelId.surfType = SF_STATICMODEL_CACHED;
         return staticModelId;
     }
     else
     {
+#ifdef __SWITCH__
+        if (switchPerfDiagEnabled)
+        {
+            switch (switchCacheFailureReason)
+            {
+            case StaticModelCacheFailureReason::InvalidParameters:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::InvalidParameters;
+                break;
+            case StaticModelCacheFailureReason::DeviceLost:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::DeviceLost;
+                break;
+            case StaticModelCacheFailureReason::FrontendPatchCountLimit:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::FrontendPatchCountLimit;
+                break;
+            case StaticModelCacheFailureReason::FrontendPatchVertexLimit:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::FrontendPatchVertexLimit;
+                break;
+            case StaticModelCacheFailureReason::AllocatorExhausted:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::AllocatorExhausted;
+                break;
+            default:
+                switchFallbackReason = SwitchSModelCacheFallbackReason::Unknown;
+                break;
+            }
+        }
+#endif
     LABEL_9:
         staticModelIda.surfType = SF_STATICMODEL_RIGID;
         staticModelIda.objectId = smodelIndex;
@@ -135,9 +284,19 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
             if (xsurf->deformed || !IsFastFileLoad())
             {
                 staticModelIda.surfType = SF_STATICMODEL_SKINNED;
+#ifdef __SWITCH__
+                if (switchPerfDiagEnabled)
+                    ++g_switchSModelCacheDiagnostics.skinnedFallback[
+                        static_cast<uint32_t>(switchFallbackReason)];
+#endif
                 return staticModelIda;
             }
         }
+#ifdef __SWITCH__
+        if (switchPerfDiagEnabled)
+            ++g_switchSModelCacheDiagnostics.rigidFallback[
+                static_cast<uint32_t>(switchFallbackReason)];
+#endif
         return staticModelIda;
     }
 }
@@ -388,6 +547,12 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
     scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_LIT] = surfData.drawSurf[0].current - scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_LIT];
     scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_DECAL] = surfData.drawSurf[1].current - scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_DECAL];
     scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_EMISSIVE] = surfData.drawSurf[2].current - scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_EMISSIVE];
+#ifdef __SWITCH__
+    Switch_LogSModelCacheDiagnostics(
+        rg.frontEndFrameCount,
+        frontEndDataOut->smcPatchCount,
+        frontEndDataOut->smcPatchVertsUsed);
+#endif
 }
 
 void __cdecl R_SkinStaticModelsCameraForLod(

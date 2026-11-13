@@ -356,7 +356,8 @@ uint16_t __cdecl SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
 uint16_t __cdecl R_CacheStaticModelSurface(
     uint32_t smcIndex,
     uint32_t smodelIndex,
-    const XModelLodInfo *lodInfo)
+    const XModelLodInfo *lodInfo,
+    StaticModelCacheFailureReason *failureReason)
 {
     uint32_t smcPatchVertsUsed; // [esp+4h] [ebp-2Ch]
     static_model_tree_t *tree; // [esp+18h] [ebp-18h]
@@ -367,6 +368,9 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     uint16_t cacheIndexa; // [esp+24h] [ebp-Ch]
     SkinCachedStaticModelCmd skinSmodelCmd; // [esp+28h] [ebp-8h] BYREF
     uint32_t cachedVertsNeeded; // [esp+2Ch] [ebp-4h]
+
+    if (failureReason)
+        *failureReason = StaticModelCacheFailureReason::None;
 
 #ifdef __SWITCH__
     // The cache pools and their intrusive links are process-local runtime
@@ -380,6 +384,8 @@ uint16_t __cdecl R_CacheStaticModelSurface(
         lodInfo->smcAllocBits < 4 ||
         lodInfo->smcAllocBits > 9)
     {
+        if (failureReason)
+            *failureReason = StaticModelCacheFailureReason::InvalidParameters;
         SMC_LogRejectedCacheReference(
             smodelIndex,
             lodInfo ? lodInfo->lod : UINT32_MAX,
@@ -407,7 +413,11 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     iassert(Sys_IsMainThread());
 
     if (dx.deviceLost)
+    {
+        if (failureReason)
+            *failureReason = StaticModelCacheFailureReason::DeviceLost;
         return 0;
+    }
 
     cacheIndex = rgp.world->dpvs.smodelDrawInsts[smodelIndex].smodelCacheIndex[lodInfo->lod];
 #ifdef __SWITCH__
@@ -484,8 +494,16 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     else
     {
         cachedVertsNeeded = 1 << lodInfo->smcAllocBits;
-        if (frontEndDataOut->smcPatchCount == 256 || cachedVertsNeeded + frontEndDataOut->smcPatchVertsUsed > 0x2000)
+        if (frontEndDataOut->smcPatchCount == 256)
         {
+            if (failureReason)
+                *failureReason = StaticModelCacheFailureReason::FrontendPatchCountLimit;
+            return 0;
+        }
+        if (cachedVertsNeeded + frontEndDataOut->smcPatchVertsUsed > 0x2000)
+        {
+            if (failureReason)
+                *failureReason = StaticModelCacheFailureReason::FrontendPatchVertexLimit;
             return 0;
         }
         else
@@ -534,6 +552,8 @@ uint16_t __cdecl R_CacheStaticModelSurface(
             }
             else
             {
+                if (failureReason)
+                    *failureReason = StaticModelCacheFailureReason::AllocatorExhausted;
                 return 0;
             }
         }
