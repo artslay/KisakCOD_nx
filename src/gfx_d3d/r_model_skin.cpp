@@ -217,14 +217,34 @@ void R_SkinXModelCmd(_WORD *data)
 
         if (sseEnabled)
         {
+#ifdef __SWITCH__
+            // The Switch "SSE" entry is a scalar fallback. With fast skinning
+            // disabled it has no normal-cache inputs or outputs, so calling it
+            // only adds a wrapper and two null-pointer checks around the exact
+            // same scalar skinning routine.
+            if (gfxBuf.fastSkin)
+            {
+                GfxPackedVertexNormal *skinVertNormalIn = nullptr;
+                GfxPackedVertexNormal *skinVertNormalOut = nullptr;
+                if (skinnedSurf->skinnedCachedOffset >= 0)
+                    skinVertNormalOut = &gfxBuf.skinnedCacheNormalsAddr[skinnedSurf->skinnedCachedOffset >> 5];
+                if (skinnedSurf->skinnedVert)
+                    skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[static_cast<int>(reinterpret_cast<uintptr_t>(skinnedSurf->skinnedVert) >> 5)];
+                R_SkinXSurfaceSkinnedSse(
+                    xsurf, &boneSkelMats[boneIndex],
+                    skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
+            }
+            else
+            {
+                R_SkinXSurfaceSkinned(xsurf, &boneSkelMats[boneIndex], skinVerticesOut);
+            }
+#else
             if (!sseStateUsed)
             {
                 sseStateUsed = true;
-#if !defined(__SWITCH__)
                 _m_empty();
-#endif
             }
-        
+
             GfxPackedVertexNormal *skinVertNormalIn = 0, *skinVertNormalOut = 0;
             if (gfxBuf.fastSkin)
             {
@@ -234,6 +254,7 @@ void R_SkinXModelCmd(_WORD *data)
                     skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[static_cast<int>(reinterpret_cast<uintptr_t>(skinnedSurf->skinnedVert) >> 5)];
             }
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
+#endif
         }
         else
         {
