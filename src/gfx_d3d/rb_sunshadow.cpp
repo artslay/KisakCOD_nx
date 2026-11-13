@@ -15,6 +15,7 @@
 #ifdef __SWITCH__
 #include <chrono>
 #include <gfx/vulkan/vulkan_backend.h>
+#include <platform/switch/switch_perf_diag.h>
 #endif
 
 GfxPointVertex g_overlayPoints[36];
@@ -41,9 +42,23 @@ void __cdecl RB_SunShadowMaps(const GfxBackEndData *data, const GfxViewInfo *vie
             ZoneTextF("Sun Shadow Map %d", partitionIndex);
 #ifdef __SWITCH__
             const auto switchShadowStart = std::chrono::steady_clock::now();
+            const SwitchGpuTimingStage gpuShadowStage =
+                partitionIndex == 0
+                    ? SwitchGpuTimingStage::SunShadowCascade0
+                    : SwitchGpuTimingStage::SunShadowCascade1;
+            if (Switch_PerfDiagEnabled())
+            {
+                if (VulkanBackend *backend = GetVulkanBackend())
+                    backend->BeginGpuTimestamp(gpuShadowStage);
+            }
 #endif
             R_DrawSunShadowMap(viewInfo, partitionIndex, &cmdBuf);
 #ifdef __SWITCH__
+            if (Switch_PerfDiagEnabled())
+            {
+                if (VulkanBackend *backend = GetVulkanBackend())
+                    backend->EndGpuTimestamp(gpuShadowStage);
+            }
             const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - switchShadowStart).count();
             Switch_RecordBackendTiming(
