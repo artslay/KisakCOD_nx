@@ -15,6 +15,7 @@
 #ifdef __SWITCH__
 
 #include "vulkan_backend.h"
+#include <platform/switch/switch_perf_diag.h>
 #include <spirv/spirv.h>
 
 #include <algorithm>
@@ -12491,6 +12492,192 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
     }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/return";
+    return S_OK;
+}
+
+bool IDirect3DDevice9::SupportsMultiDrawIndirect() const
+{
+    return m_backend &&
+        m_backend->SupportsMultiDrawIndirect() &&
+        !Switch_IsVkGpuDrawTraceEnabled();
+}
+
+HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
+    const VkDrawIndexedIndirectCommand *draws,
+    const uint32_t *vertexCounts,
+    uint32_t drawCount)
+{
+    if (!SupportsMultiDrawIndirect() || !draws || !vertexCounts ||
+        drawCount < 2u || !m_backend->IsFrameActive() ||
+        !m_indices || !m_indices->buffer || !m_decl)
+        return E_FAIL;
+
+    const auto timingStart = Switch_PerfDiagEnabled()
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
+
+    const uint64_t indexCapacity = m_indices->size / sizeof(uint16_t);
+    uint64_t maximumVertexIndex = 0u;
+    for (uint32_t drawIndex = 0; drawIndex < drawCount; ++drawIndex)
+    {
+        const VkDrawIndexedIndirectCommand &command = draws[drawIndex];
+        if (!command.indexCount || command.instanceCount != 1u ||
+            command.firstInstance != 0u || !vertexCounts[drawIndex] ||
+            command.vertexOffset < 0 ||
+            command.firstIndex > indexCapacity ||
+            command.indexCount > indexCapacity - command.firstIndex)
+            return E_FAIL;
+
+        const uint64_t lastVertex =
+            static_cast<uint64_t>(command.vertexOffset) +
+            static_cast<uint64_t>(vertexCounts[drawIndex] - 1u);
+        maximumVertexIndex = std::max(maximumVertexIndex, lastVertex);
+    }
+
+    // Every indirect draw shares the currently bound stream bases. Validate
+    // the largest effective vertex against each active declaration element.
+    for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+    {
+        if (element.Stream >= 16u)
+            continue;
+        const StreamBinding &stream = m_streams[element.Stream];
+        if (!stream.buffer || !stream.stride)
+            continue;
+
+        auto *vertexBuffer = static_cast<KisakVkBuffer *>(stream.buffer);
+        if (!vertexBuffer || vertexBuffer->buffer == VK_NULL_HANDLE)
+            return E_FAIL;
+
+        const uint32_t elementType =
+            SwitchEffectiveShaderElementType(m_decl, element, stream.stride);
+        const uint32_t elementSize = SwitchShaderElementByteSize(elementType);
+        if (!elementSize)
+            continue;
+
+        const uint32_t elementOffset =
+            SwitchEffectiveShaderElementOffset(m_decl, element, stream.stride);
+        const uint64_t bufferSize = vertexBuffer->size;
+        const uint64_t streamOffset = stream.offset;
+        const uint64_t stride = stream.stride;
+        if (streamOffset > bufferSize || elementOffset > stride ||
+            elementSize > stride - elementOffset ||
+            maximumVertexIndex > (bufferSize - streamOffset) / stride)
+            return E_FAIL;
+
+        const uint64_t vertexStart =
+            streamOffset + maximumVertexIndex * stride;
+        if (vertexStart > bufferSize ||
+            elementOffset > bufferSize - vertexStart ||
+            elementSize > bufferSize - vertexStart - elementOffset)
+            return E_FAIL;
+    }
+
+    if (m_topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+    {
+        m_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        m_pipelineDirty = true;
+        m_cachedPipelineFastPathValid = false;
+    }
+
+    // Match the ordinary indexed-draw lifetime ordering: mark buffers before
+    // PrepareDraw flushes pending writes that might otherwise recycle storage.
+    const uint64_t drawFrameSerial = m_backend->FrameSerial();
+    for (uint32_t stream = 0; stream < 16u; ++stream)
+    {
+        if ((m_streamSourceMask & (1u << stream)) && m_streams[stream].buffer)
+        {
+            static_cast<KisakVkBuffer *>(m_streams[stream].buffer)
+                ->lastDrawFrameSerial.store(drawFrameSerial, std::memory_order_release);
+        }
+    }
+    m_indices->lastDrawFrameSerial.store(drawFrameSerial, std::memory_order_release);
+
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/prepare_draw";
+    if (!PrepareDraw())
+        return E_FAIL;
+
+    const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
+    const VkBuffer indexBuffer = m_indices->buffer;
+    if (commandBuffer == VK_NULL_HANDLE || indexBuffer == VK_NULL_HANDLE)
+        return E_FAIL;
+
+    // All commands use the same base vertex/index bindings; vertexOffset and
+    // firstIndex carry the per-surface differences inside the indirect records.
+    for (uint32_t stream = 0; stream < 16u; ++stream)
+    {
+        const uint16_t streamBit = static_cast<uint16_t>(1u << stream);
+        if (!(m_streamSourceMask & streamBit) ||
+            !m_streams[stream].buffer || !m_streams[stream].stride)
+            continue;
+
+        auto *vertexBuffer = static_cast<KisakVkBuffer *>(m_streams[stream].buffer);
+        if (!vertexBuffer || vertexBuffer->buffer == VK_NULL_HANDLE)
+            return E_FAIL;
+
+        const VkBuffer buffer = vertexBuffer->buffer;
+        const VkDeviceSize offset = m_streams[stream].offset;
+        if (!(m_cachedBoundVertexStreamMask & streamBit) ||
+            m_cachedBoundVertexBuffers[stream] != buffer ||
+            m_cachedBoundVertexOffsets[stream] != offset)
+        {
+            vkCmdBindVertexBuffers(commandBuffer, stream, 1, &buffer, &offset);
+            m_cachedBoundVertexBuffers[stream] = buffer;
+            m_cachedBoundVertexOffsets[stream] = offset;
+            m_cachedBoundVertexStreamMask |= streamBit;
+        }
+    }
+
+    if (!m_cachedBoundIndexBufferValid || m_cachedBoundIndexBuffer != indexBuffer)
+    {
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        m_cachedBoundIndexBuffer = indexBuffer;
+        m_cachedBoundIndexBufferValid = true;
+    }
+
+    if (drawCount > std::numeric_limits<size_t>::max() /
+            sizeof(VkDrawIndexedIndirectCommand))
+        return E_FAIL;
+    const size_t commandBytes =
+        static_cast<size_t>(drawCount) * sizeof(VkDrawIndexedIndirectCommand);
+    VkDescriptorBufferInfo indirectInfo{};
+    if (!m_backend->AllocateUniform(
+            draws, commandBytes, &indirectInfo))
+        return E_FAIL;
+
+    const uint32_t maxDrawCount = m_backend->MaxDrawIndirectCount();
+    if (maxDrawCount < 2u)
+        return E_FAIL;
+
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/issue_draw";
+    uint32_t recordedCommands = 0u;
+    for (uint32_t firstDraw = 0; firstDraw < drawCount;)
+    {
+        const uint32_t batchCount =
+            std::min(maxDrawCount, drawCount - firstDraw);
+        const VkDeviceSize offset =
+            indirectInfo.offset +
+            static_cast<VkDeviceSize>(firstDraw) *
+                sizeof(VkDrawIndexedIndirectCommand);
+        vkCmdDrawIndexedIndirect(
+            commandBuffer, indirectInfo.buffer, offset, batchCount,
+            sizeof(VkDrawIndexedIndirectCommand));
+        ++recordedCommands;
+        firstDraw += batchCount;
+    }
+
+    g_switchGpuDrawCommandSerial.fetch_add(
+        recordedCommands, std::memory_order_relaxed);
+    g_switchSceneDrawIndexedCalls += drawCount;
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/return";
+
+    if (Switch_PerfDiagEnabled())
+    {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - timingStart).count();
+        Switch_RecordBackendTiming(
+            SwitchBackendTimingStage::DrawIndexedSubmit,
+            static_cast<uint64_t>(elapsed));
+    }
     return S_OK;
 }
 

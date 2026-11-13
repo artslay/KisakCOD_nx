@@ -12,6 +12,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 #include <cstring>
+#include <vector>
 extern uint32_t g_switchFloorRasterProbeSurfaceIndex;
 extern void Switch_LogWrite(const char *msg);
 extern bool Switch_IsRenderObjectAuditEnabled();
@@ -859,6 +860,18 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
 {
 #ifdef __SWITCH__
     const bool switchRenderAuditEnabled = Switch_IsRenderObjectAuditEnabled();
+    const bool switchUseIndirectDraw =
+        !switchRenderAuditEnabled &&
+        context.state->prim.device &&
+        context.state->prim.device->SupportsMultiDrawIndirect() &&
+        !r_drawPrimFloor->current.integer &&
+        !r_drawPrimCap->current.integer &&
+        !r_skipDrawTris->current.enabled &&
+        !(r_logFile && r_logFile->current.integer);
+
+    static thread_local std::vector<VkDrawIndexedIndirectCommand> switchIndirectDraws;
+    static thread_local std::vector<uint32_t> switchIndirectVertexCounts;
+    static thread_local std::vector<const srfTriangles_t *> switchIndirectSurfaces;
 #endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
@@ -867,7 +880,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
     const GfxBspPreTessDrawSurf *list; // [esp+14h] [ebp-18h] BYREF
     uint32_t reflectionProbeIndex; // [esp+18h] [ebp-14h]
     const GfxSurface *bspSurf; // [esp+1Ch] [ebp-10h]
-    uint32_t index; // [esp+20h] [ebp-Ch]
+    uint32_t index; // [esp+20h] [ebp-18h]
     uint32_t lightmapIndex; // [esp+24h] [ebp-8h]
     uint32_t count; // [esp+28h] [ebp-4h] BYREF
 
@@ -881,27 +894,84 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         reflectionProbeIndex = 255;
         lightmapIndex = 31;
 #ifdef __SWITCH__
-        // The non-pre-tess BSP lit path already batches adjacent surfaces when
-        // their vertex stream, lightmap and reflection probe are unchanged.
-        // Apply the same rules here: pre-tess indices for a list are contiguous,
-        // so compatible neighboring surfaces can be submitted as one draw.
         const srfTriangles_t *batchTris = nullptr;
         const GfxSurface *batchBspSurf = nullptr;
         uint32_t batchBspSurfIndex = UINT32_MAX;
         uint32_t batchBaseIndex = baseIndex;
-        uint32_t batchTriCount = 0;
+        uint32_t batchTriCount = 0u;
+        switchIndirectDraws.clear();
+        switchIndirectVertexCounts.clear();
+        switchIndirectSurfaces.clear();
+        if (switchUseIndirectDraw)
+        {
+            if (switchIndirectDraws.capacity() < count)
+                switchIndirectDraws.reserve(count);
+            if (switchIndirectVertexCounts.capacity() < count)
+                switchIndirectVertexCounts.reserve(count);
+            if (switchIndirectSurfaces.capacity() < count)
+                switchIndirectSurfaces.reserve(count);
+        }
+
         auto flushBatch = [&]()
         {
             if (!batchTris)
                 return;
-            R_SwitchDrawPreTessTrisAudited(
-                &context.state->prim, batchTris, batchBaseIndex, batchTriCount,
-                batchBspSurf, batchBspSurfIndex,
-                context.state->technique, context.state->pass);
+
+            bool submittedIndirect = false;
+            if (switchUseIndirectDraw && switchIndirectDraws.size() > 1u)
+            {
+                R_SetStreamsForBspSurface(&context.state->prim, batchTris);
+                const HRESULT drawResult =
+                    context.state->prim.device->DrawIndexedPrimitiveIndirect(
+                        switchIndirectDraws.data(),
+                        switchIndirectVertexCounts.data(),
+                        static_cast<uint32_t>(switchIndirectDraws.size()));
+                if (drawResult == S_OK)
+                {
+                    for (const VkDrawIndexedIndirectCommand &draw : switchIndirectDraws)
+                        RB_TrackDrawPrimCall(static_cast<int>(draw.indexCount / 3u));
+                    g_frameStatsCur.geoIndexCount += 3 * batchTriCount;
+                    iassert(g_primStats);
+                    g_primStats->dynamicIndexCount += 3 * batchTriCount;
+                    submittedIndirect = true;
+                }
+            }
+
+            if (!submittedIndirect)
+            {
+                if (switchRenderAuditEnabled)
+                {
+                    R_SwitchDrawPreTessTrisAudited(
+                        &context.state->prim, batchTris, batchBaseIndex, batchTriCount,
+                        batchBspSurf, batchBspSurfIndex,
+                        context.state->technique, context.state->pass);
+                }
+                else if (switchUseIndirectDraw && switchIndirectDraws.size() > 1u)
+                {
+                    for (size_t drawIndex = 0;
+                         drawIndex < switchIndirectDraws.size(); ++drawIndex)
+                    {
+                        R_DrawPreTessTris(
+                            &context.state->prim,
+                            switchIndirectSurfaces[drawIndex],
+                            switchIndirectDraws[drawIndex].firstIndex,
+                            switchIndirectDraws[drawIndex].indexCount / 3u);
+                    }
+                }
+                else
+                {
+                    R_DrawPreTessTris(
+                        &context.state->prim, batchTris, batchBaseIndex, batchTriCount);
+                }
+            }
+
             batchTris = nullptr;
             batchBspSurf = nullptr;
             batchBspSurfIndex = UINT32_MAX;
-            batchTriCount = 0;
+            batchTriCount = 0u;
+            switchIndirectDraws.clear();
+            switchIndirectVertexCounts.clear();
+            switchIndirectSurfaces.clear();
         };
 #endif
         for (index = 0; index < count; ++index)
@@ -926,8 +996,38 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 reflectionProbeIndex == bspSurf->reflectionProbeIndex &&
                 lightmapIndex == bspSurf->lightmapIndex;
 
-            // Flush before changing any state used by the pending draw.
-            if (batchTris && (!sameVertexStream || !sameLighting))
+            bool compatibleIndirectVertexOffset = false;
+            if (switchUseIndirectDraw && batchTris && sameLighting &&
+                tris->firstVertex >= batchTris->firstVertex)
+            {
+                const uint64_t vertexDelta =
+                    static_cast<uint64_t>(tris->firstVertex) -
+                    static_cast<uint64_t>(batchTris->firstVertex);
+                if (vertexDelta <= static_cast<uint64_t>(INT32_MAX))
+                {
+                    const uint32_t layerStride =
+                        static_cast<uint32_t>(g_layerDataStride[context.state->vertDeclType]);
+                    compatibleIndirectVertexOffset = true;
+                    if (layerStride)
+                    {
+                        const int64_t expectedLayerOffset =
+                            static_cast<int64_t>(batchTris->vertexLayerData) +
+                            static_cast<int64_t>(vertexDelta) *
+                                static_cast<int64_t>(layerStride);
+                        compatibleIndirectVertexOffset =
+                            expectedLayerOffset ==
+                            static_cast<int64_t>(tris->vertexLayerData);
+                    }
+                }
+            }
+
+            // A Vulkan indirect vertexOffset affects every binding. Keep the
+            // group only when stream 1 follows the same vertexOffset as stream 0.
+            if (batchTris &&
+                (!sameLighting ||
+                 (switchUseIndirectDraw
+                     ? !compatibleIndirectVertexOffset
+                     : !sameVertexStream)))
                 flushBatch();
 
             if (!sameLighting)
@@ -953,6 +1053,45 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     bspSurf, surfIndex, list[index].totalTriCount,
                     context.state->technique, context.state->pass,
                     context.state->passIndex);
+
+            if (switchUseIndirectDraw)
+            {
+                VkDrawIndexedIndirectCommand draw{};
+                draw.indexCount = 3u * list[index].totalTriCount;
+                draw.instanceCount = 1u;
+                draw.firstIndex = baseIndex;
+                draw.vertexOffset = static_cast<int32_t>(
+                    static_cast<int64_t>(tris->firstVertex) -
+                    static_cast<int64_t>(batchTris->firstVertex));
+                draw.firstInstance = 0u;
+
+                if (!switchIndirectDraws.empty())
+                {
+                    VkDrawIndexedIndirectCommand &previous = switchIndirectDraws.back();
+                    const bool sameVertexRange =
+                        previous.vertexOffset == draw.vertexOffset &&
+                        switchIndirectVertexCounts.back() == tris->vertexCount;
+                    const uint64_t previousEnd =
+                        static_cast<uint64_t>(previous.firstIndex) + previous.indexCount;
+                    if (sameVertexRange && previousEnd == draw.firstIndex &&
+                        draw.indexCount <= UINT32_MAX - previous.indexCount)
+                    {
+                        previous.indexCount += draw.indexCount;
+                    }
+                    else
+                    {
+                        switchIndirectDraws.emplace_back(draw);
+                        switchIndirectVertexCounts.emplace_back(tris->vertexCount);
+                        switchIndirectSurfaces.emplace_back(tris);
+                    }
+                }
+                else
+                {
+                    switchIndirectDraws.emplace_back(draw);
+                    switchIndirectVertexCounts.emplace_back(tris->vertexCount);
+                    switchIndirectSurfaces.emplace_back(tris);
+                }
+            }
             batchTriCount += list[index].totalTriCount;
 #else
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
