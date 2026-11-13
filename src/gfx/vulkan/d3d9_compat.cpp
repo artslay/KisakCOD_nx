@@ -5097,11 +5097,11 @@ HRESULT KisakVkBuffer::Unlock()
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
         VulkanBackend *backend = GetVulkanBackend();
-        // NOOVERWRITE is a promise made by the CPU-side allocator, not proof
-        // that an earlier Vulkan submission has finished reading the bytes.
-        // The frontend can be preparing frame N+1 while the GPU still consumes
-        // frame N, so publish these writes as ordered buffer copies instead of
-        // touching HOST_VISIBLE vertex/index storage directly.
+        // NOOVERWRITE promises that this range is not referenced by earlier
+        // draws in the current frame, but does not prove that a previous frame
+        // has finished reading the allocation. Only streams tagged to the
+        // current, fence-completed frame slot use mapped writes; all other
+        // dynamic buffers retain the ordered GPU-copy path.
         const bool frameSlotNoOverwrite =
             (lockFlags & D3DLOCK_NOOVERWRITE) != 0 &&
             frameSlotSerial != 0 &&
