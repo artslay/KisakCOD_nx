@@ -23,7 +23,11 @@
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdlib>
+#include <cstdio>
+#include <algorithm>
 #include <universal/timing.h>
+#include <platform/switch/switch_perf_diag.h>
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 void(__cdecl *g_cmdExecFailed[WRKCMD_COUNT])();
@@ -61,7 +65,15 @@ struct alignas(64) SwitchStaticDpvsPerfBucket
 };
 
 SwitchStaticDpvsPerfBucket s_switchStaticDpvsPerf[4];
-
+struct SwitchWorkerCommandDiag{
+ std::atomic<uint64_t> queued{0},inlineExecutions{0},overflows{0},queuePeak{0};
+ std::atomic<uint64_t> blocked[4]{},executed[4]{},elapsedNs[4]{},maxNs[4]{},inlineBusyWaitNs[4]{};
+};
+SwitchWorkerCommandDiag s_switchWorkerCommandDiag[WRKCMD_COUNT];
+static void Switch_WorkerDiagMax(std::atomic<uint64_t>&target,uint64_t value){
+ uint64_t old=target.load(std::memory_order_relaxed);
+ while(old<value&&!target.compare_exchange_weak(old,value,std::memory_order_relaxed,std::memory_order_relaxed)){}
+}
 static bool Switch_IsStaticDpvsPerfEnabled()
 {
     // Per-cell clock reads and atomic counters are diagnostic only. Keep the
@@ -296,9 +308,11 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
         {
             startPos = workerCmds->startPos;
             memcpy(data, &workerCmds->buf[dataSize * startPos], dataSize);
-            if (g_cmdOutputBusy[type](data))
-            {
-                InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 1);
+            if(g_cmdOutputBusy[type](data)){
+#ifdef __SWITCH__
+                if(Switch_PerfDiagEnabled()){const uint32_t e=std::min<uint32_t>(Sys_GetSwitchThreadContext(),3u);s_switchWorkerCommandDiag[type].blocked[e].fetch_add(1,std::memory_order_relaxed);}
+#endif
+                InterlockedExchangeAdd((LONG*)&workerCmds->outSize,1);
                 return 0;
             }
             newStartPos = startPos + 1;
@@ -358,6 +372,11 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
 
 void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
 {
+#ifdef __SWITCH__
+    const bool switchDiag=Switch_PerfDiagEnabled();
+    const uint32_t executor=switchDiag?std::min<uint32_t>(Sys_GetSwitchThreadContext(),3u):0u;
+    const uint64_t switchStart=switchDiag?Kisak_RawTimerTicks():0u;
+#endif
     R_NotifyWorkerCmdType(type);
     switch (type)
     {
@@ -448,7 +467,43 @@ void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
         }
         break;
     }
+#ifdef __SWITCH__
+    if(switchDiag&&type>=0&&type<WRKCMD_COUNT){
+        const uint64_t ns=Kisak_RawTimerTicks()-switchStart;
+        SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];
+        d.executed[executor].fetch_add(1,std::memory_order_relaxed);
+        d.elapsedNs[executor].fetch_add(ns,std::memory_order_relaxed);
+        Switch_WorkerDiagMax(d.maxNs[executor],ns);
+    }
+#endif
 }
+
+#ifdef __SWITCH__
+extern "C" void Switch_LogWorkerDiagSummary(){
+ if(!Switch_PerfDiagEnabled())return;
+ static const char*const names[WRKCMD_COUNT]={"fx_spot","fx_nondep","fx_rest","dpvs_static","dpvs_scene","dpvs_model","dpvs_brush","dpvs_entity","scene_ent","spot_shadow","shadow_cookie","bounds","skin_ent","fx_verts","mark_verts","skin_static","skin_xmodel"};
+ static const char*const roles[4]={"m","b","w0","w1"};
+ char line[2048];
+ for(uint32_t group=0;group<3;++group){
+  size_t used=(size_t)std::snprintf(line,sizeof(line),"[KisakCOD][VK FRAME TIMING] worker_group=%u{",group);
+  bool any=false;const uint32_t first=group*6u,last=std::min<uint32_t>(first+6u,WRKCMD_COUNT);
+  for(uint32_t type=first;type<last;++type){
+   SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];
+   const uint64_t q=d.queued.exchange(0,std::memory_order_acq_rel),inl=d.inlineExecutions.exchange(0,std::memory_order_acq_rel),ovf=d.overflows.exchange(0,std::memory_order_acq_rel),peak=d.queuePeak.exchange(0,std::memory_order_acq_rel);
+   const uint64_t pubNs=d.publishWaitNs.exchange(0,std::memory_order_acq_rel),pubSpins=d.publishSpinIterations.exchange(0,std::memory_order_acq_rel),pubYields=d.publishSleepYields.exchange(0,std::memory_order_acq_rel);
+   const LONG currentIn=g_workerCmds[type].inSize,currentOut=g_workerCmds[type].outSize;
+   uint64_t blocked[4]={},executed[4]={},elapsed[4]={},maxNs[4]={},busyNs[4]={};
+   for(uint32_t r=0;r<4;++r){blocked[r]=d.blocked[r].exchange(0,std::memory_order_acq_rel);executed[r]=d.executed[r].exchange(0,std::memory_order_acq_rel);elapsed[r]=d.elapsedNs[r].exchange(0,std::memory_order_acq_rel);maxNs[r]=d.maxNs[r].exchange(0,std::memory_order_acq_rel);busyNs[r]=d.inlineBusyWaitNs[r].exchange(0,std::memory_order_acq_rel);}
+   if(!q&&!inl&&!ovf&&!executed[0]&&!executed[1]&&!executed[2]&&!executed[3]&&!pubSpins)continue;
+   if(used<sizeof(line))used+=(size_t)std::snprintf(line+used,sizeof(line)-used,"%s%s q=%llu i=%llu o=%llu peak=%llu cur=%ld/%ld pub=%.2fms/%llu/%llu ",
+    any?";":"",names[type],(unsigned long long)q,(unsigned long long)inl,(unsigned long long)ovf,(unsigned long long)peak,(long)currentIn,(long)currentOut,(double)pubNs/1.0e6,(unsigned long long)pubSpins,(unsigned long long)pubYields);
+   any=true;
+   for(uint32_t r=0;r<4&&used<sizeof(line);++r)used+=(size_t)std::snprintf(line+used,sizeof(line)-used,"%s=%llu/%.2f/%.2f/b%llu/w%.2f%s",roles[r],(unsigned long long)executed[r],(double)elapsed[r]/1.0e6,(double)maxNs[r]/1.0e6,(unsigned long long)blocked[r],(double)busyNs[r]/1.0e6,r==3?"":" ");
+  }
+  if(any){if(used<sizeof(line))std::snprintf(line+used,sizeof(line)-used,"}");Switch_LogWrite(line);}
+ }
+}
+#endif
 
 void R_InitWorkerThreads()
 {
@@ -612,9 +667,12 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
         bufSize = workerCmds->bufSize;
         bufCount = workerCmds->bufCount;
         iassert( !(bufSize % dataSize ) );
-        if (InterlockedExchangeAdd((LONG*)&workerCmds->inSize, 1) < bufCount)
-        {
-            endPos = InterlockedExchangeAdd((LONG*)&workerCmds->endPos, dataSize) % bufSize;
+        const LONG previousInSize=InterlockedExchangeAdd((LONG*)&workerCmds->inSize,1);
+        if(previousInSize<bufCount){
+#ifdef __SWITCH__
+            if(Switch_PerfDiagEnabled()){SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];d.queued.fetch_add(1,std::memory_order_relaxed);Switch_WorkerDiagMax(d.queuePeak,(uint64_t)(previousInSize+1));}
+#endif
+            endPos = InterlockedExchangeAdd((LONG*)&workerCmds->endPos,dataSize)%bufSize;
             iassert( (endPos >= 0) );
             if (!endPos)
                 InterlockedExchangeAdd((LONG*)&workerCmds->endPos, -bufSize);
@@ -622,6 +680,11 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
             Destination = (LONG*)&workerCmds->syncedEndPos;
 #ifdef KISAK_SWITCH
             uint32_t publishWaitSpins = 0;
+#endif
+#ifdef __SWITCH__
+            const bool measurePublishWait=Switch_PerfDiagEnabled();
+            const uint64_t publishWaitStart=measurePublishWait?Kisak_RawTimerTicks():0u;
+            uint32_t publishSleepYields=0;
 #endif
             for (;;)
             {
@@ -634,36 +697,47 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
                     // A producer can be descheduled after reserving an earlier
                     // ring slot. Let that producer run instead of keeping a
                     // worker core spinning at full speed behind it.
-                    if ((++publishWaitSpins & 0x3ffu) == 0)
-                        Sys_Sleep(1);
+                    if((++publishWaitSpins&0x3ffu)==0){Sys_Sleep(1);
+#ifdef __SWITCH__
+                        if(measurePublishWait)++publishSleepYields;
+#endif
+                    }
 #endif
                 }
 
-                if (InterlockedCompareExchange(
-                        Destination,
-                        (dataSize + endPos) % bufSize,
-                        endPos) == endPos)
-                    break;
+                if(InterlockedCompareExchange(Destination,(dataSize+endPos)%bufSize,endPos)==endPos)break;
             }
-            InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 1);
+#ifdef __SWITCH__
+            if(measurePublishWait){SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];d.publishWaitNs.fetch_add(Kisak_RawTimerTicks()-publishWaitStart,std::memory_order_relaxed);d.publishSpinIterations.fetch_add(publishWaitSpins,std::memory_order_relaxed);d.publishSleepYields.fetch_add(publishSleepYields,std::memory_order_relaxed);}
+#endif
+            InterlockedExchangeAdd((LONG*)&workerCmds->outSize,1);
             R_NotifyWorkerCmdType(type);
             return;
         }
-        if (type != WRKCMD_SKIN_CACHED_STATICMODEL)
-            R_WarnOncePerFrame(R_WARN_WORKER_CMD_SIZE, type);
-        InterlockedExchangeAdd((LONG*)&workerCmds->inSize, -1);
+#ifdef __SWITCH__
+        if(Switch_PerfDiagEnabled())s_switchWorkerCommandDiag[type].overflows.fetch_add(1,std::memory_order_relaxed);
+#endif
+        if(type!=WRKCMD_SKIN_CACHED_STATICMODEL)R_WarnOncePerFrame(R_WARN_WORKER_CMD_SIZE,type);
+        InterlockedExchangeAdd((LONG*)&workerCmds->inSize,-1);
     }
-
+#ifdef __SWITCH__
+    if(Switch_PerfDiagEnabled())s_switchWorkerCommandDiag[type].inlineExecutions.fetch_add(1,std::memory_order_relaxed);
+#endif
     {
         PROF_SCOPED("WaitWorkerCmds");
-        if (g_cmdOutputBusy[type])
-        {
-            while (g_cmdOutputBusy[type](data))
-                NET_Sleep(1);
+        if(g_cmdOutputBusy[type]){
+#ifdef __SWITCH__
+            const bool measureWait=Switch_PerfDiagEnabled();
+            const uint32_t executor=measureWait?std::min<uint32_t>(Sys_GetSwitchThreadContext(),3u):0u;
+            const uint64_t busyStart=measureWait?Kisak_RawTimerTicks():0u;
+#endif
+            while(g_cmdOutputBusy[type](data))NET_Sleep(1);
+#ifdef __SWITCH__
+            if(measureWait)s_switchWorkerCommandDiag[type].inlineBusyWaitNs[executor].fetch_add(Kisak_RawTimerTicks()-busyStart,std::memory_order_relaxed);
+#endif
         }
     }
-
-    R_ProcessWorkerCmdInternal(type, data);
+    R_ProcessWorkerCmdInternal(type,data);
 }
 
 void __cdecl R_UpdateActiveWorkerThreads()

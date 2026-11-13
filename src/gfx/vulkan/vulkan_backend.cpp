@@ -19,6 +19,7 @@ extern bool R_RecoverLostVulkanDevice();
 
 #include <switch.h>
 #include "../../platform/switch/switch_saltynx.h"
+#include "../../platform/switch/switch_perf_diag.h"
 
 #include <gfx_d3d/r_init.h>
 #include <gfx_d3d/r_dvars.h>
@@ -413,6 +414,8 @@ void Switch_RecordFrameCpuEnd()
         static_cast<unsigned long long>(presentCalls),
         averageMs(presentNs, presentCalls), maximumMs(presentMaxNs));
     Switch_LogWrite(message);
+    Switch_LogThreadDiagSummary();
+    Switch_LogWorkerDiagSummary();
 }
 #endif
 

@@ -43,6 +43,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <platform/switch/switch_perf_diag.h>
 #endif
 
 #include <setjmp.h>
@@ -1992,8 +1993,8 @@ void __cdecl Com_Frame_Try_Block_Function()
     int maxFPS; // [esp+78h] [ebp-4h] BYREF
 
     iassert(cmd_args.nesting == -1);
-
 #ifdef __SWITCH__
+    SwitchPerfDiagScope switchFrameDiag(SWITCH_MAIN_FRAME_TOTAL);
     g_switchFrameStage = "frame/write_config";
 #endif
     Com_WriteConfiguration(0);
@@ -2062,7 +2063,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/maxfps/event_loop";
 #endif
-            Com_EventLoop();
+            {
+#ifdef __SWITCH__
+                SwitchPerfDiagScope switchEventDiag(SWITCH_MAIN_EVENT_LOOP);
+#endif
+                Com_EventLoop();
+            }
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/maxfps/time";
 #endif
@@ -2072,7 +2078,12 @@ void __cdecl Com_Frame_Try_Block_Function()
             msec = com_frameTime - com_lastFrameTime[lastFrameIndex];
             if (msec >= minMsec)
                 break;
-            NET_Sleep(1);
+            {
+#ifdef __SWITCH__
+                SwitchPerfDiagScope switchPaceDiag(SWITCH_MAIN_FRAME_PACING_SLEEP);
+#endif
+                NET_Sleep(1);
+            }
         }
         com_lastFrameTime[lastFrameIndex] = com_frameTime;
     }
@@ -2086,7 +2097,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/maxfps/event_loop";
 #endif
-            Com_EventLoop();
+            {
+#ifdef __SWITCH__
+                SwitchPerfDiagScope switchEventDiag(SWITCH_MAIN_EVENT_LOOP);
+#endif
+                Com_EventLoop();
+            }
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/maxfps/time";
 #endif
@@ -2099,7 +2115,12 @@ void __cdecl Com_Frame_Try_Block_Function()
             // ever waiting for that interval to elapse.
             if (com_frameTime - com_lastFrameTime[lastFrameIndex] >= minMsec)
                 break;
-            NET_Sleep(1);
+            {
+#ifdef __SWITCH__
+                SwitchPerfDiagScope switchPaceDiag(SWITCH_MAIN_FRAME_PACING_SLEEP);
+#endif
+                NET_Sleep(1);
+            }
         }
 
         int v4;
@@ -2116,7 +2137,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cbuf_execute";
 #endif
-    Cbuf_Execute(0, CL_ControllerIndexFromClientNum(0));
+    {
+#ifdef __SWITCH__
+        SwitchPerfDiagScope switchCommandsDiag(SWITCH_MAIN_COMMANDS);
+#endif
+        Cbuf_Execute(0, CL_ControllerIndexFromClientNum(0));
+    }
     iassert(msec > 0);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/modify_msec";
@@ -2126,7 +2152,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/sv_frame";
 #endif
-    msec = SV_Frame(msec);
+    {
+#ifdef __SWITCH__
+        SwitchPerfDiagScope switchServerDiag(SWITCH_MAIN_SERVER);
+#endif
+        msec = SV_Frame(msec);
+    }
 
 #ifdef KISAK_MP
     Com_DedicatedModified();
@@ -2137,6 +2168,9 @@ void __cdecl Com_Frame_Try_Block_Function()
         R_SetEndTime(com_lastFrameTime[lastFrameIndex]);
 
         {
+#ifdef __SWITCH__
+            SwitchPerfDiagScope switchPreframeDiag(SWITCH_MAIN_PREFRAME);
+#endif
             PROF_SCOPED("pre frame");
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_run_once";
@@ -2145,7 +2179,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/preframe_event_loop/before";
 #endif
-            Com_EventLoop();
+            {
+#ifdef __SWITCH__
+                SwitchPerfDiagScope switchEventDiag(SWITCH_MAIN_EVENT_LOOP);
+#endif
+                Com_EventLoop();
+            }
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/preframe_event_loop/after";
 #endif
@@ -2183,6 +2222,7 @@ void __cdecl Com_Frame_Try_Block_Function()
 
         {
 #ifdef __SWITCH__
+            SwitchPerfDiagScope switchClientDiag(SWITCH_MAIN_CLIENT);
             g_switchFrameStage = "frame/cl_frame";
 #endif
             PROF_SCOPED("CL_Frame");
@@ -2201,11 +2241,21 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr_update_screen";
 #endif
-        SCR_UpdateScreen();
+        {
+#ifdef __SWITCH__
+            SwitchPerfDiagScope switchScreenDiag(SWITCH_MAIN_SCREEN);
+#endif
+            SCR_UpdateScreen();
+        }
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/ragdoll";
 #endif
-        Ragdoll_Update(msec);
+        {
+#ifdef __SWITCH__
+            SwitchPerfDiagScope switchRagdollDiag(SWITCH_MAIN_RAGDOLL);
+#endif
+            Ragdoll_Update(msec);
+        }
         iassert(Sys_IsMainThread());
 #ifdef KISAK_SP
         //SCR_UpdateRumble(); // KISAKTODO
@@ -2222,7 +2272,12 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/wait_end";
 #endif
-        R_WaitEndTime();
+        {
+#ifdef __SWITCH__
+            SwitchPerfDiagScope switchEndWaitDiag(SWITCH_MAIN_END_WAIT);
+#endif
+            R_WaitEndTime();
+        }
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/try_block_done";
 #endif
@@ -2427,7 +2482,12 @@ void __cdecl Com_CheckSyncFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/check_sync/db_update";
 #endif
-    DB_Update();
+    {
+#ifdef __SWITCH__
+        SwitchPerfDiagScope switchDbDiag(SWITCH_MAIN_DB_UPDATE);
+#endif
+        DB_Update();
+    }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/check_sync/done";
 #endif
@@ -2435,6 +2495,9 @@ void __cdecl Com_CheckSyncFrame()
 
 void __cdecl Com_Frame()
 {
+#ifdef __SWITCH__
+    SwitchPerfDiagScope switchComFrameDiag(SWITCH_MAIN_COM_FRAME_TOTAL);
+#endif
 #ifdef TRACY_ENABLE
     TracyCFrameMarkStart("Com_Frame");
 #endif

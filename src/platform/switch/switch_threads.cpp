@@ -2,10 +2,13 @@
 #include <universal/q_shared.h>
 #include <qcommon/threads.h>
 #include <qcommon/qcommon.h>
+#include "switch_perf_diag.h"
+#include <universal/timing.h>
 #include <gfx_d3d/rb_drawprofile.h>
 #include <gfx_d3d/r_init.h>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -41,6 +44,45 @@ struct SwitchEvent {
 };
 
 extern void Switch_LogWrite(const char *msg);
+static int32_t Switch_GetThreadAffinityCoreIndex(ThreadContext_t context,WinThreadLock threadLock);
+namespace {
+struct SwitchDiagCounter {
+ std::atomic<uint64_t> calls{0},totalNs{0},maxNs{0};
+ void Add(uint64_t ns){calls.fetch_add(1,std::memory_order_relaxed);totalNs.fetch_add(ns,std::memory_order_relaxed);uint64_t old=maxNs.load(std::memory_order_relaxed);while(old<ns&&!maxNs.compare_exchange_weak(old,ns,std::memory_order_relaxed,std::memory_order_relaxed)){}}
+ void Take(uint64_t*c,uint64_t*t,uint64_t*m){*c=calls.exchange(0,std::memory_order_acq_rel);*t=totalNs.exchange(0,std::memory_order_acq_rel);*m=maxNs.exchange(0,std::memory_order_acq_rel);}
+};
+SwitchDiagCounter g_switchMainFrameStages[SWITCH_MAIN_FRAME_STAGE_COUNT],g_switchWorkerCommandWait[4],g_switchSuspendGateWait[THREAD_CONTEXT_COUNT];
+SwitchDiagCounter g_switchMainOwnershipWait,g_switchFrontendRunningWait,g_switchFrontendPausedWait;
+}
+extern "C" bool Switch_PerfDiagEnabled(){static const bool enabled=[](){const char*v=std::getenv("KISAK_SWITCH_PERF_DIAG");return v&&v[0]=='1'&&v[1]==0;}();return enabled;}
+extern "C" void Switch_RecordMainFrameStage(uint32_t stage,uint64_t ns){if(Switch_PerfDiagEnabled()&&stage<SWITCH_MAIN_FRAME_STAGE_COUNT)g_switchMainFrameStages[stage].Add(ns);}
+extern "C" void Switch_LogThreadDiagSummary(){
+ if(!Switch_PerfDiagEnabled())return;
+ static const char*const names[SWITCH_MAIN_FRAME_STAGE_COUNT]={"com","frame","event","pace","cmd","sv","pre","cl","screen","rag","endwait","db"};
+ uint64_t c[SWITCH_MAIN_FRAME_STAGE_COUNT]={},t[SWITCH_MAIN_FRAME_STAGE_COUNT]={},m[SWITCH_MAIN_FRAME_STAGE_COUNT]={};
+ for(uint32_t i=0;i<SWITCH_MAIN_FRAME_STAGE_COUNT;++i)g_switchMainFrameStages[i].Take(&c[i],&t[i],&m[i]);
+ const uint64_t frames=c[SWITCH_MAIN_FRAME_TOTAL]?c[SWITCH_MAIN_FRAME_TOTAL]:1;
+ char line[2048];size_t used=(size_t)std::snprintf(line,sizeof(line),"[KisakCOD][VK FRAME TIMING] cpu_window frames=%llu stages{",(unsigned long long)frames);
+ for(uint32_t i=0;i<SWITCH_MAIN_FRAME_STAGE_COUNT&&used<sizeof(line);++i)used+=(size_t)std::snprintf(line+used,sizeof(line)-used,"%s%s=%llu/%.2f/%.2f",i?",":"",names[i],(unsigned long long)c[i],(double)t[i]/(double)frames/1.0e6,(double)m[i]/1.0e6);
+ if(used<sizeof(line))std::snprintf(line+used,sizeof(line)-used,"} avg_ms_per_frame");
+ Switch_LogWrite(line);
+ uint64_t wc[4]={},wt[4]={},wm[4]={},sc[4]={},st[4]={},sm[4]={};
+ for(uint32_t i=0;i<4;++i){g_switchWorkerCommandWait[i].Take(&wc[i],&wt[i],&wm[i]);if(i<THREAD_CONTEXT_COUNT)g_switchSuspendGateWait[i].Take(&sc[i],&st[i],&sm[i]);}
+ uint64_t oc=0,ot=0,om=0,rc=0,rt=0,rm=0,pc=0,pt=0,pm=0;
+ g_switchMainOwnershipWait.Take(&oc,&ot,&om);g_switchFrontendRunningWait.Take(&rc,&rt,&rm);g_switchFrontendPausedWait.Take(&pc,&pt,&pm);
+ const WinThreadLock lock=s_threadLock.load(std::memory_order_acquire);
+ const int mc=Switch_GetThreadAffinityCoreIndex(THREAD_CONTEXT_MAIN,lock),bc=Switch_GetThreadAffinityCoreIndex(THREAD_CONTEXT_BACKEND,lock),w0c=Switch_GetThreadAffinityCoreIndex(THREAD_CONTEXT_WORKER0,lock),w1c=Switch_GetThreadAffinityCoreIndex(THREAD_CONTEXT_WORKER1,lock);
+ auto mask=[](int i)->uint32_t{return i>=0&&(uint32_t)i<s_cpuCount?s_affinityMaskForCpu[(uint32_t)i]:s_affinityMaskForProcess;};
+ char waits[2048];
+ std::snprintf(waits,sizeof(waits),"[KisakCOD][VK FRAME TIMING] cpu_wait frames=%llu mask=0x%x lock=%u aff{m=0x%x,b=0x%x,w0=0x%x,w1=0x%x} alive{b=%u,w0=%u,w1=%u} cmdwait{m=%llu:%.2f/%.2f,b=%llu:%.2f/%.2f,w0=%llu:%.2f/%.2f,w1=%llu:%.2f/%.2f} suspend{w0=%llu:%.2f/%.2f,w1=%llu:%.2f/%.2f} renderwait{own=%llu:%.2f/%.2f,run=%llu:%.2f/%.2f,pause=%llu:%.2f/%.2f}",
+  (unsigned long long)frames,s_affinityMaskForProcess,(unsigned)lock,mask(mc),mask(bc),mask(w0c),mask(w1c),
+  (unsigned)g_threadAlive[THREAD_CONTEXT_BACKEND].load(std::memory_order_relaxed),(unsigned)g_threadAlive[THREAD_CONTEXT_WORKER0].load(std::memory_order_relaxed),(unsigned)g_threadAlive[THREAD_CONTEXT_WORKER1].load(std::memory_order_relaxed),
+  (unsigned long long)wc[0],(double)wt[0]/frames/1.0e6,(double)wm[0]/1.0e6,(unsigned long long)wc[1],(double)wt[1]/frames/1.0e6,(double)wm[1]/1.0e6,
+  (unsigned long long)wc[2],(double)wt[2]/frames/1.0e6,(double)wm[2]/1.0e6,(unsigned long long)wc[3],(double)wt[3]/frames/1.0e6,(double)wm[3]/1.0e6,
+  (unsigned long long)sc[2],(double)st[2]/frames/1.0e6,(double)sm[2]/1.0e6,(unsigned long long)sc[3],(double)st[3]/frames/1.0e6,(double)sm[3]/1.0e6,
+  (unsigned long long)oc,(double)ot/frames/1.0e6,(double)om/1.0e6,(unsigned long long)rc,(double)rt/frames/1.0e6,(double)rm/1.0e6,(unsigned long long)pc,(double)pt/frames/1.0e6,(double)pm/1.0e6);
+ Switch_LogWrite(waits);
+}
 
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
@@ -159,7 +201,10 @@ static void WaitForThreadResume(ThreadContext_t context)
 
     SwitchThreadControl &control = g_threadControl[context];
     std::unique_lock<std::mutex> lock(control.mutex);
+    const bool measureWait=Switch_PerfDiagEnabled()&&control.suspended;
+    const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
     control.cv.wait(lock, [&] { return !control.suspended; });
+    if(measureWait)g_switchSuspendGateWait[context].Add(Kisak_RawTimerTicks()-waitStart);
 }
 
 static uint32_t ThreadId()
@@ -720,10 +765,11 @@ void __cdecl Sys_WaitForWorkerCmd()
     if (isWorker)
         WaitForThreadResume(g_threadContext);
 
-    WaitSwitchEvent(g_workerCmdEvent, 1);
-
-    if (isWorker)
-        WaitForThreadResume(g_threadContext);
+    const bool measureWait=Switch_PerfDiagEnabled()&&(uint32_t)g_threadContext<4u;
+    const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
+    WaitSwitchEvent(g_workerCmdEvent,1);
+    if(measureWait)g_switchWorkerCommandWait[(uint32_t)g_threadContext].Add(Kisak_RawTimerTicks()-waitStart);
+    if(isWorker)WaitForThreadResume(g_threadContext);
 }
 void __cdecl Sys_SetUpdateSpotLightEffectEvent()
 {
@@ -790,8 +836,10 @@ void __cdecl Sys_ReleaseThreadOwnership()
 void __cdecl Sys_WaitForMainThread()
 {
     std::unique_lock<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
-    g_noThreadOwnershipEvent.cv.wait(
-        lock, [] { return g_noThreadOwnershipEvent.signaled; });
+    const bool measureWait=Switch_PerfDiagEnabled();
+    const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
+    g_noThreadOwnershipEvent.cv.wait(lock,[] { return g_noThreadOwnershipEvent.signaled; });
+    if(measureWait)g_switchMainOwnershipWait.Add(Kisak_RawTimerTicks()-waitStart);
 }
 int __cdecl Sys_IsMainThreadReady()
 {
@@ -843,8 +891,10 @@ void __cdecl Sys_FrontEndSleep()
 
     {
         std::unique_lock<std::mutex> lock(g_rendererRunningEvent.mutex);
-        g_rendererRunningEvent.cv.wait(
-            lock, [] { return g_rendererRunningEvent.signaled; });
+        const bool measureWait=Switch_PerfDiagEnabled();
+        const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
+        g_rendererRunningEvent.cv.wait(lock,[] { return g_rendererRunningEvent.signaled; });
+        if(measureWait)g_switchFrontendRunningWait.Add(Kisak_RawTimerTicks()-waitStart);
     }
 
     {
@@ -854,7 +904,10 @@ void __cdecl Sys_FrontEndSleep()
 
     SetSwitchEvent(g_backendEvent[1]);
     --g_renderPausedCount;
-    WaitSwitchEvent(g_renderPausedEvent, UINT32_MAX - 1);
+    const bool measureWait=Switch_PerfDiagEnabled();
+    const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
+    WaitSwitchEvent(g_renderPausedEvent,UINT32_MAX-1);
+    if(measureWait)g_switchFrontendPausedWait.Add(Kisak_RawTimerTicks()-waitStart);
 }
 void __cdecl Sys_WakeRenderer(void *data)
 {
