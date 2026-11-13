@@ -88,10 +88,11 @@ struct SwitchFrontendFenceWaitStat
     uint64_t maxNs = 0;
 };
 
-// Pool bits: 0 = skinning/pre-tess, 1 = backend-data mesh, 2 = view-info mesh.
-// A shared fence is measured once and attributed to the exact set of pools it protects.
+// Pool bits identify each double-buffered frontend ring independently:
+// skinning/pre-tess 0-1, backend-data mesh 2-3, and view-info mesh 4-5.
+// A shared fence is measured once and attributed to the exact set of pool indices it protects.
 SwitchFrontendFenceWaitStat
-    s_switchFrontendFenceWaitStats[2][VulkanBackend::FramesInFlight][8]{};
+    s_switchFrontendFenceWaitStats[2][VulkanBackend::FramesInFlight][64]{};
 uint32_t s_switchFrontendFenceWaitFrames = 0;
 
 void Switch_RecordFrontendFenceWait(
@@ -100,7 +101,7 @@ void Switch_RecordFrontendFenceWait(
     const uint32_t phaseIndex = static_cast<uint32_t>(phase);
     if (phaseIndex >= 2u ||
         frameSlot >= VulkanBackend::FramesInFlight ||
-        poolMask == 0u || poolMask >= 8u)
+        poolMask == 0u || poolMask >= 64u)
         return;
 
     SwitchFrontendFenceWaitStat &stat =
@@ -130,8 +131,9 @@ void Switch_FormatFrontendPoolMask(uint32_t poolMask, char *text, size_t textSiz
 {
     size_t used = 0;
     text[0] = '\0';
-    const char *names[3] = {"smp", "backend", "view"};
-    for (uint32_t bit = 0; bit < 3; ++bit)
+    const char *names[6] = {
+        "skin_pre0", "skin_pre1", "backend_mesh0", "backend_mesh1", "view_mesh0", "view_mesh1"};
+    for (uint32_t bit = 0; bit < 6; ++bit)
     {
         if (!(poolMask & (1u << bit)))
             continue;
@@ -173,9 +175,9 @@ void Switch_ReportFrontendFenceWaitWindow()
         append(" %s{", phase == 0 ? "pre_wake" : "post_wake");
         for (uint32_t slot = 0; slot < VulkanBackend::FramesInFlight; ++slot)
         {
-            append("%ss%u{", slot ? "," : "", slot);
+            append("%sgpu_slot%u{", slot ? "," : "", slot);
             bool firstMask = true;
-            for (uint32_t poolMask = 1; poolMask < 8; ++poolMask)
+            for (uint32_t poolMask = 1; poolMask < 64; ++poolMask)
             {
                 const SwitchFrontendFenceWaitStat &stat =
                     s_switchFrontendFenceWaitStats[phase][slot][poolMask];
@@ -205,7 +207,7 @@ void Switch_ReportFrontendFenceWaitWindow()
 
     for (uint32_t phase = 0; phase < 2; ++phase)
         for (uint32_t slot = 0; slot < VulkanBackend::FramesInFlight; ++slot)
-            for (uint32_t poolMask = 0; poolMask < 8; ++poolMask)
+            for (uint32_t poolMask = 0; poolMask < 64; ++poolMask)
                 s_switchFrontendFenceWaitStats[phase][slot][poolMask] = {};
 }
 
@@ -417,6 +419,11 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
     const uint32_t viewInfoPool = g_frameIndex;
 
     VulkanBackend *backend = GetVulkanBackend();
+    const uint32_t poolBits[3] = {
+        1u << smpPool,
+        1u << (2u + backendDataPool),
+        1u << (4u + viewInfoPool)
+    };
     int frameSlotsToWait[3] = {-1, -1, -1};
     if (Switch_PoolNeedsPreWait(
             s_switchGpuSlotForSmpPool, smpPool, frameSlot, drainAll))
@@ -440,7 +447,7 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
         if (previousSlot < 0)
             continue;
 
-        uint32_t poolMask = 1u << i;
+        uint32_t poolMask = poolBits[i];
         for (uint32_t next = i + 1u; next < 3; ++next)
         {
             if (frameSlotsToWait[next] == previousSlot)
@@ -469,6 +476,11 @@ void Switch_WaitForNextFrontEndResources()
         s_switchGpuSlotForSmpPool[gfxBuf.dynamicBufferFrame].exchange(-1, std::memory_order_acq_rel),
         s_switchGpuSlotForBackEndData[s_smpFrame].exchange(-1, std::memory_order_acq_rel),
         s_switchGpuSlotForViewInfo[g_frameIndex].exchange(-1, std::memory_order_acq_rel)
+    };
+    const uint32_t poolBits[3] = {
+        1u << gfxBuf.dynamicBufferFrame,
+        1u << (2u + s_smpFrame),
+        1u << (4u + g_frameIndex)
     };
 
     VulkanBackend *backend = GetVulkanBackend();
