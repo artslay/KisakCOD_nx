@@ -16,6 +16,24 @@ extern void Switch_LogWrite(const char *msg);
 extern bool Switch_IsModelTransformTraceEnabled();
 extern bool Switch_IsModelTransformWeaponSurface(const void *xsurf);
 
+struct SwitchSkinMatrix
+{
+    float32x4_t axis0;
+    float32x4_t axis1;
+    float32x4_t axis2;
+    float32x4_t origin;
+};
+
+static inline SwitchSkinMatrix Switch_LoadSkinMatrix(const DObjSkelMat *mat)
+{
+    return {
+        vld1q_f32(mat->axis[0]),
+        vld1q_f32(mat->axis[1]),
+        vld1q_f32(mat->axis[2]),
+        vld1q_f32(mat->origin)
+    };
+}
+
 static void R_LogModelTransformCpuSkin(
     const GfxModelSkinnedSurface *surface, const XSurface *xsurf,
     const GfxPackedVertex *vertices, const DObjSkelMat *boneMatrices,
@@ -406,7 +424,8 @@ static void __cdecl MatrixTransformVertexAndBasis(
     PackedUnitVec tangent,
     const DObjSkelMat *mat,
     GfxPackedVertex *vert,
-    bool transformBasis)
+    bool transformBasis,
+    const void *preloadedMatrix)
 {
 #ifdef __SWITCH__
     // Tegra X1 is AArch64/NEON. The original desktop path uses scalar-style
@@ -414,10 +433,18 @@ static void __cdecl MatrixTransformVertexAndBasis(
     // Load a bone matrix once, then evaluate its three output components in
     // parallel for position, normal and tangent. Keep the multiply/add order
     // aligned with the scalar CoD4 transform.
-    const float32x4_t axis0 = vld1q_f32(mat->axis[0]);
-    const float32x4_t axis1 = vld1q_f32(mat->axis[1]);
-    const float32x4_t axis2 = vld1q_f32(mat->axis[2]);
-    const float32x4_t origin = vld1q_f32(mat->origin);
+    const SwitchSkinMatrix loadedMatrix =
+        preloadedMatrix
+            ? SwitchSkinMatrix{}
+            : Switch_LoadSkinMatrix(mat);
+    const SwitchSkinMatrix *bone =
+        preloadedMatrix
+            ? static_cast<const SwitchSkinMatrix *>(preloadedMatrix)
+            : &loadedMatrix;
+    const float32x4_t axis0 = bone->axis0;
+    const float32x4_t axis1 = bone->axis1;
+    const float32x4_t axis2 = bone->axis2;
+    const float32x4_t origin = bone->origin;
 
     float32x4_t transformed = vmulq_n_f32(axis0, offset[0]);
     transformed = vfmaq_n_f32(transformed, axis1, offset[1]);
@@ -515,7 +542,7 @@ static void __cdecl R_SkinXSurfaceWeight0Internal(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut, transformBasis);
+            vertsOut, transformBasis, nullptr);
         vertsOut->color.packed = vertsIn->color.packed;
         vertsOut->texCoord.packed = vertsIn->texCoord.packed;
         ++vertIndex;
@@ -559,7 +586,7 @@ static void __cdecl R_SkinXSurfaceWeight1Internal(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut, transformBasis);
+            vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         boneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, offset);
@@ -612,7 +639,7 @@ static void __cdecl R_SkinXSurfaceWeight2Internal(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut, transformBasis);
+            vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
@@ -671,7 +698,7 @@ static void __cdecl R_SkinXSurfaceWeight3Internal(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut, transformBasis);
+            vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
@@ -737,11 +764,17 @@ static void __cdecl R_SkinXSurfaceRigidInternal(
         vertCount = vertList->vertCount;
         iassert((vertList->boneOffset % 64) == 0); // LWSS ADD
         bone = (const DObjSkelMat *)((char *)boneMatrix + vertList->boneOffset);
+#ifdef __SWITCH__
+        const SwitchSkinMatrix boneTransform = Switch_LoadSkinMatrix(bone);
+        const void *cachedBoneTransform = &boneTransform;
+#else
+        const void *cachedBoneTransform = nullptr;
+#endif
         for (vertIndex = 0; vertIndex < vertCount; ++vertIndex)
         {
             MatrixTransformVertexAndBasis(
                 v->xyz, v->binormalSign, v->normal, v->tangent, bone,
-                vertex, transformBasis);
+                vertex, transformBasis, cachedBoneTransform);
             vertex->color.packed = v->color.packed;
             vertex->texCoord.packed = v->texCoord.packed;
             ++v;
