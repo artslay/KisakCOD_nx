@@ -128,9 +128,22 @@ static ThreadOwner g_databaseThreadOwner = THREAD_OWNER_NONE;
 static SwitchEvent g_cinematicsThreadOutstandingRequestEvent;
 static SwitchEvent g_cinematicsHostOutstandingRequestEvent;
 
-// Worker command wake event. Native code waits on this for 1 ms while polling
-// the timeout predicate; use a real Switch event instead of a tight yield loop.
+// Worker command wake event. Each worker tracks its own generation so a
+// reset by another waiter cannot consume its notification.
 static SwitchEvent g_workerCmdEvent;
+static std::atomic<uint64_t> g_workerCmdGeneration{0};
+static thread_local uint64_t g_workerCmdGenerationSeen = 0;
+
+static void WaitForWorkerCmdGeneration()
+{
+    std::unique_lock<std::mutex> lock(g_workerCmdEvent.mutex);
+    g_workerCmdEvent.cv.wait(lock, [] {
+        return g_workerCmdGeneration.load(std::memory_order_acquire) !=
+            g_workerCmdGenerationSeen;
+    });
+    g_workerCmdGenerationSeen =
+        g_workerCmdGeneration.load(std::memory_order_acquire);
+}
 
 // Renderer synchronization mirrors the original Win32 SMP backend contract:
 // an atomic command-data handoff plus backend/ownership events.
@@ -740,6 +753,9 @@ void __cdecl Sys_WakeDatabase2()
 }
 void __cdecl Sys_SetWorkerCmdEvent()
 {
+    // Monotonic generation is observed independently by each worker. The
+    // manual-reset event remains for the main thread's timeout-based wait.
+    g_workerCmdGeneration.fetch_add(1, std::memory_order_release);
     SetSwitchEvent(g_workerCmdEvent);
 }
 
@@ -766,9 +782,10 @@ void __cdecl Sys_WaitForWorkerCmd()
 
     const bool measureWait=Switch_PerfDiagEnabled()&&(uint32_t)g_threadContext<4u;
     const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
-    // Keep the 1 ms timeout as a fallback for the shared manual-reset event:
-    // another worker can reset it before every awakened waiter observes it.
-    WaitSwitchEvent(g_workerCmdEvent, 1);
+    if (isWorker)
+        WaitForWorkerCmdGeneration();
+    else
+        WaitSwitchEvent(g_workerCmdEvent, 1);
     if(measureWait)g_switchWorkerCommandWait[(uint32_t)g_threadContext].Add(Kisak_RawTimerTicks()-waitStart);
     if(isWorker)WaitForThreadResume(g_threadContext);
 }
