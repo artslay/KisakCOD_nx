@@ -9,6 +9,7 @@
 #include "r_dobj_skin.h"
 
 #ifdef __SWITCH__
+#include <arm_neon.h>
 #include <atomic>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
@@ -371,8 +372,55 @@ static void __cdecl MatrixTransformVertexAndBasis(
     const DObjSkelMat *mat,
     GfxPackedVertex *vert)
 {
-    float rotated[3]; // [esp+B8h] [ebp-18h]
-    float unpacked[3]; // [esp+C4h] [ebp-Ch]
+#ifdef __SWITCH__
+    // Tegra X1 is AArch64/NEON. The original desktop path uses scalar-style
+    // expressions after the SSE/MMX entry point was removed for Switch.
+    // Load a bone matrix once, then evaluate its three output components in
+    // parallel for position, normal and tangent. Keep the multiply/add order
+    // aligned with the scalar CoD4 transform.
+    const float32x4_t axis0 = vld1q_f32(mat->axis[0]);
+    const float32x4_t axis1 = vld1q_f32(mat->axis[1]);
+    const float32x4_t axis2 = vld1q_f32(mat->axis[2]);
+    const float32x4_t origin = vld1q_f32(mat->origin);
+
+    float32x4_t transformed = vmulq_n_f32(axis0, offset[0]);
+    transformed = vfmaq_n_f32(transformed, axis1, offset[1]);
+    transformed = vfmaq_n_f32(transformed, axis2, offset[2]);
+    transformed = vaddq_f32(transformed, origin);
+    vert->xyz[0] = vgetq_lane_f32(transformed, 0);
+    vert->xyz[1] = vgetq_lane_f32(transformed, 1);
+    vert->xyz[2] = vgetq_lane_f32(transformed, 2);
+    vert->binormalSign = binormalSign;
+
+    float unpacked[3];
+    Vec3UnpackUnitVec(normal, unpacked);
+    transformed = vmulq_n_f32(axis0, unpacked[0]);
+    transformed = vfmaq_n_f32(transformed, axis1, unpacked[1]);
+    transformed = vfmaq_n_f32(transformed, axis2, unpacked[2]);
+    normal.array[0] = static_cast<int>(
+        vgetq_lane_f32(transformed, 0) * 127.0f + 127.5f);
+    normal.array[1] = static_cast<int>(
+        vgetq_lane_f32(transformed, 1) * 127.0f + 127.5f);
+    normal.array[2] = static_cast<int>(
+        vgetq_lane_f32(transformed, 2) * 127.0f + 127.5f);
+    normal.array[3] = 63;
+    vert->normal = normal;
+
+    Vec3UnpackUnitVec(tangent, unpacked);
+    transformed = vmulq_n_f32(axis0, unpacked[0]);
+    transformed = vfmaq_n_f32(transformed, axis1, unpacked[1]);
+    transformed = vfmaq_n_f32(transformed, axis2, unpacked[2]);
+    tangent.array[0] = static_cast<int>(
+        vgetq_lane_f32(transformed, 0) * 127.0f + 127.5f);
+    tangent.array[1] = static_cast<int>(
+        vgetq_lane_f32(transformed, 1) * 127.0f + 127.5f);
+    tangent.array[2] = static_cast<int>(
+        vgetq_lane_f32(transformed, 2) * 127.0f + 127.5f);
+    tangent.array[3] = 63;
+    vert->tangent = tangent;
+#else
+    float rotated[3];
+    float unpacked[3];
 
     vert->xyz[0] = *offset * mat->axis[0][0] + offset[1] * mat->axis[1][0] + offset[2] * mat->axis[2][0] + mat->origin[0];
     vert->xyz[1] = *offset * mat->axis[0][1] + offset[1] * mat->axis[1][1] + offset[2] * mat->axis[2][1] + mat->origin[1];
@@ -403,6 +451,7 @@ static void __cdecl MatrixTransformVertexAndBasis(
     tangent.array[3] = 63;
 
     vert->tangent = tangent;
+#endif
 }
 
 void __cdecl R_SkinXSurfaceWeight0(
