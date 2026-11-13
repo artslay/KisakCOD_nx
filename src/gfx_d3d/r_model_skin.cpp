@@ -87,7 +87,7 @@ static void R_LogModelTransformCpuSkin(
         static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
         surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(sourceVertices),
         static_cast<const void *>(vertices), surface->skinnedCachedOffset,
-        sseEnabled ? "sse_entry_scalar" : "scalar",
+        sseEnabled ? "neon_fast_skin_cache" : "neon",
         sourceVertices ? sourceVertices[first].xyz[0] : 0.0f,
         sourceVertices ? sourceVertices[first].xyz[1] : 0.0f,
         sourceVertices ? sourceVertices[first].xyz[2] : 0.0f,
@@ -194,8 +194,9 @@ void R_SkinXModelCmd(_WORD *data)
     PROF_SCOPED("R_SkinXModel");
 
 #ifdef __SWITCH__
-    // Switch uses the portable scalar implementation for the SSE skinning entry
-    // point; sys_SSE is a desktop-only dvar and is not registered on this port.
+    // The Switch path uses the AArch64 NEON transform kernel. This dvar selects
+    // whether the desktop-compatible fast-skin normal-cache wrapper is used;
+    // sys_SSE remains a desktop-only dvar and is not registered on this port.
     bool sseEnabled = r_sse_skinning && r_sse_skinning->current.enabled;
 #else
     bool sseEnabled = sys_SSE->current.enabled && r_sse_skinning->current.enabled;
@@ -298,10 +299,9 @@ void R_SkinXModelCmd(_WORD *data)
         if (sseEnabled)
         {
 #ifdef __SWITCH__
-            // The Switch "SSE" entry is a scalar fallback. With fast skinning
-            // disabled it has no normal-cache inputs or outputs, so calling it
-            // only adds a wrapper and two null-pointer checks around the exact
-            // same scalar skinning routine.
+            // The Switch "SSE" compatibility toggle selects fast-skin cache
+            // handling. The actual vertex transforms use the AArch64 NEON
+            // kernel whether this cache wrapper is enabled or not.
             if (gfxBuf.fastSkin)
             {
                 GfxPackedVertexNormal *skinVertNormalIn = nullptr;
@@ -415,9 +415,9 @@ void __cdecl R_SkinXSurfaceSkinnedSse(
     iassert(boneMatrix);
     iassert(skinVerticesOut);
 
-    // The desktop implementation uses SSE/MMX for this entry point. Switch is
-    // AArch64, so use the engine's scalar skinner and preserve the fast-skin
-    // normal-cache contract explicitly.
+    // Preserve the desktop fast-skin normal-cache contract. On Switch the
+    // shared vertex-transform kernel is NEON-accelerated; this wrapper reuses
+    // cached normals/tangents when available and updates the current cache.
     if (skinVertNormalIn)
         iassert(skinVertNormalOut);
 
