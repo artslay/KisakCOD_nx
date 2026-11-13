@@ -8079,7 +8079,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         // Descriptor identity depends only on the sampler parameters used by
         // this active shader slot, not on unrelated D3D sampler stages.
         std::memcpy(
-            fastCacheKey.samplerStates[slot],
+            fastCacheKey.samplerStates[slot].data(),
             m_samplerState[slot],
             sizeof(m_samplerState[slot]));
         auto *texture = static_cast<KisakVkTexture *>(textures[slot]);
