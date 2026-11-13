@@ -743,7 +743,8 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                 }
 
                 if (!batchTris ||
-                    batchTris->firstVertex != indirectTris->firstVertex)
+                    batchTris->firstVertex != indirectTris->firstVertex ||
+                    batchTris->vertexCount != indirectTris->vertexCount)
                 {
                     if (!flushIndirectBatch())
                     {
