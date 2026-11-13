@@ -754,7 +754,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     ".\\r_draw_bsp.cpp",
                     623,
                     0,
-                    "surfIndex doesn't index rgp.world->surfaceCount\\n\\t%i not in [0, %i)",
+                    "surfIndex doesn't index rgp.world->surfaceCount\n\t%i not in [0, %i)",
                     surfIndex,
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
@@ -764,7 +764,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 batchTris->firstVertex == tris->firstVertex &&
                 batchTris->vertexCount == tris->vertexCount &&
                 batchTris->vertexLayerData == tris->vertexLayerData;
-            const bool sameLighting = 
+            const bool sameLighting =
                 reflectionProbeIndex == bspSurf->reflectionProbeIndex &&
                 lightmapIndex == bspSurf->lightmapIndex;
 
