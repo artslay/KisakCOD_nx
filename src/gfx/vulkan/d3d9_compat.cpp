@@ -12311,192 +12311,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
 bool IDirect3DDevice9::SupportsMultiDrawIndirect() const
 {
-    return m_backend && m_backend->SupportsMultiDrawIndirect() &&
-        !Switch_IsVkGpuDrawTraceEnabled();
-}
-
-HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
-    const VkDrawIndexedIndirectCommand *commands,
-    const uint32_t *vertexCounts,
-    uint32_t drawCount)
-{
-    const bool switchPerfDiag = Switch_PerfDiagEnabled();
-    const auto switchDrawIndexedStart = switchPerfDiag
-        ? std::chrono::steady_clock::now()
-        : std::chrono::steady_clock::time_point{};
-
-    if (!m_backend || !m_backend->SupportsMultiDrawIndirect() ||
-        !m_backend->IsFrameActive() || !commands || !vertexCounts ||
-        drawCount < 2u || !m_indices || !m_indices->buffer ||
-        !m_decl || !(m_streamSourceMask & 1u) ||
-        !m_streams[0].buffer || !m_streams[0].stride ||
-        Switch_IsVkGpuDrawTraceEnabled())
-        return E_FAIL;
-
-    if (m_topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-    {
-        m_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        m_pipelineDirty = true;
-        m_cachedPipelineFastPathValid = false;
-    }
-
-    const uint64_t indexCapacity =
-        static_cast<uint64_t>(m_indices->size / sizeof(uint16_t));
-    const StreamBinding &stream0 = m_streams[0];
-    const uint64_t vertexBufferBytes = stream0.buffer->size;
-    const uint64_t streamOffset = stream0.offset;
-    const uint64_t stride = stream0.stride;
-
-    // Validate the exact index and vertex ranges before switching to indirect
-    // submission. The D3D9 pre-tess path supplies local indices plus a stream
-    // base; the indirect command carries that base as vertexOffset instead.
-    for (uint32_t drawIndex = 0; drawIndex < drawCount; ++drawIndex)
-    {
-        const VkDrawIndexedIndirectCommand &draw = commands[drawIndex];
-        if (!draw.indexCount || draw.indexCount % 3u ||
-            draw.instanceCount != 1u || draw.firstInstance != 0u ||
-            draw.vertexOffset < 0 || !vertexCounts[drawIndex] ||
-            draw.firstIndex > indexCapacity ||
-            draw.indexCount > indexCapacity - draw.firstIndex)
-            return E_FAIL;
-
-        const uint64_t lastVertex =
-            static_cast<uint64_t>(draw.vertexOffset) +
-            static_cast<uint64_t>(vertexCounts[drawIndex]) - 1u;
-        for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
-        {
-            if (element.Stream >= 16u)
-                continue;
-            if (element.Stream != 0u)
-                return E_FAIL;
-
-            const uint32_t elementType =
-                SwitchEffectiveShaderElementType(m_decl, element, stream0.stride);
-            const uint32_t elementSize = SwitchShaderElementByteSize(elementType);
-            if (!elementSize)
-                continue;
-
-            const uint32_t elementOffset =
-                SwitchEffectiveShaderElementOffset(m_decl, element, stream0.stride);
-            if (elementOffset > stride || elementSize > stride - elementOffset ||
-                streamOffset > vertexBufferBytes ||
-                lastVertex > (vertexBufferBytes - streamOffset) / stride)
-                return E_FAIL;
-
-            const uint64_t vertexStart = streamOffset + lastVertex * stride;
-            if (vertexStart > vertexBufferBytes ||
-                elementOffset > vertexBufferBytes - vertexStart ||
-                elementSize > vertexBufferBytes - vertexStart - elementOffset)
-                return E_FAIL;
-        }
-    }
-
-    // Preserve the same frame-use tracking as the ordinary indexed path before
-    // queued updates are flushed by PrepareDraw().
-    const uint64_t drawFrameSerial = m_backend->FrameSerial();
-    for (uint32_t stream = 0; stream < 16u; ++stream)
-    {
-        if ((m_streamSourceMask & (1u << stream)) && m_streams[stream].buffer)
-        {
-            static_cast<KisakVkBuffer *>(m_streams[stream].buffer)
-                ->lastDrawFrameSerial.store(
-                    drawFrameSerial, std::memory_order_release);
-        }
-    }
-    m_indices->lastDrawFrameSerial.store(
-        drawFrameSerial, std::memory_order_release);
-
-    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/prepare_draw";
-    if (!PrepareDraw())
-        return E_FAIL;
-
-    const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
-    if (commandBuffer == VK_NULL_HANDLE)
-        return E_FAIL;
-
-    const size_t commandBytes =
-        static_cast<size_t>(drawCount) * sizeof(VkDrawIndexedIndirectCommand);
-    VkDescriptorBufferInfo indirectInfo{};
-    if (!m_backend->AllocateUniform(commands, commandBytes, &indirectInfo) ||
-        indirectInfo.buffer == VK_NULL_HANDLE)
-        return E_FAIL;
-
-    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/bind_streams";
-    for (uint32_t stream = 0; stream < 16u; ++stream)
-    {
-        const uint16_t streamBit = static_cast<uint16_t>(1u << stream);
-        if (!(m_streamSourceMask & streamBit))
-            continue;
-
-        IDirect3DVertexBuffer9 *vertexBuffer = m_streams[stream].buffer;
-        if (!vertexBuffer || !m_streams[stream].stride ||
-            vertexBuffer->buffer == VK_NULL_HANDLE)
-            return E_FAIL;
-
-        const VkBuffer buffer = vertexBuffer->buffer;
-        const VkDeviceSize offset = m_streams[stream].offset;
-        if (!(m_cachedBoundVertexStreamMask & streamBit) ||
-            m_cachedBoundVertexBuffers[stream] != buffer ||
-            m_cachedBoundVertexOffsets[stream] != offset)
-        {
-            vkCmdBindVertexBuffers(
-                commandBuffer, stream, 1, &buffer, &offset);
-            m_cachedBoundVertexBuffers[stream] = buffer;
-            m_cachedBoundVertexOffsets[stream] = offset;
-            m_cachedBoundVertexStreamMask |= streamBit;
-        }
-    }
-
-    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/bind_index";
-    const VkBuffer indexBuffer = m_indices->buffer;
-    if (!m_cachedBoundIndexBufferValid ||
-        m_cachedBoundIndexBuffer != indexBuffer)
-    {
-        vkCmdBindIndexBuffer(
-            commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-        m_cachedBoundIndexBuffer = indexBuffer;
-        m_cachedBoundIndexBufferValid = true;
-    }
-
-    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/issue_draw";
-    const uint32_t maxDrawCount = m_backend->MaxDrawIndirectCount();
-    if (maxDrawCount < 2u)
-        return E_FAIL;
-
-    uint32_t firstDraw = 0;
-    while (firstDraw < drawCount)
-    {
-        const uint32_t batchDrawCount =
-            std::min(maxDrawCount, drawCount - firstDraw);
-        const VkDeviceSize offset =
-            indirectInfo.offset +
-            static_cast<VkDeviceSize>(firstDraw) *
-                sizeof(VkDrawIndexedIndirectCommand);
-        vkCmdDrawIndexedIndirect(
-            commandBuffer, indirectInfo.buffer, offset,
-            batchDrawCount, sizeof(VkDrawIndexedIndirectCommand));
-        firstDraw += batchDrawCount;
-    }
-
-    g_switchGpuDrawCommandSerial.fetch_add(
-        drawCount, std::memory_order_relaxed);
-    ++g_switchSceneDrawIndexedCalls;
-
-    if (switchPerfDiag)
-    {
-        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now() - switchDrawIndexedStart).count();
-        Switch_RecordBackendTiming(
-            SwitchBackendTimingStage::DrawIndexedSubmit,
-            static_cast<uint64_t>(elapsed));
-    }
-
-    g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/return";
-    return S_OK;
-}
-
-bool IDirect3DDevice9::SupportsMultiDrawIndirect() const
-{
     return m_backend &&
         m_backend->SupportsMultiDrawIndirect() &&
         !Switch_IsVkGpuDrawTraceEnabled();
@@ -12509,7 +12323,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
 {
     if (!SupportsMultiDrawIndirect() || !draws || !vertexCounts ||
         drawCount < 2u || !m_backend->IsFrameActive() ||
-        !m_indices || !m_indices->buffer || !m_decl)
+        !m_indices || !m_indices->buffer || !m_decl ||
+        !(m_streamSourceMask & 1u))
         return E_FAIL;
 
     const auto timingStart = Switch_PerfDiagEnabled()
@@ -12521,8 +12336,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
     for (uint32_t drawIndex = 0; drawIndex < drawCount; ++drawIndex)
     {
         const VkDrawIndexedIndirectCommand &command = draws[drawIndex];
-        if (!command.indexCount || command.instanceCount != 1u ||
-            command.firstInstance != 0u || !vertexCounts[drawIndex] ||
+        if (!command.indexCount || command.indexCount % 3u ||
+            command.instanceCount != 1u || command.firstInstance != 0u ||
+            !vertexCounts[drawIndex] ||
             command.vertexOffset < 0 ||
             command.firstIndex > indexCapacity ||
             command.indexCount > indexCapacity - command.firstIndex)
