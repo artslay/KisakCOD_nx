@@ -718,7 +718,13 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
 #endif
             }
 #endif
-            InterlockedExchangeAdd((LONG*)&workerCmds->outSize,1);
+            const LONG previousOutSize =
+                InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 1);
+            // Publish a persistent wake when the ready queue transitions from
+            // empty to non-empty. This closes the scan-to-wait race for workers
+            // that now sleep on the event instead of polling every millisecond.
+            if (previousOutSize == 0)
+                Sys_SetWorkerCmdEvent();
             R_NotifyWorkerCmdType(type);
             return;
         }
