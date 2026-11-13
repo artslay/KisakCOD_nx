@@ -24,6 +24,10 @@ extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
 extern bool Switch_IsSafeMaterialShaderArgumentRange(
     const MaterialShaderArgument *arg, uint32_t argCount, const char *path);
 
+// R_SetupPass validates the complete pass argument array immediately before
+// R_UpdateVertexDecl in the normal draw loop. Carry that result across the
+// adjacent call so we do not walk the same arguments twice per material pass.
+static thread_local const MaterialPass *g_switchPassArgsResolvedForVertexDecl = nullptr;
 
 #endif
 
@@ -583,9 +587,16 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
         g_switchFrameStage = "frame/render/update_vertex_decl/rejected_state";
         return;
     }
+    const bool passArgsAlreadyResolved =
+        state->pass && g_switchPassArgsResolvedForVertexDecl == state->pass;
+    // Consume the one-shot result. Any non-adjacent caller still performs the
+    // full validation, while the normal R_SetupPass -> R_UpdateVertexDecl
+    // sequence avoids scanning every shader argument twice.
+    g_switchPassArgsResolvedForVertexDecl = nullptr;
     if (!state->pass ||
-        !Switch_ResolveMaterialPassArgsForRender(
-            const_cast<MaterialPass *>(state->pass)))
+        (!passArgsAlreadyResolved &&
+         !Switch_ResolveMaterialPassArgsForRender(
+             const_cast<MaterialPass *>(state->pass))))
     {
         state->pass = nullptr;
         g_switchFrameStage = "frame/render/update_vertex_decl/rejected_pass";
@@ -665,6 +676,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // This is the actual draw setup path. Some technique selection routes can
     // reach it without passing through Material_GetTechnique, so resolve the
     // pass argument array immediately before any per-pass argument traversal.
+    g_switchPassArgsResolvedForVertexDecl = nullptr;
     if (!Switch_ResolveMaterialPassArgsForRender(
             const_cast<MaterialPass *>(pass)))
     {
@@ -672,6 +684,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         g_switchFrameStage = "frame/render/setup_pass/rejected";
         return;
     }
+    g_switchPassArgsResolvedForVertexDecl = pass;
     g_switchFrameStage = "frame/render/setup_pass/args_resolved";
 #endif
     material = context.state->material;
