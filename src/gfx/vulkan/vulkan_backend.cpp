@@ -2654,6 +2654,8 @@ void VulkanBackend::BeginGpuTimestamp(SwitchGpuTimingStage stage)
         return;
 
     FrameSync &frame = m_frameSync[m_currentFrameSlot];
+    if (!frame.gpuTimestampPool)
+        return;
     uint8_t &flags = frame.gpuTimestampStageFlags[stageIndex];
     if (flags & 1u)
         return;
@@ -2678,6 +2680,8 @@ void VulkanBackend::EndGpuTimestamp(SwitchGpuTimingStage stage)
         return;
 
     FrameSync &frame = m_frameSync[m_currentFrameSlot];
+    if (!frame.gpuTimestampPool)
+        return;
     uint8_t &flags = frame.gpuTimestampStageFlags[stageIndex];
     if (flags != 1u)
         return;
