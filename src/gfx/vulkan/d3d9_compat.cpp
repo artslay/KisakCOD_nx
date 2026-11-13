@@ -11236,7 +11236,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 auditLogObject(&g_switchQueuedWorldAudit[i],status,reason,triOffset);
                 triOffset+=g_switchQueuedWorldAudit[i].triangleCount;
             }
-        } else auditLogObject(nullptr,status,reason,0u);
+        } else if (g_switchRenderAuditContext.material) {
+            auditLogObject(nullptr,status,reason,0u);
+        }
         g_switchQueuedWorldAuditCount=0;
         g_switchQueuedWorldAuditOverflowReported=false;
     };
