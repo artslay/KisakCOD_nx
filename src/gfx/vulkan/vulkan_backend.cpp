@@ -1012,6 +1012,7 @@ void VulkanBackend::Shutdown()
 
     // Stop any in-flight cinematic upload before destroying Vulkan resources.
     // ImmediateSubmit takes these locks in the same order.
+    std::lock_guard<std::mutex> uploadStagingLock(m_uploadStagingMutex);
     std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
     std::lock_guard<std::mutex> queueLock(m_queueMutex);
     if (m_device)
@@ -1063,6 +1064,16 @@ void VulkanBackend::Shutdown()
     if (m_psUniformLayout) vkDestroyDescriptorSetLayout(m_device, m_psUniformLayout, nullptr);
     m_psUniformLayout = VK_NULL_HANDLE;
 
+    if (m_uploadStagingBuffer || m_uploadStagingMemory)
+        DestroyBuffer(
+            m_uploadStagingBuffer,
+            m_uploadStagingMemory,
+            m_uploadStagingMapped != nullptr);
+    m_uploadStagingBuffer = VK_NULL_HANDLE;
+    m_uploadStagingMemory = VK_NULL_HANDLE;
+    m_uploadStagingMapped = nullptr;
+    m_uploadStagingCapacity = 0;
+
     if (m_uniformMapped && m_uniformRingMemory)
         vkUnmapMemory(m_device, m_uniformRingMemory);
     m_uniformMapped = nullptr;
@@ -1097,8 +1108,12 @@ void VulkanBackend::Shutdown()
     m_graphicsQueueTimestampValidBits = 0;
     m_gpuTimestampPeriodNs = 0.0;
 #endif
+    if (m_immediateFence)
+        vkDestroyFence(m_device, m_immediateFence, nullptr);
+    m_immediateFence = VK_NULL_HANDLE;
     if (m_immediateCommandPool)
         vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
+    m_immediateCommandBuffer = VK_NULL_HANDLE;
 
     DestroyDefaultDepth();
     DestroySwapchain();
@@ -1114,6 +1129,8 @@ void VulkanBackend::Shutdown()
     m_graphicsQueue = VK_NULL_HANDLE;
     m_commandPool = VK_NULL_HANDLE;
     m_immediateCommandPool = VK_NULL_HANDLE;
+    m_immediateCommandBuffer = VK_NULL_HANDLE;
+    m_immediateFence = VK_NULL_HANDLE;
     m_commandBuffer = VK_NULL_HANDLE;
     m_currentFrameSlot = 0;
     m_nextFrameSlot = 0;
@@ -1862,6 +1879,29 @@ bool VulkanBackend::CreateCommandResources()
     if (immediatePoolResult != VK_SUCCESS)
     {
         SetError("vkCreateCommandPool for immediate uploads failed", immediatePoolResult);
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo immediateAlloc{};
+    immediateAlloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    immediateAlloc.commandPool = m_immediateCommandPool;
+    immediateAlloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    immediateAlloc.commandBufferCount = 1;
+    const VkResult immediateCommandResult =
+        vkAllocateCommandBuffers(m_device, &immediateAlloc, &m_immediateCommandBuffer);
+    if (immediateCommandResult != VK_SUCCESS)
+    {
+        SetError("vkAllocateCommandBuffers for immediate uploads failed", immediateCommandResult);
+        return false;
+    }
+
+    VkFenceCreateInfo immediateFenceInfo{};
+    immediateFenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    const VkResult immediateFenceResult =
+        vkCreateFence(m_device, &immediateFenceInfo, nullptr, &m_immediateFence);
+    if (immediateFenceResult != VK_SUCCESS)
+    {
+        SetError("vkCreateFence for immediate uploads failed", immediateFenceResult);
         return false;
     }
 
@@ -3917,7 +3957,8 @@ bool VulkanBackend::ImmediateSubmit(
     const std::function<void(VkCommandBuffer)> &fn,
     ImmediateSubmitReason reason)
 {
-    if (!m_device || !m_graphicsQueue || !m_immediateCommandPool || !fn || m_deviceLost)
+    if (!m_device || !m_graphicsQueue || !m_immediateCommandPool ||
+        !m_immediateCommandBuffer || !m_immediateFence || !fn || m_deviceLost)
         return false;
 
     // Cinematic texture uploads run on the cinematic worker, while normal
@@ -3926,22 +3967,22 @@ bool VulkanBackend::ImmediateSubmit(
     // externally synchronized across threads.
     std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
 
-    VkCommandBufferAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = m_immediateCommandPool;
-    alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc.commandBufferCount = 1;
-
-    VkCommandBuffer command = VK_NULL_HANDLE;
-    const VkResult allocResult = vkAllocateCommandBuffers(m_device, &alloc, &command);
-    if (allocResult != VK_SUCCESS)
+    const VkResult resetCommandResult =
+        vkResetCommandBuffer(m_immediateCommandBuffer, 0);
+    if (resetCommandResult != VK_SUCCESS)
     {
-        SetError("vkAllocateCommandBuffers for immediate submit failed", allocResult);
+        SetError("vkResetCommandBuffer for immediate submit failed", resetCommandResult);
         return false;
     }
 
-    VkFence fence = VK_NULL_HANDLE;
-    bool submitted = false;
+    const VkResult resetFenceResult =
+        vkResetFences(m_device, 1, &m_immediateFence);
+    if (resetFenceResult != VK_SUCCESS)
+    {
+        SetError("vkResetFences for immediate submit failed", resetFenceResult);
+        return false;
+    }
+
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -3949,105 +3990,75 @@ bool VulkanBackend::ImmediateSubmit(
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/upload/immediate_begin";
 #endif
-    const VkResult beginResult = vkBeginCommandBuffer(command, &begin);
-    if (beginResult == VK_SUCCESS)
-    {
-        fn(command);
-#ifdef __SWITCH__
-        g_switchFrameStage = "frame/upload/immediate_end";
-#endif
-        const VkResult endResult = vkEndCommandBuffer(command);
-        if (endResult == VK_SUCCESS)
-        {
-            VkFenceCreateInfo fenceInfo{};
-            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            const VkResult fenceResult = vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
-            if (fenceResult == VK_SUCCESS)
-            {
-                VkSubmitInfo submit{};
-                submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submit.commandBufferCount = 1;
-                submit.pCommandBuffers = &command;
-
-                VkResult submitResult;
-                {
-#ifdef __SWITCH__
-                    g_switchFrameStage = "frame/upload/immediate_queue_submit";
-#endif
-                    std::lock_guard<std::mutex> queueLock(m_queueMutex);
-                    submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
-#ifdef __SWITCH__
-                    g_switchFrameStage = "frame/upload/immediate_queue_submit_return";
-#endif
-                }
-#ifdef __SWITCH__
-                // The old stage marker remained active through the wait and
-                // command-buffer teardown, making a crash snapshot ambiguous.
-                g_switchFrameStage = "frame/upload/immediate_queue_lock_released";
-#endif
-                if (submitResult == VK_SUCCESS)
-                {
-#ifdef __SWITCH__
-                    g_switchFrameStage = "frame/upload/immediate_wait_fence";
-#endif
-#ifdef __SWITCH__
-                    const auto immediateWaitStart = SwitchFrameTimingStart();
-#endif
-                    const VkResult waitResult =
-                        vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
-#ifdef __SWITCH__
-                    const uint64_t immediateElapsedNs =
-                        SwitchElapsedNs(immediateWaitStart);
-                    g_switchFrameTimingStats.immediateWait.Add(immediateElapsedNs);
-                    const size_t reasonIndex = static_cast<size_t>(reason);
-                    if (reasonIndex < g_switchFrameTimingStats.immediateWaitByReason.size())
-                        g_switchFrameTimingStats.immediateWaitByReason[reasonIndex].Add(
-                            immediateElapsedNs);
-                    g_switchFrameStage = "frame/upload/immediate_wait_fence_return";
-#endif
-                    if (waitResult == VK_SUCCESS)
-                        submitted = true;
-                    else
-                        SetError("vkWaitForFences failed for immediate submit", waitResult);
-                }
-                else
-                {
-#ifdef __SWITCH__
-                    g_switchFrameStage = "frame/upload/immediate_submit_error";
-#endif
-                    SetError("vkQueueSubmit failed for immediate submit", submitResult);
-                }
-#ifdef __SWITCH__
-                g_switchFrameStage = "frame/upload/immediate_destroy_fence";
-#endif
-                vkDestroyFence(m_device, fence, nullptr);
-#ifdef __SWITCH__
-                g_switchFrameStage = "frame/upload/immediate_destroy_fence_return";
-#endif
-            }
-            else
-            {
-                SetError("vkCreateFence failed for immediate submit", fenceResult);
-            }
-        }
-        else
-        {
-            SetError("vkEndCommandBuffer failed for immediate submit", endResult);
-        }
-    }
-    else
+    const VkResult beginResult = vkBeginCommandBuffer(m_immediateCommandBuffer, &begin);
+    if (beginResult != VK_SUCCESS)
     {
         SetError("vkBeginCommandBuffer failed for immediate submit", beginResult);
+        return false;
+    }
+
+    fn(m_immediateCommandBuffer);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/immediate_end";
+#endif
+    const VkResult endResult = vkEndCommandBuffer(m_immediateCommandBuffer);
+    if (endResult != VK_SUCCESS)
+    {
+        SetError("vkEndCommandBuffer failed for immediate submit", endResult);
+        return false;
+    }
+
+    VkSubmitInfo submit{};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &m_immediateCommandBuffer;
+
+    VkResult submitResult;
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/immediate_queue_submit";
+#endif
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_immediateFence);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/immediate_queue_submit_return";
+#endif
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/immediate_queue_lock_released";
+#endif
+
+    if (submitResult != VK_SUCCESS)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/immediate_submit_error";
+#endif
+        SetError("vkQueueSubmit failed for immediate submit", submitResult);
+        return false;
     }
 
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/upload/immediate_free_command_buffer";
+    g_switchFrameStage = "frame/upload/immediate_wait_fence";
+    const auto immediateWaitStart = SwitchFrameTimingStart();
 #endif
-    vkFreeCommandBuffers(m_device, m_immediateCommandPool, 1, &command);
+    const VkResult waitResult =
+        vkWaitForFences(m_device, 1, &m_immediateFence, VK_TRUE, UINT64_MAX);
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/upload/immediate_free_command_buffer_return";
+    const uint64_t immediateElapsedNs = SwitchElapsedNs(immediateWaitStart);
+    g_switchFrameTimingStats.immediateWait.Add(immediateElapsedNs);
+    const size_t reasonIndex = static_cast<size_t>(reason);
+    if (reasonIndex < g_switchFrameTimingStats.immediateWaitByReason.size())
+        g_switchFrameTimingStats.immediateWaitByReason[reasonIndex].Add(
+            immediateElapsedNs);
+    g_switchFrameStage = "frame/upload/immediate_wait_fence_return";
 #endif
-    return submitted;
+    if (waitResult != VK_SUCCESS)
+    {
+        SetError("vkWaitForFences failed for immediate submit", waitResult);
+        return false;
+    }
+
+    return true;
 }
 
 bool VulkanBackend::UploadImage2D(
@@ -4212,6 +4223,48 @@ bool VulkanBackend::UploadImage2D(
         }
     }
 
+    // Most texture mips fit in this reusable upload buffer. ImmediateSubmit
+    // waits for its fence before returning, so the same mapped range is safe
+    // to reuse by the next uploader without adding another GPU wait.
+    static constexpr VkDeviceSize kImmediateUploadStagingCapacity =
+        4u * 1024u * 1024u;
+    if (static_cast<VkDeviceSize>(bytes) <= kImmediateUploadStagingCapacity)
+    {
+        std::lock_guard<std::mutex> stagingLock(m_uploadStagingMutex);
+        if (!m_uploadStagingBuffer)
+        {
+            if (!CreateBuffer(
+                    kImmediateUploadStagingCapacity,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    &m_uploadStagingBuffer,
+                    &m_uploadStagingMemory,
+                    &m_uploadStagingMapped))
+                return false;
+            m_uploadStagingCapacity = kImmediateUploadStagingCapacity;
+        }
+
+        if (!m_uploadStagingMapped ||
+            static_cast<VkDeviceSize>(bytes) > m_uploadStagingCapacity)
+            return false;
+
+        std::memcpy(m_uploadStagingMapped, data, bytes);
+        const bool submitted = ImmediateSubmit(
+            [&](VkCommandBuffer command)
+            {
+                recordUpload(command, m_uploadStagingBuffer, 0);
+            },
+            ImmediateSubmitReason::ImageUpload2D);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/image2d_submit_return";
+#endif
+        (void)format;
+        return submitted;
+    }
+
+    // Oversized images retain the exact-size fallback rather than making the
+    // persistent staging allocation grow without bound on Switch.
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     void *mapped = nullptr;

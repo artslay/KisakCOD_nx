@@ -438,7 +438,17 @@ private:
     // Active aliases point at the currently recording frame-slot resources.
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkCommandPool m_immediateCommandPool = VK_NULL_HANDLE;
+    VkCommandBuffer m_immediateCommandBuffer = VK_NULL_HANDLE;
+    VkFence m_immediateFence = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
+    // Protect the persistent synchronous texture staging buffer until its
+    // ImmediateSubmit fence completes; shutdown takes this lock before the
+    // immediate command-pool lock.
+    std::mutex m_uploadStagingMutex;
+    VkBuffer m_uploadStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_uploadStagingMemory = VK_NULL_HANDLE;
+    void *m_uploadStagingMapped = nullptr;
+    VkDeviceSize m_uploadStagingCapacity = 0;
     std::array<FrameSync, FramesInFlight> m_frameSync{};
     // Fence host access is externally synchronized by Vulkan. A per-slot lock
     // allows the frontend to wait for an old slot while the backend uses the other.
