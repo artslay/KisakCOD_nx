@@ -12358,7 +12358,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
             continue;
         const StreamBinding &stream = m_streams[element.Stream];
         if (!stream.buffer || !stream.stride)
-            continue;
+            return E_FAIL;
 
         auto *vertexBuffer = static_cast<KisakVkBuffer *>(stream.buffer);
         if (!vertexBuffer || vertexBuffer->buffer == VK_NULL_HANDLE)
