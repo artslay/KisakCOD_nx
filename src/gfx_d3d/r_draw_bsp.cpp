@@ -913,6 +913,9 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         uint32_t batchBspSurfIndex = UINT32_MAX;
         uint32_t batchBaseIndex = baseIndex;
         uint32_t batchTriCount = 0u;
+        // Track the largest relative vertex offset so an unlayered batch can
+        // move its base backward without rescanning all already-built commands.
+        uint32_t batchMaxVertexOffset = 0u;
         switchIndirectDraws.clear();
         switchIndirectVertexCounts.clear();
         switchIndirectSurfaces.clear();
@@ -983,6 +986,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             batchBspSurf = nullptr;
             batchBspSurfIndex = UINT32_MAX;
             batchTriCount = 0u;
+            batchMaxVertexOffset = 0u;
             switchIndirectDraws.clear();
             switchIndirectVertexCounts.clear();
             switchIndirectSurfaces.clear();
@@ -1011,18 +1015,31 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 lightmapIndex == bspSurf->lightmapIndex;
 
             bool compatibleIndirectVertexOffset = false;
-            if (switchUseIndirectDraw && batchTris && sameLighting &&
-                tris->firstVertex >= batchTris->firstVertex)
+            const uint32_t layerStride = switchUseIndirectDraw
+                ? static_cast<uint32_t>(g_layerDataStride[context.state->prim.vertDeclType])
+                : 0u;
+            if (switchUseIndirectDraw && batchTris && sameLighting)
             {
+                const uint32_t newBaseVertex =
+                    std::min(batchTris->firstVertex, tris->firstVertex);
                 const uint64_t vertexDelta =
-                    static_cast<uint64_t>(tris->firstVertex) -
-                    static_cast<uint64_t>(batchTris->firstVertex);
+                    static_cast<uint64_t>(tris->firstVertex) - newBaseVertex;
                 if (vertexDelta <= static_cast<uint64_t>(INT32_MAX))
                 {
-                    const uint32_t layerStride =
-                        static_cast<uint32_t>(g_layerDataStride[context.state->prim.vertDeclType]);
-                    compatibleIndirectVertexOffset = true;
-                    if (layerStride)
+                    if (layerStride == 0u)
+                    {
+                        // With only the world vertex stream, vertexOffset is
+                        // relative to an arbitrary common base. Rebase the
+                        // whole batch to its lowest firstVertex instead of
+                        // flushing whenever surfaces arrive out of order.
+                        const uint64_t rebaseDelta =
+                            static_cast<uint64_t>(batchTris->firstVertex) -
+                            newBaseVertex;
+                        compatibleIndirectVertexOffset =
+                            static_cast<uint64_t>(batchMaxVertexOffset) +
+                                rebaseDelta <= static_cast<uint64_t>(INT32_MAX);
+                    }
+                    else if (tris->firstVertex >= batchTris->firstVertex)
                     {
                         const int64_t expectedLayerOffset =
                             static_cast<int64_t>(batchTris->vertexLayerData) +
@@ -1058,6 +1075,17 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 batchBspSurf = bspSurf;
                 batchBspSurfIndex = surfIndex;
                 batchBaseIndex = baseIndex;
+                batchMaxVertexOffset = 0u;
+            }
+            else if (switchUseIndirectDraw && layerStride == 0u &&
+                     tris->firstVertex < batchTris->firstVertex)
+            {
+                const uint32_t rebaseDelta =
+                    batchTris->firstVertex - tris->firstVertex;
+                for (VkDrawIndexedIndirectCommand &draw : switchIndirectDraws)
+                    draw.vertexOffset += static_cast<int32_t>(rebaseDelta);
+                batchMaxVertexOffset += rebaseDelta;
+                batchTris = tris;
             }
 
             if (switchRenderAuditEnabled)
@@ -1075,6 +1103,9 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 draw.vertexOffset = static_cast<int32_t>(
                     static_cast<int64_t>(tris->firstVertex) -
                     static_cast<int64_t>(batchTris->firstVertex));
+                batchMaxVertexOffset = std::max(
+                    batchMaxVertexOffset,
+                    static_cast<uint32_t>(draw.vertexOffset));
                 draw.firstInstance = 0u;
 
                 if (!switchIndirectDraws.empty())
