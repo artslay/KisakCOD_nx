@@ -5102,11 +5102,34 @@ HRESULT KisakVkBuffer::Unlock()
         // The frontend can be preparing frame N+1 while the GPU still consumes
         // frame N, so publish these writes as ordered buffer copies instead of
         // touching HOST_VISIBLE vertex/index storage directly.
+        const bool frameSlotNoOverwrite =
+            (lockFlags & D3DLOCK_NOOVERWRITE) != 0 &&
+            frameSlotSerial != 0 &&
+            backend &&
+            backend->IsFrameActive() &&
+            frameSlotDevice == backend->Device() &&
+            frameSlot == backend->CurrentFrameSlot() &&
+            frameSlotSerial == backend->FrameSerial();
+
         const auto queueShadowRange =
-            [this, backend](uint32_t begin, uint32_t end) -> bool
+            [this, backend, frameSlotNoOverwrite](uint32_t begin, uint32_t end) -> bool
         {
             if (begin >= end)
                 return true;
+
+            if (frameSlotNoOverwrite)
+            {
+                // This is a fresh, non-overlapping range in a dynamic stream
+                // whose frame-slot fence has already completed. Queue an
+                // exact mapped write instead of staging a GPU buffer copy.
+                return backend->QueueMappedBufferUpdate(
+                    buffer,
+                    begin,
+                    static_cast<uint8_t *>(mapped) + begin,
+                    shadow.data() + begin,
+                    static_cast<size_t>(end - begin),
+                    false);
+            }
 
             const VkDeviceSize uploadOffset =
                 static_cast<VkDeviceSize>(begin) & ~VkDeviceSize(3u);
@@ -6415,7 +6438,10 @@ HRESULT IDirect3DDevice9::BeginScene()
     if (!m_backend->BeginFrame())
         return E_FAIL;
     if (!frameWasActive)
-        R_SetDynamicBufferFrame(m_backend->CurrentFrameSlot());
+        R_SetDynamicBufferFrame(
+            m_backend->CurrentFrameSlot(),
+            m_backend->FrameSerial(),
+            m_backend->Device());
     m_sceneOpen = true;
     m_targetRendered = false;
     g_switchSceneDrawPrimitiveCalls = 0;

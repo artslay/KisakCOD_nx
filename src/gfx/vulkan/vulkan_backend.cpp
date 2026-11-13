@@ -5097,20 +5097,43 @@ bool VulkanBackend::QueueMappedBufferUpdate(
         return false;
 
     std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+    const size_t dataOffset =
+        (m_queuedBufferUpdateData.size() + 3u) & ~size_t(3u);
+    m_queuedBufferUpdateData.resize(dataOffset, 0);
+    m_queuedBufferUpdateData.insert(
+        m_queuedBufferUpdateData.end(),
+        static_cast<const uint8_t *>(data),
+        static_cast<const uint8_t *>(data) + size);
+
+    // Consecutive frame-safe NOOVERWRITE writes often form one stream range.
+    // Merge them so FlushQueuedBufferUpdates performs one memcpy for the span.
+    if (!m_queuedBufferUpdates.empty())
+    {
+        QueuedBufferUpdate &previous = m_queuedBufferUpdates.back();
+        const auto *previousMappedEnd =
+            static_cast<const uint8_t *>(previous.mappedDestination) +
+            previous.size;
+        if (previous.mappedWrite &&
+            previous.waitForGpu == waitForGpu &&
+            previous.destination == destination &&
+            previous.destinationOffset + previous.size == destinationOffset &&
+            previousMappedEnd == mappedDestination &&
+            previous.dataOffset + previous.size == dataOffset)
+        {
+            previous.size += size;
+            m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+            return true;
+        }
+    }
+
     QueuedBufferUpdate update{};
     update.destination = destination;
     update.destinationOffset = destinationOffset;
     update.mappedDestination = mappedDestination;
     update.mappedWrite = true;
     update.waitForGpu = waitForGpu;
-    update.dataOffset =
-        (m_queuedBufferUpdateData.size() + 3u) & ~size_t(3u);
+    update.dataOffset = dataOffset;
     update.size = size;
-    m_queuedBufferUpdateData.resize(update.dataOffset, 0);
-    m_queuedBufferUpdateData.insert(
-        m_queuedBufferUpdateData.end(),
-        static_cast<const uint8_t *>(data),
-        static_cast<const uint8_t *>(data) + size);
     m_queuedBufferUpdates.emplace_back(update);
     m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     return true;

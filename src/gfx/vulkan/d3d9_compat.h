@@ -236,6 +236,11 @@ struct KisakVkBuffer : IDirect3DResource9 {
     VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     bool recoveryPending=false;
     bool dynamic=false;
+    // Set only for the dynamic VB/IB streams selected by the current Vulkan
+    // frame slot after its fence has completed.
+    uint32_t frameSlot = UINT32_MAX;
+    uint64_t frameSlotSerial = 0;
+    VkDevice frameSlotDevice = VK_NULL_HANDLE;
     // Dynamic shadow storage remains authoritative while in-frame uploads are queued.
     bool shadowInitialized=false;
     uint32_t size=0;

@@ -249,7 +249,8 @@ void __cdecl R_CreateDynamicBuffers()
 }
 
 #ifdef __SWITCH__
-void __cdecl R_SetDynamicBufferFrame(uint32_t frameSlot)
+void __cdecl R_SetDynamicBufferFrame(
+    uint32_t frameSlot, uint64_t frameSerial, VkDevice device)
 {
     iassert(frameSlot < 2);
 
@@ -260,6 +261,17 @@ void __cdecl R_SetDynamicBufferFrame(uint32_t frameSlot)
     gfxBuf.dynamicIndexBuffer = &gfxBuf.dynamicIndexBufferPool[frameSlot];
     gfxBuf.dynamicVertexBuffer->used = 0;
     gfxBuf.dynamicIndexBuffer->used = 0;
+
+    auto *vertexBuffer = reinterpret_cast<KisakVkBuffer *>(
+        gfxBuf.dynamicVertexBuffer->buffer);
+    auto *indexBuffer = reinterpret_cast<KisakVkBuffer *>(
+        gfxBuf.dynamicIndexBuffer->buffer);
+    vertexBuffer->frameSlot = frameSlot;
+    vertexBuffer->frameSlotSerial = frameSerial;
+    vertexBuffer->frameSlotDevice = device;
+    indexBuffer->frameSlot = frameSlot;
+    indexBuffer->frameSlotSerial = frameSerial;
+    indexBuffer->frameSlotDevice = device;
 }
 #endif
 
