@@ -120,6 +120,8 @@ struct SwitchFrameTimingStats
     SwitchFrameTimingCounter frameCpu;
     SwitchFrameTimingCounter gpuFrame;
     std::array<SwitchFrameTimingCounter,
+        static_cast<size_t>(SwitchGpuTimingStage::Count)> gpuStages;
+    std::array<SwitchFrameTimingCounter,
         static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStages;
     std::atomic<uint64_t> modelLightingRegions{0};
     std::atomic<uint64_t> modelLightingBytes{0};
@@ -230,6 +232,17 @@ void Switch_RecordFrameCpuEnd()
         &cpuCalls, &cpuNs, &cpuMaxNs);
     g_switchFrameTimingStats.gpuFrame.Reset(
         &gpuCalls, &gpuNs, &gpuMaxNs);
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchGpuTimingStage::Count)> gpuStageCalls{};
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchGpuTimingStage::Count)> gpuStageNs{};
+    std::array<uint64_t,
+        static_cast<size_t>(SwitchGpuTimingStage::Count)> gpuStageMaxNs{};
+    for (size_t i = 0; i < g_switchFrameTimingStats.gpuStages.size(); ++i)
+    {
+        g_switchFrameTimingStats.gpuStages[i].Reset(
+            &gpuStageCalls[i], &gpuStageNs[i], &gpuStageMaxNs[i]);
+    }
     for (size_t i = 0; i < g_switchFrameTimingStats.backendStages.size(); ++i)
     {
         g_switchFrameTimingStats.backendStages[i].Reset(
@@ -366,21 +379,55 @@ void Switch_RecordFrameCpuEnd()
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfMarkMesh)]),
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]),
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawSurfParticleCloud)]));
+    static const char *const gpuStageNames[] = {
+        "sun_shadow", "spot_shadow", "setup_depth", "cookies",
+        "scene_depth", "lit", "decal", "sun", "lights",
+        "distortion", "emissive", "end_scene"
+    };
+    char gpuStageText[768];
+    size_t gpuStageTextUsed = static_cast<size_t>(
+        std::snprintf(gpuStageText, sizeof(gpuStageText), "gpu_stages{"));
+    for (size_t i = 0; i < gpuStageCalls.size() &&
+         gpuStageTextUsed < sizeof(gpuStageText) - 1u; ++i)
+    {
+        const size_t remaining = sizeof(gpuStageText) - gpuStageTextUsed;
+        const int written = std::snprintf(
+            gpuStageText + gpuStageTextUsed, remaining,
+            "%s%s=%llu:%.2f/%.2f",
+            i ? "," : "",
+            gpuStageNames[i],
+            static_cast<unsigned long long>(gpuStageCalls[i]),
+            averageMs(gpuStageNs[i], gpuStageCalls[i]),
+            maximumMs(gpuStageMaxNs[i]));
+        if (written < 0)
+            break;
+        if (static_cast<size_t>(written) >= remaining)
+        {
+            gpuStageTextUsed = sizeof(gpuStageText) - 1u;
+            break;
+        }
+        gpuStageTextUsed += static_cast<size_t>(written);
+    }
+    if (gpuStageTextUsed < sizeof(gpuStageText) - 1u)
+    {
+        gpuStageText[gpuStageTextUsed++] = '}';
+        gpuStageText[gpuStageTextUsed] = '\0';
+    }
     char drawIndexedStageText[96];
     std::snprintf(
         drawIndexedStageText, sizeof(drawIndexedStageText),
         "drawidx=%llu:%.2f",
         static_cast<unsigned long long>(backendStageCalls[static_cast<size_t>(SwitchBackendTimingStage::DrawIndexedSubmit)]),
         averageFrameMs(backendStageNs[static_cast<size_t>(SwitchBackendTimingStage::DrawIndexedSubmit)]));
-    char message[4096];
+    char message[5120];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f gpu_ms=%llu:%.2f/%.2f %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f gpu_ms=%llu:%.2f/%.2f %s %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(gpuCalls),
         averageMs(gpuNs, gpuCalls), maximumMs(gpuMaxNs),
         backendStageText, draw3dStageText,
-        drawSurfStageText, drawSurfTypeText, drawIndexedStageText,
+        drawSurfStageText, drawSurfTypeText, gpuStageText, drawIndexedStageText,
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
         static_cast<unsigned long long>(fenceCalls),
