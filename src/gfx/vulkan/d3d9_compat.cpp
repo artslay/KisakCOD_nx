@@ -7518,12 +7518,31 @@ bool IDirect3DDevice9::BindUniformSet(
     if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
+    const VkDevice descriptorDevice = m_backend->Device();
+    const VkDescriptorPool descriptorPool = m_backend->DescriptorPool();
+    if (!descriptorDevice || !descriptorPool)
+        return false;
+    if (m_uniformDynamicDescriptorDevice != descriptorDevice ||
+        m_uniformDynamicDescriptorPool != descriptorPool)
+    {
+        for (auto &stageSets : m_uniformDynamicDescriptorSets)
+            stageSets.fill(VK_NULL_HANDLE);
+        for (auto &slotCache : m_uniformBindCache)
+            slotCache.fill(UniformBindCacheEntry{});
+        m_uniformDynamicDescriptorDevice = descriptorDevice;
+        m_uniformDynamicDescriptorPool = descriptorPool;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(
+            m_backend->PhysicalDevice(), &properties);
+        m_uniformDynamicMaxRange = properties.limits.maxUniformBufferRange;
+    }
+    if (m_uniformDynamicMaxRange < 16u)
+        return false;
+
     if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
     {
         m_samplerSetCursor[frameSlot][0] = 0;
         m_samplerSetCursor[frameSlot][1] = 0;
-        m_uniformSetCursor[frameSlot][0] = 0;
-        m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
@@ -7555,7 +7574,9 @@ bool IDirect3DDevice9::BindUniformSet(
         uniformBindCache.set != VK_NULL_HANDLE)
     {
         g_switchFrameStage = "frame/render/vulkan/uniform/revision_cache_hit";
-        BindDescriptorSetIfChanged(bindPoint, setIndex, uniformBindCache.set);
+        BindUniformDescriptorSetIfChanged(
+            bindPoint, setIndex, uniformBindCache.set,
+            uniformBindCache.dynamicOffset);
         return true;
     }
 
@@ -7781,13 +7802,44 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
+    VkDeviceSize dynamicRange = 16u;
+    size_t dynamicRangeIndex = 0;
+    while (dynamicRange < static_cast<VkDeviceSize>(size))
+    {
+        if (dynamicRange >= m_uniformDynamicMaxRange ||
+            dynamicRange > m_uniformDynamicMaxRange / 2u)
+        {
+            dynamicRange = m_uniformDynamicMaxRange;
+            ++dynamicRangeIndex;
+            break;
+        }
+        dynamicRange <<= 1u;
+        ++dynamicRangeIndex;
+    }
+    if (dynamicRange < static_cast<VkDeviceSize>(size) ||
+        dynamicRangeIndex >= UniformDynamicRangeClassCount)
+    {
+        traceUniformBindStage("uniform_range_too_large", nullptr, size, 0);
+        return false;
+    }
+
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
-    if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
+    void *mappedUniform = nullptr;
+    if (!m_backend->AllocateUniformRange(
+            static_cast<size_t>(dynamicRange), &bufferInfo, &mappedUniform))
     {
         traceUniformBindStage("uniform_ring_failed", bytes, size, 0);
         return false;
     }
+    std::memset(mappedUniform, 0, static_cast<size_t>(dynamicRange));
+    std::memcpy(mappedUniform, bytes, size);
+    if (bufferInfo.offset > UINT32_MAX)
+    {
+        traceUniformBindStage("uniform_dynamic_offset_overflow", bytes, size, 0);
+        return false;
+    }
+    const uint32_t dynamicOffset = static_cast<uint32_t>(bufferInfo.offset);
     traceUniformBindStage("uniform_ring_written", bytes, size, 1);
 #ifdef __SWITCH__
     if (setIndex == 1u && g_switchModelTransformDraw.active &&
@@ -7808,66 +7860,63 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
-    const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
+    auto &set = m_uniformDynamicDescriptorSets[cacheIndex][dynamicRangeIndex];
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
-    VkDescriptorSet set = VK_NULL_HANDLE;
-    if (cursor < cachedSets.size())
-    {
-        set = cachedSets[cursor];
-    }
-    else
+    if (set == VK_NULL_HANDLE)
     {
         VkDescriptorSetAllocateInfo alloc{};
         alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        alloc.descriptorPool = m_backend->DescriptorPool();
+        alloc.descriptorPool = descriptorPool;
         VkDescriptorSetLayout descriptorLayout = setIndex == 1
             ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
         alloc.descriptorSetCount = 1;
         alloc.pSetLayouts = &descriptorLayout;
+        VkDescriptorSet allocatedSet = VK_NULL_HANDLE;
         const VkResult allocResult =
-            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+            vkAllocateDescriptorSets(descriptorDevice, &alloc, &allocatedSet);
         if (allocResult != VK_SUCCESS)
         {
             char trace[320];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=dynamic_uniform set=%u range=%llu class=%zu result=%d\n",
                 setIndex,
-                static_cast<unsigned long long>(frameSerial),
-                cursor,
-                cachedSets.size(),
-                size,
+                static_cast<unsigned long long>(dynamicRange),
+                dynamicRangeIndex,
                 static_cast<int>(allocResult));
             Switch_LogWrite(trace);
             traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
             return false;
         }
+
+        VkDescriptorBufferInfo descriptorInfo{};
+        descriptorInfo.buffer = bufferInfo.buffer;
+        descriptorInfo.offset = 0;
+        descriptorInfo.range = dynamicRange;
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = allocatedSet;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        write.pBufferInfo = &descriptorInfo;
+        vkUpdateDescriptorSets(descriptorDevice, 1, &write, 0, nullptr);
+        set = allocatedSet;
         traceUniformBindStage("descriptor_allocated", bytes, size, 1);
-        cachedSets.push_back(set);
+        traceUniformBindStage("descriptor_updated", bytes, size, 1);
         traceUniformBindStage("descriptor_cached", bytes, size, 1);
     }
-    ++m_uniformSetCursor[frameSlot][cacheIndex];
-
-    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = set;
-    write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write.pBufferInfo = &bufferInfo;
-    vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
-    traceUniformBindStage("descriptor_updated", bytes, size, 1);
     uniformBindCache.frameSerial = frameSerial;
     uniformBindCache.revision = uniformRevision;
     uniformBindCache.shaderSerial = shaderSerial;
     uniformBindCache.device = m_backend->Device();
     uniformBindCache.parse = parse;
     uniformBindCache.set = set;
+    uniformBindCache.dynamicOffset = dynamicOffset;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
-    BindDescriptorSetIfChanged(bindPoint, setIndex, set);
+    BindUniformDescriptorSetIfChanged(
+        bindPoint, setIndex, set, dynamicOffset);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
 #ifdef __SWITCH__
     if (setIndex == 1u && g_switchModelTransformDraw.active &&
@@ -8038,8 +8087,6 @@ bool IDirect3DDevice9::BindSamplerSet(
     {
         m_samplerSetCursor[frameSlot][0] = 0;
         m_samplerSetCursor[frameSlot][1] = 0;
-        m_uniformSetCursor[frameSlot][0] = 0;
-        m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
         m_samplerBindFastCache[frameSlot][0].valid = false;
@@ -10592,6 +10639,7 @@ void IDirect3DDevice9::ResetCachedCommandState()
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
     m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
+    m_cachedUniformDynamicOffsets.fill(UINT32_MAX);
     m_cachedBoundVertexBuffers.fill(VK_NULL_HANDLE);
     m_cachedBoundVertexOffsets.fill(0);
     m_cachedBoundVertexStreamMask = 0;
@@ -10615,6 +10663,25 @@ void IDirect3DDevice9::BindDescriptorSetIfChanged(
         setIndex, 1, &set, 0, nullptr);
     if (setIndex < m_cachedBoundDescriptorSets.size())
         m_cachedBoundDescriptorSets[setIndex] = set;
+}
+
+void IDirect3DDevice9::BindUniformDescriptorSetIfChanged(
+    VkPipelineBindPoint bindPoint, uint32_t setIndex,
+    VkDescriptorSet set, uint32_t dynamicOffset)
+{
+    ResetCachedCommandState();
+    if (setIndex >= m_cachedBoundDescriptorSets.size())
+        return;
+
+    if (m_cachedBoundDescriptorSets[setIndex] == set &&
+        m_cachedUniformDynamicOffsets[setIndex] == dynamicOffset)
+        return;
+
+    vkCmdBindDescriptorSets(
+        m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+        setIndex, 1, &set, 1, &dynamicOffset);
+    m_cachedBoundDescriptorSets[setIndex] = set;
+    m_cachedUniformDynamicOffsets[setIndex] = dynamicOffset;
 }
 
 void Switch_BeginDescriptorPoolBatch()
