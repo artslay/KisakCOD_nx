@@ -10,6 +10,7 @@
 #include <functional>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vulkan/vulkan.h>
 #include "gfx/gfx_backend.h"
 
@@ -22,6 +23,7 @@ struct VulkanImageUpload2D
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
     uint32_t width = 0;
     uint32_t height = 0;
+    uint32_t depth = 1;
     uint32_t mipLevel = 0;
     const void *data = nullptr;
     size_t bytes = 0;
@@ -205,8 +207,10 @@ public:
         VkImageView *view,
         VkComponentMapping components = {});
 
-    // Upload multiple images with one staging allocation and one queue submission.
+    // Upload multiple image subresources (2D, cube layers, or 3D mip volumes)
+    // with one staging allocation and one command-buffer recording.
     bool UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t count);
+    bool QueueImageUpload2D(const VulkanImageUpload2D &upload);
 
     bool UploadImage2D(
         VkImage image,
@@ -288,6 +292,7 @@ public:
         VkCompareOp compareOp = VK_COMPARE_OP_LESS_OR_EQUAL);
 
     bool AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info);
+    bool AllocateUniformRange(size_t size, VkDescriptorBufferInfo *info, void **mapped);
 
     // Thread-safe CPU-side enqueue. These functions never touch Vulkan command
     // buffers; queued writes are recorded by the backend from EnsureRendering.
@@ -372,6 +377,7 @@ private:
     void DestroySwapchain();
     void DestroyDefaultDepth();
     void FlushDeferredResources(uint64_t completedFrameSerial = ~uint64_t(0));
+    bool FlushQueuedImageUploads();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
 
     struct QueuedBufferUpdate
@@ -383,6 +389,12 @@ private:
         bool waitForGpu = false;
         size_t dataOffset = 0;
         size_t size = 0;
+    };
+
+    struct QueuedImageUpload
+    {
+        VulkanImageUpload2D upload{};
+        size_t dataOffset = 0;
     };
 
     struct DeferredResource
@@ -460,6 +472,17 @@ private:
     std::mutex m_descriptorPoolMutex;
     std::mutex m_deferredResourcesMutex;
     std::vector<DeferredResource> m_deferredResources;
+    std::unordered_set<VkImage> m_retiringImages;
+
+    // Database workers copy mip payloads into this queue. The render thread
+    // drains it into frame-fenced mapped staging before binding image samplers.
+    std::mutex m_imageUploadsMutex;
+    std::vector<QueuedImageUpload> m_queuedImageUploads;
+    std::vector<uint8_t> m_queuedImageUploadData;
+    std::vector<QueuedImageUpload> m_pendingImageUploads;
+    std::vector<uint8_t> m_pendingImageUploadData;
+    std::vector<VulkanImageUpload2D> m_imageUploadBatch;
+    std::atomic<bool> m_hasQueuedImageUploads{false};
 
     // Worker threads only append owned CPU copies. The backend thread drains
     // this queue and is the sole thread that records their Vulkan commands.

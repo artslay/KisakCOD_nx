@@ -521,46 +521,69 @@ void R_VulkanUploadTexture(
 
 
 
-    // Only the thread that owns the active frame may append transfer
-    // commands to its command buffer. Other callers retain the previous
-    // synchronization-before-ImmediateSubmit path.
-    const bool recordInCurrentFrame = backend->IsFrameRecordingThread();
-    if (!recordInCurrentFrame &&
-        oldLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
-        backend->IsFrameActive())
-    {
-#ifdef __SWITCH__
-        g_switchFrameStage = "frame/upload/texture_reupload_sync";
-#endif
-        if (!backend->SynchronizeActiveFrame())
-        {
-            char trace[384];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK TEXTURE REUPLOAD SYNC FAIL] name=%.96s mip=%u face=%u layer=%u layout=%u\n",
-                image->name ? image->name : "<null>", mipLevel,
-                static_cast<unsigned>(face), layer,
-                static_cast<unsigned>(oldLayout));
-            Switch_LogWrite(trace);
-            return;
-        }
-    }
-
     bool uploaded = false;
-    if (image->mapType == MAPTYPE_3D)
+    const bool diagnosticProbe = mipLevel == 0u && image->name &&
+        (std::strcmp(image->name, "ch_factory_rusty_iron") == 0 ||
+         std::strcmp(image->name, "me_drywall02_col") == 0 ||
+         std::strcmp(image->name, "icbm_tunnelfloor") == 0);
+
+    if (diagnosticProbe)
     {
-        uploaded = backend->UploadImage3D(
-            texture->image, texture->format,
-            width, height, depth, mipLevel,
-            source, bytes, oldLayout, VkOffset3D{}, recordInCurrentFrame);
+        // Keep the explicit readback probes synchronous; ordinary texture mips
+        // use the asynchronous owned-payload queue below.
+        const bool recordInCurrentFrame = backend->IsFrameRecordingThread();
+        if (!recordInCurrentFrame &&
+            oldLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
+            backend->IsFrameActive())
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/upload/texture_reupload_sync";
+#endif
+            if (!backend->SynchronizeActiveFrame())
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK TEXTURE REUPLOAD SYNC FAIL] name=%.96s mip=%u face=%u layer=%u layout=%u\n",
+                    image->name ? image->name : "<null>", mipLevel,
+                    static_cast<unsigned>(face), layer,
+                    static_cast<unsigned>(oldLayout));
+                Switch_LogWrite(trace);
+                return;
+            }
+        }
+
+        if (image->mapType == MAPTYPE_3D)
+        {
+            uploaded = backend->UploadImage3D(
+                texture->image, texture->format,
+                width, height, depth, mipLevel,
+                source, bytes, oldLayout, VkOffset3D{}, recordInCurrentFrame);
+        }
+        else
+        {
+            uploaded = backend->UploadImage2D(
+                texture->image, texture->format, info.aspect,
+                width, height, mipLevel,
+                source, bytes, oldLayout, layer, VkOffset3D{},
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, recordInCurrentFrame);
+        }
     }
     else
     {
-        uploaded = backend->UploadImage2D(
-            texture->image, texture->format, info.aspect,
-            width, height, mipLevel,
-            source, bytes, oldLayout, layer, VkOffset3D{},
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, recordInCurrentFrame);
+        VulkanImageUpload2D upload{};
+        upload.image = texture->image;
+        upload.aspect = info.aspect;
+        upload.width = width;
+        upload.height = height;
+        upload.depth = image->mapType == MAPTYPE_3D ? depth : 1u;
+        upload.mipLevel = mipLevel;
+        upload.data = source;
+        upload.bytes = bytes;
+        upload.oldLayout = oldLayout;
+        upload.baseArrayLayer = layer;
+        upload.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        uploaded = backend->QueueImageUpload2D(upload);
     }
 
     if (uploaded)

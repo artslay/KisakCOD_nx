@@ -1022,6 +1022,15 @@ void VulkanBackend::Shutdown()
         m_queuedBufferUpdates.clear();
         m_hasQueuedBufferUpdates.store(false, std::memory_order_release);
     }
+    {
+        std::lock_guard<std::mutex> imageUploadLock(m_imageUploadsMutex);
+        m_queuedImageUploads.clear();
+        m_queuedImageUploadData.clear();
+        m_pendingImageUploads.clear();
+        m_pendingImageUploadData.clear();
+        m_imageUploadBatch.clear();
+        m_hasQueuedImageUploads.store(false, std::memory_order_release);
+    }
     FlushDeferredResources();
 
     // Dummy sampler is owned by m_samplers; destroy it only there.
@@ -3491,13 +3500,39 @@ void VulkanBackend::DeferDestroyImage(
     if (!image && !memory && !view)
         return;
 
+    std::lock_guard<std::mutex> queueLock(m_imageUploadsMutex);
+    std::lock_guard<std::mutex> retireLock(m_deferredResourcesMutex);
+    if (image)
+    {
+        m_retiringImages.insert(image);
+        std::vector<QueuedImageUpload> keptUploads;
+        std::vector<uint8_t> keptData;
+        keptUploads.reserve(m_queuedImageUploads.size());
+        for (const QueuedImageUpload &queued : m_queuedImageUploads)
+        {
+            if (queued.upload.image == image)
+                continue;
+            QueuedImageUpload copy = queued;
+            const size_t offset = (keptData.size() + 3u) & ~size_t(3u);
+            keptData.resize(offset, 0);
+            keptData.insert(
+                keptData.end(),
+                m_queuedImageUploadData.data() + queued.dataOffset,
+                m_queuedImageUploadData.data() + queued.dataOffset + queued.upload.bytes);
+            copy.dataOffset = offset;
+            keptUploads.emplace_back(copy);
+        }
+        m_queuedImageUploads.swap(keptUploads);
+        m_queuedImageUploadData.swap(keptData);
+        m_hasQueuedImageUploads.store(!m_queuedImageUploads.empty(), std::memory_order_release);
+    }
+
     DeferredResource resource{};
     resource.kind = DeferredResource::Kind::Image;
     resource.image = image;
     resource.memory = memory;
     resource.view = view;
     resource.retireFrameSerial = FrameSerial();
-    std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
     m_deferredResources.push_back(resource);
 }
 
@@ -3830,6 +3865,11 @@ void VulkanBackend::DestroyImage(VkImage image, VkDeviceMemory memory, VkImageVi
     if (view) vkDestroyImageView(m_device, view, nullptr);
     if (image) vkDestroyImage(m_device, image, nullptr);
     if (memory) vkFreeMemory(m_device, memory, nullptr);
+    if (image)
+    {
+        std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
+        m_retiringImages.erase(image);
+    }
 }
 
 void VulkanBackend::TransitionImage(
@@ -4309,7 +4349,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
     {
         const VulkanImageUpload2D &upload = uploads[i];
         if (!upload.image || !upload.data || !upload.bytes ||
-            !upload.width || !upload.height ||
+            !upload.width || !upload.height || !upload.depth ||
             stagingSize > std::numeric_limits<VkDeviceSize>::max() - 3u)
             return false;
 
@@ -4428,7 +4468,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
             copy.imageSubresource.layerCount = 1;
             copy.imageOffset = upload.imageOffset;
-            copy.imageExtent = {upload.width, upload.height, 1};
+            copy.imageExtent = {upload.width, upload.height, upload.depth};
             vkCmdCopyBufferToImage(
                 command,
                 sourceBuffer,
@@ -4446,49 +4486,59 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             count, toFinal.data());
     };
 
-    // Bink publishes decoded planes to this render-thread function. When the
-    // caller owns the current frame, stage the whole plane set in its uniform
-    // transfer ring and record the three/four image copies in the current
-    // command buffer. This removes the per-video-frame ImmediateSubmit fence.
+    // Copy mip payloads directly into the frame-slot mapped ring, avoiding
+    // a second packed CPU vector and an additional memcpy of the whole mip chain.
     if (m_frameActive && m_commandBuffer && IsFrameRecordingThread() &&
         stagingSize <= static_cast<VkDeviceSize>(
             std::numeric_limits<size_t>::max()))
     {
-        std::vector<uint8_t> packedData(static_cast<size_t>(stagingSize));
-        for (uint32_t i = 0; i < count; ++i)
-        {
-            std::memcpy(
-                packedData.data() + static_cast<size_t>(offsets[i]),
-                uploads[i].data,
-                uploads[i].bytes);
-        }
-
         VkDescriptorBufferInfo uploadSource{};
-        if (!AllocateUniform(packedData.data(), packedData.size(), &uploadSource))
+        void *mappedUpload = nullptr;
+        if (AllocateUniformRange(
+                static_cast<size_t>(stagingSize), &uploadSource, &mappedUpload))
         {
-            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
-                return false;
-            if (AllocateUniform(packedData.data(), packedData.size(), &uploadSource))
+            for (uint32_t i = 0; i < count; ++i)
             {
-                EndRendering();
-                recordBatch(
-                    m_commandBuffer, uploadSource.buffer, uploadSource.offset);
-#ifdef __SWITCH__
-                g_switchFrameStage = "frame/upload/images2d_recorded_in_frame";
-#endif
-                return true;
+                std::memcpy(
+                    static_cast<uint8_t *>(mappedUpload) +
+                        static_cast<size_t>(offsets[i]),
+                    uploads[i].data,
+                    uploads[i].bytes);
             }
-        }
-        else
-        {
             EndRendering();
-            recordBatch(
-                m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+            recordBatch(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/upload/images2d_recorded_in_frame";
 #endif
             return true;
         }
+
+        // Do not wait for the GPU when the frame ring is full. Retire this
+        // transient transfer source only after the frame completion fence.
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void *mapped = nullptr;
+        if (!CreateBuffer(
+                stagingSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &staging, &stagingMemory, &mapped))
+            return false;
+        for (uint32_t i = 0; i < count; ++i)
+            std::memcpy(
+                static_cast<uint8_t *>(mapped) +
+                    static_cast<size_t>(offsets[i]),
+                uploads[i].data,
+                uploads[i].bytes);
+
+        EndRendering();
+        recordBatch(m_commandBuffer, staging, 0);
+        DeferDestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/images2d_recorded_staging";
+#endif
+        return true;
     }
 
     static constexpr VkDeviceSize kImmediateUploadStagingCapacity =
@@ -4998,27 +5048,28 @@ VkSampler VulkanBackend::GetSampler(
     return sampler;
 }
 
-bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info)
+bool VulkanBackend::AllocateUniformRange(
+    size_t size, VkDescriptorBufferInfo *info, void **mapped)
 {
-    if (!m_uniformMapped || !data || !info)
+    if (!m_uniformMapped || !info || !mapped ||
+        size > std::numeric_limits<VkDeviceSize>::max() - 15u)
         return false;
 
-    const VkDeviceSize alignedSize = (static_cast<VkDeviceSize>(size) + 15u) & ~VkDeviceSize(15u);
+    const VkDeviceSize alignedSize =
+        (static_cast<VkDeviceSize>(size) + 15u) & ~VkDeviceSize(15u);
     const VkDeviceSize offset = (m_uniformOffset + m_uniformAlignment - 1) /
                                 m_uniformAlignment * m_uniformAlignment;
-    if (offset + alignedSize > m_uniformCapacity)
+    if (offset > m_uniformCapacity || alignedSize > m_uniformCapacity - offset)
     {
 #ifdef __SWITCH__
         char trace[320];
         std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][VK UNIFORM RING EXHAUSTED] frame=%llu used=%llu capacity=%llu request=%zu aligned=%llu stage=%s\n",
+            trace, sizeof(trace),
+            "[KisakCOD][VK UNIFORM RING EXHAUSTED] frame=%llu used=%llu capacity=%llu request=%zu aligned=%llu stage=%s\\n",
             static_cast<unsigned long long>(FrameSerial()),
             static_cast<unsigned long long>(m_uniformOffset),
             static_cast<unsigned long long>(m_uniformCapacity),
-            size,
-            static_cast<unsigned long long>(alignedSize),
+            size, static_cast<unsigned long long>(alignedSize),
             g_switchFrameStage ? g_switchFrameStage : "(null)");
         Switch_LogWrite(trace);
 #endif
@@ -5026,12 +5077,22 @@ bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorB
     }
 
     const VkDeviceSize absoluteOffset = m_uniformFrameBase + offset;
-    std::memcpy(m_uniformMapped + absoluteOffset, data, size);
     m_uniformOffset = offset + alignedSize;
-
     info->buffer = m_uniformRing;
     info->offset = absoluteOffset;
     info->range = static_cast<VkDeviceSize>(size);
+    *mapped = m_uniformMapped + absoluteOffset;
+    return true;
+}
+
+bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info)
+{
+    if (!data || !info)
+        return false;
+    void *mapped = nullptr;
+    if (!AllocateUniformRange(size, info, &mapped))
+        return false;
+    std::memcpy(mapped, data, size);
     return true;
 }
 
@@ -5141,8 +5202,202 @@ bool VulkanBackend::QueueMappedBufferUpdate(
     return true;
 }
 
+bool VulkanBackend::QueueImageUpload2D(const VulkanImageUpload2D &upload)
+{
+    if (!upload.image || !upload.data || !upload.bytes ||
+        !upload.width || !upload.height || !upload.depth ||
+        !m_device || m_deviceLost)
+        return false;
+    if (upload.bytes > std::numeric_limits<size_t>::max() - 3u)
+        return false;
+
+    std::lock_guard<std::mutex> queueLock(m_imageUploadsMutex);
+    std::lock_guard<std::mutex> retireLock(m_deferredResourcesMutex);
+    if (m_retiringImages.find(upload.image) != m_retiringImages.end())
+        return false;
+    if (m_queuedImageUploadData.size() >
+        std::numeric_limits<size_t>::max() - 3u)
+        return false;
+
+    const size_t dataOffset =
+        (m_queuedImageUploadData.size() + 3u) & ~size_t(3u);
+    if (upload.bytes > std::numeric_limits<size_t>::max() - dataOffset)
+        return false;
+
+    m_queuedImageUploadData.resize(dataOffset, 0);
+    m_queuedImageUploadData.insert(
+        m_queuedImageUploadData.end(),
+        static_cast<const uint8_t *>(upload.data),
+        static_cast<const uint8_t *>(upload.data) + upload.bytes);
+
+    QueuedImageUpload queued{};
+    queued.upload = upload;
+    queued.upload.data = nullptr;
+    queued.dataOffset = dataOffset;
+    m_queuedImageUploads.emplace_back(queued);
+    m_hasQueuedImageUploads.store(true, std::memory_order_release);
+    return true;
+}
+
+bool VulkanBackend::FlushQueuedImageUploads()
+{
+    if (!m_hasQueuedImageUploads.load(std::memory_order_acquire))
+        return true;
+    if (!m_frameActive || m_deviceLost || !m_commandBuffer ||
+        !IsFrameRecordingThread())
+        return false;
+
+    m_pendingImageUploads.clear();
+    m_pendingImageUploadData.clear();
+    {
+        std::lock_guard<std::mutex> lock(m_imageUploadsMutex);
+        m_pendingImageUploads.swap(m_queuedImageUploads);
+        m_pendingImageUploadData.swap(m_queuedImageUploadData);
+        m_hasQueuedImageUploads.store(
+            !m_queuedImageUploads.empty(), std::memory_order_release);
+    }
+    if (m_pendingImageUploads.empty())
+        return true;
+
+    std::vector<VulkanImageUpload2D> &batch = m_imageUploadBatch;
+    batch.clear();
+    if (batch.capacity() < m_pendingImageUploads.size())
+        batch.reserve(m_pendingImageUploads.size());
+
+    const auto isRetiring = [this](VkImage image)
+    {
+        std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
+        return m_retiringImages.find(image) != m_retiringImages.end();
+    };
+
+    const auto requeueRemaining = [this](size_t first)
+    {
+        std::lock_guard<std::mutex> queueLock(m_imageUploadsMutex);
+        std::lock_guard<std::mutex> retireLock(m_deferredResourcesMutex);
+        std::vector<QueuedImageUpload> mergedUploads;
+        std::vector<uint8_t> mergedData;
+        mergedUploads.reserve(
+            m_pendingImageUploads.size() - first +
+            m_queuedImageUploads.size());
+        mergedData.reserve(
+            m_pendingImageUploadData.size() +
+            m_queuedImageUploadData.size());
+
+        const auto appendRecord =
+            [&mergedUploads, &mergedData, this](
+                const QueuedImageUpload &source,
+                const std::vector<uint8_t> &sourceData)
+        {
+            if (m_retiringImages.find(source.upload.image) != m_retiringImages.end())
+                return;
+            QueuedImageUpload copy = source;
+            const size_t offset = (mergedData.size() + 3u) & ~size_t(3u);
+            mergedData.resize(offset, 0);
+            mergedData.insert(
+                mergedData.end(),
+                sourceData.data() + source.dataOffset,
+                sourceData.data() + source.dataOffset + source.upload.bytes);
+            copy.dataOffset = offset;
+            mergedUploads.emplace_back(copy);
+        };
+        for (size_t index = first;
+             index < m_pendingImageUploads.size(); ++index)
+            appendRecord(m_pendingImageUploads[index], m_pendingImageUploadData);
+        for (const QueuedImageUpload &queued : m_queuedImageUploads)
+            appendRecord(queued, m_queuedImageUploadData);
+
+        m_queuedImageUploads.swap(mergedUploads);
+        m_queuedImageUploadData.swap(mergedData);
+        m_hasQueuedImageUploads.store(
+            !m_queuedImageUploads.empty(), std::memory_order_release);
+    };
+
+    size_t index = 0;
+    while (index < m_pendingImageUploads.size())
+    {
+        const size_t batchBegin = index;
+        VkDeviceSize batchBytes = 0;
+        batch.clear();
+
+        while (index < m_pendingImageUploads.size())
+        {
+            const QueuedImageUpload &queued = m_pendingImageUploads[index];
+            const VulkanImageUpload2D &source = queued.upload;
+            if (isRetiring(source.image))
+            {
+                ++index;
+                continue;
+            }
+
+            const VkDeviceSize alignedOffset =
+                (batchBytes + 3u) & ~VkDeviceSize(3u);
+            if (source.bytes > std::numeric_limits<VkDeviceSize>::max() -
+                    alignedOffset)
+            {
+                requeueRemaining(batchBegin);
+                m_pendingImageUploads.clear();
+                m_pendingImageUploadData.clear();
+                return false;
+            }
+
+            bool duplicateSubresource = false;
+            for (const VulkanImageUpload2D &existing : batch)
+            {
+                if (existing.image == source.image &&
+                    existing.aspect == source.aspect &&
+                    existing.mipLevel == source.mipLevel &&
+                    existing.baseArrayLayer == source.baseArrayLayer)
+                {
+                    duplicateSubresource = true;
+                    break;
+                }
+            }
+            if (!batch.empty() && duplicateSubresource)
+                break;
+            if (!batch.empty() &&
+                alignedOffset + static_cast<VkDeviceSize>(source.bytes) >
+                    m_uniformCapacity)
+                break;
+
+            VulkanImageUpload2D upload = source;
+            upload.data =
+                m_pendingImageUploadData.data() + queued.dataOffset;
+            batch.emplace_back(upload);
+            batchBytes = alignedOffset + static_cast<VkDeviceSize>(source.bytes);
+            ++index;
+            if (batchBytes >= m_uniformCapacity)
+                break;
+        }
+
+        if (batch.empty())
+        {
+            if (index > batchBegin)
+                continue;
+            requeueRemaining(batchBegin);
+            m_pendingImageUploads.clear();
+            m_pendingImageUploadData.clear();
+            return false;
+        }
+
+        if (!UploadImages2D(batch.data(), static_cast<uint32_t>(batch.size())))
+        {
+            requeueRemaining(batchBegin);
+            m_pendingImageUploads.clear();
+            m_pendingImageUploadData.clear();
+            return false;
+        }
+    }
+
+    m_pendingImageUploads.clear();
+    m_pendingImageUploadData.clear();
+    return true;
+}
+
 bool VulkanBackend::FlushQueuedBufferUpdates()
 {
+    if (!FlushQueuedImageUploads())
+        return false;
+
     if (!m_hasQueuedBufferUpdates.load(std::memory_order_acquire))
         return true;
     if (!m_frameActive || m_deviceLost || !m_commandBuffer)
