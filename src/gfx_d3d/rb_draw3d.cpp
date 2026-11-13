@@ -44,12 +44,16 @@ static inline void Switch_RecordDraw3DStage(
 
 static inline void Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage stage)
 {
+    if (!Switch_PerfDiagEnabled())
+        return;
     if (VulkanBackend *backend = GetVulkanBackend())
         backend->BeginGpuTimestamp(stage);
 }
 
 static inline void Switch_EndGpuDraw3DStage(SwitchGpuTimingStage stage)
 {
+    if (!Switch_PerfDiagEnabled())
+        return;
     if (VulkanBackend *backend = GetVulkanBackend())
         backend->EndGpuTimestamp(stage);
 }
