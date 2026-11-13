@@ -4858,9 +4858,10 @@ bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend)
     }
     for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
     {
-        vkUnmapMemory(buffer->device, buffer->memory);
-        buffer->mapped = nullptr;
+        // DestroyBuffer retires this resource's suballocation. The shared pool
+        // mapping remains valid until the last buffer in that block is retired.
         backend->DestroyBuffer(buffer->buffer, buffer->memory);
+        buffer->mapped = nullptr;
         buffer->buffer = VK_NULL_HANDLE;
         buffer->memory = VK_NULL_HANDLE;
         buffer->device = VK_NULL_HANDLE;
@@ -4917,16 +4918,10 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
         if (!backend->CreateBuffer(owner->size, owner->usageFlags, owner->memoryProperties,
                                    &item.buffer, &item.memory, &item.mapped))
         {
-            if (item.mapped)
-                vkUnmapMemory(backend->Device(), item.memory);
             if (item.buffer || item.memory)
                 backend->DestroyBuffer(item.buffer, item.memory);
             for (PendingBuffer &created : pending)
-            {
-                if (created.mapped)
-                    vkUnmapMemory(backend->Device(), created.memory);
                 backend->DestroyBuffer(created.buffer, created.memory);
-            }
             Switch_LogWrite("[KisakCOD][VK RECOVERY] failed to recreate a mapped buffer\n");
             return false;
         }
@@ -4969,13 +4964,8 @@ uint32_t KisakVkBuffer::Release()
     }
     else
     {
-        // The backend may already have been detached during shutdown.
-        if (mapped)
-            vkUnmapMemory(device, memory);
-        if (buffer)
-            vkDestroyBuffer(device, buffer, nullptr);
-        if (memory)
-            vkFreeMemory(device, memory, nullptr);
+        // The backend detached only after its device and pool blocks were torn
+        // down. Never free a shared VkDeviceMemory block from an individual wrapper.
     }
     buffer = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;

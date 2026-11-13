@@ -351,6 +351,10 @@ public:
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
 
 private:
+    enum class MemoryResourceClass : uint8_t;
+    struct MemoryBlock;
+    struct MemoryAllocation;
+
     struct FrameSync
     {
         VkSemaphore imageAvailable = VK_NULL_HANDLE;
@@ -380,6 +384,17 @@ private:
     void DestroyDefaultDepth();
     void FlushDeferredResources(uint64_t completedFrameSerial = ~uint64_t(0));
     bool FlushQueuedImageUploads();
+    bool AllocateResourceMemory(
+        MemoryResourceClass resourceClass, VkBuffer buffer, VkImage image,
+        const VkMemoryRequirements &requirements, uint32_t memoryTypeIndex,
+        bool requiresDedicated, bool prefersDedicated, bool requestMapped,
+        VkDeviceMemory *memory, VkDeviceSize *memoryOffset, void **mapped);
+    void ReleaseBufferMemory(VkBuffer buffer, VkDeviceMemory memory);
+    void ReleaseImageMemory(VkImage image, VkDeviceMemory memory);
+    void ReleaseMemoryAllocation(
+        MemoryResourceClass resourceClass, VkBuffer buffer, VkImage image,
+        VkDeviceMemory memory);
+    void DestroyMemoryAllocator();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
 
     struct QueuedBufferUpdate
@@ -397,6 +412,31 @@ private:
     {
         VulkanImageUpload2D upload{};
         size_t dataOffset = 0;
+    };
+
+    enum class MemoryResourceClass : uint8_t { Buffer, Image };
+    struct MemoryFreeRange
+    {
+        VkDeviceSize offset = 0;
+        VkDeviceSize size = 0;
+    };
+    struct MemoryBlock
+    {
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkDeviceSize size = 0;
+        uint32_t memoryTypeIndex = UINT32_MAX;
+        VkMemoryPropertyFlags properties = 0;
+        MemoryResourceClass resourceClass = MemoryResourceClass::Buffer;
+        void *mapped = nullptr;
+        bool dedicated = false;
+        size_t liveAllocations = 0;
+        std::vector<MemoryFreeRange> freeRanges;
+    };
+    struct MemoryAllocation
+    {
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkDeviceSize offset = 0;
+        VkDeviceSize size = 0;
     };
 
     struct DeferredResource
@@ -475,6 +515,13 @@ private:
     std::mutex m_deferredResourcesMutex;
     std::vector<DeferredResource> m_deferredResources;
     std::unordered_set<VkImage> m_retiringImages;
+
+    // Buffer and optimal-image allocations use independent pools to satisfy
+    // bufferImageGranularity; allocation offsets are tracked per resource.
+    std::mutex m_memoryAllocatorMutex;
+    std::unordered_map<VkDeviceMemory, MemoryBlock> m_memoryBlocks;
+    std::unordered_map<VkBuffer, MemoryAllocation> m_bufferMemoryAllocations;
+    std::unordered_map<VkImage, MemoryAllocation> m_imageMemoryAllocations;
 
     // Database workers copy mip payloads into this queue. The render thread
     // drains it into frame-fenced mapped staging before binding image samplers.

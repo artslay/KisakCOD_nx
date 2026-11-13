@@ -1083,15 +1083,11 @@ void VulkanBackend::Shutdown()
     m_uploadStagingMapped = nullptr;
     m_uploadStagingCapacity = 0;
 
-    if (m_uniformMapped && m_uniformRingMemory)
-        vkUnmapMemory(m_device, m_uniformRingMemory);
-    m_uniformMapped = nullptr;
-    if (m_uniformRing)
-        vkDestroyBuffer(m_device, m_uniformRing, nullptr);
+    if (m_uniformRing || m_uniformRingMemory)
+        DestroyBuffer(m_uniformRing, m_uniformRingMemory, m_uniformMapped != nullptr);
     m_uniformRing = VK_NULL_HANDLE;
-    if (m_uniformRingMemory)
-        vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
     m_uniformRingMemory = VK_NULL_HANDLE;
+    m_uniformMapped = nullptr;
 
     std::vector<std::unique_lock<std::mutex>> frameFenceLocks;
     frameFenceLocks.reserve(FramesInFlight);
@@ -1126,6 +1122,7 @@ void VulkanBackend::Shutdown()
 
     DestroyDefaultDepth();
     DestroySwapchain();
+    DestroyMemoryAllocator();
 
     if (m_surface) vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
     if (m_device) vkDestroyDevice(m_device, nullptr);
@@ -3390,6 +3387,310 @@ uint32_t VulkanBackend::FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags 
     return UINT32_MAX;
 }
 
+
+bool VulkanBackend::AllocateResourceMemory(
+    MemoryResourceClass resourceClass,
+    VkBuffer buffer,
+    VkImage image,
+    const VkMemoryRequirements &requirements,
+    uint32_t memoryTypeIndex,
+    bool requiresDedicated,
+    bool prefersDedicated,
+    bool requestMapped,
+    VkDeviceMemory *memory,
+    VkDeviceSize *memoryOffset,
+    void **mapped)
+{
+    if (!memory || !memoryOffset || !m_device ||
+        requirements.size == 0 || requirements.alignment == 0 ||
+        memoryTypeIndex == UINT32_MAX)
+        return false;
+    *memory = VK_NULL_HANDLE;
+    *memoryOffset = 0;
+    if (mapped)
+        *mapped = nullptr;
+
+    VkPhysicalDeviceMemoryProperties properties{};
+    vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &properties);
+    if (memoryTypeIndex >= properties.memoryTypeCount)
+        return false;
+    const VkMemoryPropertyFlags flags =
+        properties.memoryTypes[memoryTypeIndex].propertyFlags;
+    if (requestMapped && !(flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
+        return false;
+
+    const VkDeviceSize preferredSize =
+        resourceClass == MemoryResourceClass::Image
+            ? VkDeviceSize(16u * 1024u * 1024u)
+            : VkDeviceSize(8u * 1024u * 1024u);
+    const bool dedicated = requiresDedicated || prefersDedicated ||
+        requirements.size >= preferredSize / 2u;
+    const auto alignUp = [](VkDeviceSize value, VkDeviceSize alignment,
+                            VkDeviceSize *result)
+    {
+        if (!result || alignment == 0 ||
+            value > std::numeric_limits<VkDeviceSize>::max() - (alignment - 1u))
+            return false;
+        *result = ((value + alignment - 1u) / alignment) * alignment;
+        return true;
+    };
+
+    std::lock_guard<std::mutex> lock(m_memoryAllocatorMutex);
+    const auto reserve = [&](MemoryBlock &block) -> bool
+    {
+        for (size_t i = 0; i < block.freeRanges.size(); ++i)
+        {
+            const MemoryFreeRange range = block.freeRanges[i];
+            VkDeviceSize offset = 0;
+            if (!alignUp(range.offset, requirements.alignment, &offset))
+                continue;
+            const VkDeviceSize prefix = offset - range.offset;
+            if (prefix > range.size || requirements.size > range.size - prefix)
+                continue;
+
+            const VkDeviceSize rangeEnd = range.offset + range.size;
+            const VkDeviceSize allocationEnd = offset + requirements.size;
+            const VkDeviceSize suffix = rangeEnd - allocationEnd;
+            block.freeRanges.erase(block.freeRanges.begin() + i);
+            size_t insertion = i;
+            if (prefix)
+            {
+                block.freeRanges.insert(
+                    block.freeRanges.begin() + insertion,
+                    MemoryFreeRange{range.offset, prefix});
+                ++insertion;
+            }
+            if (suffix)
+            {
+                block.freeRanges.insert(
+                    block.freeRanges.begin() + insertion,
+                    MemoryFreeRange{allocationEnd, suffix});
+            }
+
+            const MemoryAllocation allocation{block.memory, offset, requirements.size};
+            if (resourceClass == MemoryResourceClass::Buffer)
+                m_bufferMemoryAllocations[buffer] = allocation;
+            else
+                m_imageMemoryAllocations[image] = allocation;
+            ++block.liveAllocations;
+            *memory = block.memory;
+            *memoryOffset = offset;
+            if (mapped)
+                *mapped = block.mapped
+                    ? static_cast<void *>(static_cast<uint8_t *>(block.mapped) + offset)
+                    : nullptr;
+            return !requestMapped || (mapped && *mapped != nullptr);
+        }
+        return false;
+    };
+
+    for (auto &entry : m_memoryBlocks)
+    {
+        MemoryBlock &block = entry.second;
+        if (block.resourceClass != resourceClass ||
+            block.memoryTypeIndex != memoryTypeIndex || block.dedicated)
+            continue;
+        if (requestMapped && !block.mapped)
+        {
+            const VkResult mapResult =
+                vkMapMemory(m_device, block.memory, 0, block.size, 0, &block.mapped);
+            if (mapResult != VK_SUCCESS)
+            {
+                SetError("vkMapMemory failed for pooled Vulkan memory", mapResult);
+                continue;
+            }
+        }
+        if (reserve(block))
+            return true;
+    }
+
+    VkDeviceSize blockSize = requirements.size;
+    if (!dedicated)
+    {
+        if (requirements.size >
+            std::numeric_limits<VkDeviceSize>::max() - (requirements.alignment - 1u))
+            return false;
+        blockSize = std::max(
+            preferredSize, requirements.size + requirements.alignment - 1u);
+        if (!alignUp(blockSize, VkDeviceSize(64u * 1024u), &blockSize))
+            return false;
+    }
+
+    VkMemoryDedicatedAllocateInfo dedicatedInfo{};
+    dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    dedicatedInfo.buffer = resourceClass == MemoryResourceClass::Buffer
+        ? buffer : VK_NULL_HANDLE;
+    dedicatedInfo.image = resourceClass == MemoryResourceClass::Image
+        ? image : VK_NULL_HANDLE;
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.pNext = dedicated ? &dedicatedInfo : nullptr;
+    allocateInfo.allocationSize = blockSize;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+
+    VkDeviceMemory newMemory = VK_NULL_HANDLE;
+    const VkResult allocateResult =
+        vkAllocateMemory(m_device, &allocateInfo, nullptr, &newMemory);
+    if (allocateResult != VK_SUCCESS)
+    {
+        SetError("vkAllocateMemory failed for Vulkan pool block", allocateResult);
+        return false;
+    }
+
+    MemoryBlock newBlock{};
+    newBlock.memory = newMemory;
+    newBlock.size = blockSize;
+    newBlock.memoryTypeIndex = memoryTypeIndex;
+    newBlock.properties = flags;
+    newBlock.resourceClass = resourceClass;
+    newBlock.dedicated = dedicated;
+    newBlock.freeRanges.push_back({0, blockSize});
+    if (requestMapped)
+    {
+        const VkResult mapResult =
+            vkMapMemory(m_device, newMemory, 0, blockSize, 0, &newBlock.mapped);
+        if (mapResult != VK_SUCCESS)
+        {
+            SetError("vkMapMemory failed for Vulkan pool block", mapResult);
+            vkFreeMemory(m_device, newMemory, nullptr);
+            return false;
+        }
+    }
+
+    const bool wasMapped = newBlock.mapped != nullptr;
+    auto inserted = m_memoryBlocks.emplace(newMemory, std::move(newBlock));
+    if (!inserted.second)
+    {
+        if (wasMapped)
+            vkUnmapMemory(m_device, newMemory);
+        vkFreeMemory(m_device, newMemory, nullptr);
+        return false;
+    }
+    if (reserve(inserted.first->second))
+        return true;
+
+    MemoryBlock &failed = inserted.first->second;
+    if (failed.mapped)
+        vkUnmapMemory(m_device, failed.memory);
+    vkFreeMemory(m_device, failed.memory, nullptr);
+    m_memoryBlocks.erase(inserted.first);
+    return false;
+}
+
+void VulkanBackend::ReleaseMemoryAllocation(
+    MemoryResourceClass resourceClass,
+    VkBuffer buffer,
+    VkImage image,
+    VkDeviceMemory memory)
+{
+    std::lock_guard<std::mutex> lock(m_memoryAllocatorMutex);
+    MemoryAllocation allocation{};
+    if (resourceClass == MemoryResourceClass::Buffer)
+    {
+        const auto it = m_bufferMemoryAllocations.find(buffer);
+        if (it == m_bufferMemoryAllocations.end())
+            return;
+        allocation = it->second;
+        if (memory && allocation.memory != memory)
+            SetError("Vulkan buffer memory handle did not match allocator record");
+        m_bufferMemoryAllocations.erase(it);
+    }
+    else
+    {
+        const auto it = m_imageMemoryAllocations.find(image);
+        if (it == m_imageMemoryAllocations.end())
+            return;
+        allocation = it->second;
+        if (memory && allocation.memory != memory)
+            SetError("Vulkan image memory handle did not match allocator record");
+        m_imageMemoryAllocations.erase(it);
+    }
+
+    auto blockIt = m_memoryBlocks.find(allocation.memory);
+    if (blockIt == m_memoryBlocks.end())
+        return;
+    MemoryBlock &block = blockIt->second;
+    auto pos = std::lower_bound(
+        block.freeRanges.begin(), block.freeRanges.end(), allocation.offset,
+        [](const MemoryFreeRange &range, VkDeviceSize offset)
+        {
+            return range.offset < offset;
+        });
+    pos = block.freeRanges.insert(
+        pos, MemoryFreeRange{allocation.offset, allocation.size});
+    if (pos != block.freeRanges.begin())
+    {
+        auto previous = pos - 1;
+        if (previous->offset + previous->size == pos->offset)
+        {
+            previous->size += pos->size;
+            pos = block.freeRanges.erase(pos);
+            pos = previous;
+        }
+    }
+    if (pos + 1 != block.freeRanges.end() &&
+        pos->offset + pos->size == (pos + 1)->offset)
+    {
+        pos->size += (pos + 1)->size;
+        block.freeRanges.erase(pos + 1);
+    }
+    if (block.liveAllocations)
+        --block.liveAllocations;
+
+    const bool empty = block.liveAllocations == 0 &&
+        block.freeRanges.size() == 1 &&
+        block.freeRanges[0].offset == 0 &&
+        block.freeRanges[0].size == block.size;
+    if (block.dedicated || empty)
+    {
+        if (block.mapped)
+            vkUnmapMemory(m_device, block.memory);
+        vkFreeMemory(m_device, block.memory, nullptr);
+        m_memoryBlocks.erase(blockIt);
+    }
+}
+
+void VulkanBackend::ReleaseBufferMemory(VkBuffer buffer, VkDeviceMemory memory)
+{
+    ReleaseMemoryAllocation(
+        MemoryResourceClass::Buffer, buffer, VK_NULL_HANDLE, memory);
+}
+
+void VulkanBackend::ReleaseImageMemory(VkImage image, VkDeviceMemory memory)
+{
+    ReleaseMemoryAllocation(
+        MemoryResourceClass::Image, VK_NULL_HANDLE, image, memory);
+}
+
+void VulkanBackend::DestroyMemoryAllocator()
+{
+    std::lock_guard<std::mutex> lock(m_memoryAllocatorMutex);
+#ifdef __SWITCH__
+    if (!m_bufferMemoryAllocations.empty() || !m_imageMemoryAllocations.empty())
+    {
+        char trace[192];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK MEMORY] shutdown with live allocations buffers=%zu images=%zu blocks=%zu\n",
+            m_bufferMemoryAllocations.size(),
+            m_imageMemoryAllocations.size(),
+            m_memoryBlocks.size());
+        Switch_LogWrite(trace);
+    }
+#endif
+    for (auto &entry : m_memoryBlocks)
+    {
+        MemoryBlock &block = entry.second;
+        if (block.mapped)
+            vkUnmapMemory(m_device, block.memory);
+        if (block.liveAllocations == 0 && block.memory)
+            vkFreeMemory(m_device, block.memory, nullptr);
+    }
+    m_memoryBlocks.clear();
+    m_bufferMemoryAllocations.clear();
+    m_imageMemoryAllocations.clear();
+}
+
 bool VulkanBackend::CreateBuffer(
     VkDeviceSize size,
     VkBufferUsageFlags usage,
@@ -3398,8 +3699,12 @@ bool VulkanBackend::CreateBuffer(
     VkDeviceMemory *memory,
     void **mapped)
 {
-    if (!buffer || !memory)
+    if (!buffer || !memory || !m_device || !size)
         return false;
+    *buffer = VK_NULL_HANDLE;
+    *memory = VK_NULL_HANDLE;
+    if (mapped)
+        *mapped = nullptr;
 
     VkBufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -3413,8 +3718,16 @@ bool VulkanBackend::CreateBuffer(
         return false;
     }
 
-    VkMemoryRequirements requirements{};
-    vkGetBufferMemoryRequirements(m_device, *buffer, &requirements);
+    VkBufferMemoryRequirementsInfo2 requirementsInfo{};
+    requirementsInfo.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+    requirementsInfo.buffer = *buffer;
+    VkMemoryDedicatedRequirements dedicatedRequirements{};
+    dedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+    VkMemoryRequirements2 requirements2{};
+    requirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    requirements2.pNext = &dedicatedRequirements;
+    vkGetBufferMemoryRequirements2(m_device, &requirementsInfo, &requirements2);
+    const VkMemoryRequirements &requirements = requirements2.memoryRequirements;
     const uint32_t type = FindMemoryType(requirements.memoryTypeBits, properties);
     if (type == UINT32_MAX)
     {
@@ -3423,59 +3736,46 @@ bool VulkanBackend::CreateBuffer(
         return false;
     }
 
-    VkMemoryAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = requirements.size;
-    alloc.memoryTypeIndex = type;
-    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
-    if (allocateResult != VK_SUCCESS)
+    VkDeviceSize memoryOffset = 0;
+    if (!AllocateResourceMemory(
+            MemoryResourceClass::Buffer, *buffer, VK_NULL_HANDLE,
+            requirements, type,
+            dedicatedRequirements.requiresDedicatedAllocation == VK_TRUE,
+            dedicatedRequirements.prefersDedicatedAllocation == VK_TRUE,
+            mapped != nullptr, memory, &memoryOffset, mapped))
     {
-        SetError("vkAllocateMemory failed for buffer", allocateResult);
         vkDestroyBuffer(m_device, *buffer, nullptr);
         *buffer = VK_NULL_HANDLE;
+        *memory = VK_NULL_HANDLE;
         return false;
     }
 
-    const VkResult bindResult = vkBindBufferMemory(m_device, *buffer, *memory, 0);
+    const VkResult bindResult =
+        vkBindBufferMemory(m_device, *buffer, *memory, memoryOffset);
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindBufferMemory failed", bindResult);
         vkDestroyBuffer(m_device, *buffer, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseBufferMemory(*buffer, *memory);
         *memory = VK_NULL_HANDLE;
         *buffer = VK_NULL_HANDLE;
+        if (mapped)
+            *mapped = nullptr;
         return false;
     }
-
-    if (mapped)
-    {
-        const VkResult mapResult = vkMapMemory(m_device, *memory, 0, size, 0, mapped);
-        if (mapResult != VK_SUCCESS)
-        {
-            SetError("vkMapMemory failed for buffer", mapResult);
-            vkDestroyBuffer(m_device, *buffer, nullptr);
-            vkFreeMemory(m_device, *memory, nullptr);
-            *memory = VK_NULL_HANDLE;
-            *buffer = VK_NULL_HANDLE;
-            return false;
-        }
-    }
-
     return true;
 }
 
 void VulkanBackend::DestroyBuffer(
     VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped)
 {
-    // Vulkan requires mapped device memory to be unmapped before it is freed.
-    // UploadImage2D/3D use short-lived, mapped staging allocations; persistent
-    // vertex/index/uniform buffers are unmapped by their owning resource first.
-    if (memoryMapped && memory && m_device)
-        vkUnmapMemory(m_device, memory);
+    // A pool block is mapped once and stays mapped until its final live range
+    // is retired. Never unmap it on an individual buffer release.
+    (void)memoryMapped;
     if (buffer && m_device)
         vkDestroyBuffer(m_device, buffer, nullptr);
-    if (memory && m_device)
-        vkFreeMemory(m_device, memory, nullptr);
+    if (buffer)
+        ReleaseBufferMemory(buffer, memory);
 }
 
 void VulkanBackend::DeferDestroyBuffer(
@@ -3594,6 +3894,12 @@ bool VulkanBackend::CreateImage2D(
     VkImageView *view,
     VkComponentMapping components, VkSampleCountFlagBits samples)
 {
+    if (!image || !memory || !view || !width || !height || !mipLevels)
+        return false;
+    *image = VK_NULL_HANDLE;
+    *memory = VK_NULL_HANDLE;
+    *view = VK_NULL_HANDLE;
+
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info.imageType = VK_IMAGE_TYPE_2D;
@@ -3614,11 +3920,18 @@ bool VulkanBackend::CreateImage2D(
         return false;
     }
 
-    VkMemoryRequirements requirements{};
-    vkGetImageMemoryRequirements(m_device, *image, &requirements);
+    VkImageMemoryRequirementsInfo2 requirementsInfo{};
+    requirementsInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+    requirementsInfo.image = *image;
+    VkMemoryDedicatedRequirements dedicatedRequirements{};
+    dedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+    VkMemoryRequirements2 requirements2{};
+    requirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    requirements2.pNext = &dedicatedRequirements;
+    vkGetImageMemoryRequirements2(m_device, &requirementsInfo, &requirements2);
+    const VkMemoryRequirements &requirements = requirements2.memoryRequirements;
     const uint32_t type = FindMemoryType(
-        requirements.memoryTypeBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (type == UINT32_MAX)
     {
         vkDestroyImage(m_device, *image, nullptr);
@@ -3626,26 +3939,27 @@ bool VulkanBackend::CreateImage2D(
         return false;
     }
 
-    VkMemoryAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = requirements.size;
-    alloc.memoryTypeIndex = type;
-    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
-    if (allocateResult != VK_SUCCESS)
+    VkDeviceSize memoryOffset = 0;
+    if (!AllocateResourceMemory(
+            MemoryResourceClass::Image, VK_NULL_HANDLE, *image,
+            requirements, type,
+            dedicatedRequirements.requiresDedicatedAllocation == VK_TRUE,
+            dedicatedRequirements.prefersDedicatedAllocation == VK_TRUE,
+            false, memory, &memoryOffset, nullptr))
     {
-        SetError("vkAllocateMemory failed for 2D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         *memory = VK_NULL_HANDLE;
         return false;
     }
 
-    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+    const VkResult bindResult =
+        vkBindImageMemory(m_device, *image, *memory, memoryOffset);
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindImageMemory failed for 2D image", bindResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -3656,12 +3970,6 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.image = *image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
-    // A depth/stencil image view used by a sampled-image descriptor must
-    // select exactly one aspect. The engine samples depth maps as floats;
-    // keeping DEPTH|STENCIL here makes D24S8 shadow-map descriptors invalid
-    // (VUID-VkDescriptorImageInfo-imageView-01976). Dynamic-rendering depth
-    // and stencil attachments infer their respective aspects from the
-    // attachment slot, so the same view can still back both attachments.
     const bool sampledDepthStencil =
         (usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0 &&
         (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0 &&
@@ -3672,14 +3980,16 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
-    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    const VkResult viewResult =
+        vkCreateImageView(m_device, &viewInfo, nullptr, view);
     if (viewResult != VK_SUCCESS)
     {
         SetError("vkCreateImageView 2D failed", viewResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
+        *view = VK_NULL_HANDLE;
         return false;
     }
     return true;
@@ -3693,6 +4003,9 @@ bool VulkanBackend::CreateImageCube(
 {
     if (!image || !memory || !view || !width || !height || !mipLevels)
         return false;
+    *image = VK_NULL_HANDLE;
+    *memory = VK_NULL_HANDLE;
+    *view = VK_NULL_HANDLE;
 
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -3715,8 +4028,16 @@ bool VulkanBackend::CreateImageCube(
         return false;
     }
 
-    VkMemoryRequirements requirements{};
-    vkGetImageMemoryRequirements(m_device, *image, &requirements);
+    VkImageMemoryRequirementsInfo2 requirementsInfo{};
+    requirementsInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+    requirementsInfo.image = *image;
+    VkMemoryDedicatedRequirements dedicatedRequirements{};
+    dedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+    VkMemoryRequirements2 requirements2{};
+    requirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    requirements2.pNext = &dedicatedRequirements;
+    vkGetImageMemoryRequirements2(m_device, &requirementsInfo, &requirements2);
+    const VkMemoryRequirements &requirements = requirements2.memoryRequirements;
     const uint32_t type = FindMemoryType(
         requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (type == UINT32_MAX)
@@ -3726,26 +4047,27 @@ bool VulkanBackend::CreateImageCube(
         return false;
     }
 
-    VkMemoryAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = requirements.size;
-    alloc.memoryTypeIndex = type;
-    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
-    if (allocateResult != VK_SUCCESS)
+    VkDeviceSize memoryOffset = 0;
+    if (!AllocateResourceMemory(
+            MemoryResourceClass::Image, VK_NULL_HANDLE, *image,
+            requirements, type,
+            dedicatedRequirements.requiresDedicatedAllocation == VK_TRUE,
+            dedicatedRequirements.prefersDedicatedAllocation == VK_TRUE,
+            false, memory, &memoryOffset, nullptr))
     {
-        SetError("vkAllocateMemory failed for cube image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         *memory = VK_NULL_HANDLE;
         return false;
     }
 
-    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+    const VkResult bindResult =
+        vkBindImageMemory(m_device, *image, *memory, memoryOffset);
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindImageMemory failed for cube image", bindResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -3760,18 +4082,18 @@ bool VulkanBackend::CreateImageCube(
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 6;
-
-    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    const VkResult viewResult =
+        vkCreateImageView(m_device, &viewInfo, nullptr, view);
     if (viewResult != VK_SUCCESS)
     {
         SetError("vkCreateImageView cube failed", viewResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
+        *view = VK_NULL_HANDLE;
         return false;
     }
-
     return true;
 }
 
@@ -3781,8 +4103,11 @@ bool VulkanBackend::CreateImage3D(
     VkImage *image, VkDeviceMemory *memory, VkImageView *view,
     VkComponentMapping components)
 {
-    if (!image || !memory || !view)
+    if (!image || !memory || !view || !width || !height || !depth || !mipLevels)
         return false;
+    *image = VK_NULL_HANDLE;
+    *memory = VK_NULL_HANDLE;
+    *view = VK_NULL_HANDLE;
 
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -3796,6 +4121,7 @@ bool VulkanBackend::CreateImage3D(
     info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
     const VkResult createResult = vkCreateImage(m_device, &info, nullptr, image);
     if (createResult != VK_SUCCESS)
     {
@@ -3803,8 +4129,16 @@ bool VulkanBackend::CreateImage3D(
         return false;
     }
 
-    VkMemoryRequirements requirements{};
-    vkGetImageMemoryRequirements(m_device, *image, &requirements);
+    VkImageMemoryRequirementsInfo2 requirementsInfo{};
+    requirementsInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+    requirementsInfo.image = *image;
+    VkMemoryDedicatedRequirements dedicatedRequirements{};
+    dedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+    VkMemoryRequirements2 requirements2{};
+    requirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    requirements2.pNext = &dedicatedRequirements;
+    vkGetImageMemoryRequirements2(m_device, &requirementsInfo, &requirements2);
+    const VkMemoryRequirements &requirements = requirements2.memoryRequirements;
     const uint32_t type = FindMemoryType(
         requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (type == UINT32_MAX)
@@ -3814,25 +4148,27 @@ bool VulkanBackend::CreateImage3D(
         return false;
     }
 
-    VkMemoryAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = requirements.size;
-    alloc.memoryTypeIndex = type;
-    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
-    if (allocateResult != VK_SUCCESS)
+    VkDeviceSize memoryOffset = 0;
+    if (!AllocateResourceMemory(
+            MemoryResourceClass::Image, VK_NULL_HANDLE, *image,
+            requirements, type,
+            dedicatedRequirements.requiresDedicatedAllocation == VK_TRUE,
+            dedicatedRequirements.prefersDedicatedAllocation == VK_TRUE,
+            false, memory, &memoryOffset, nullptr))
     {
-        SetError("vkAllocateMemory failed for 3D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         *memory = VK_NULL_HANDLE;
         return false;
     }
-    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+
+    const VkResult bindResult =
+        vkBindImageMemory(m_device, *image, *memory, memoryOffset);
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindImageMemory failed for 3D image", bindResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -3847,14 +4183,16 @@ bool VulkanBackend::CreateImage3D(
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
-    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    const VkResult viewResult =
+        vkCreateImageView(m_device, &viewInfo, nullptr, view);
     if (viewResult != VK_SUCCESS)
     {
         SetError("vkCreateImageView 3D failed", viewResult);
         vkDestroyImage(m_device, *image, nullptr);
-        vkFreeMemory(m_device, *memory, nullptr);
+        ReleaseImageMemory(*image, *memory);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
+        *view = VK_NULL_HANDLE;
         return false;
     }
     return true;
@@ -3862,9 +4200,12 @@ bool VulkanBackend::CreateImage3D(
 
 void VulkanBackend::DestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view)
 {
-    if (view) vkDestroyImageView(m_device, view, nullptr);
-    if (image) vkDestroyImage(m_device, image, nullptr);
-    if (memory) vkFreeMemory(m_device, memory, nullptr);
+    if (view)
+        vkDestroyImageView(m_device, view, nullptr);
+    if (image)
+        vkDestroyImage(m_device, image, nullptr);
+    if (image)
+        ReleaseImageMemory(image, memory);
     if (image)
     {
         std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
