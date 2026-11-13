@@ -664,6 +664,138 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
     cmdBuf.primDrawSurfPos = primDrawSurfPos;
     while (R_ReadBspPreTessDrawSurfs(&cmdBuf, &list, &count, &baseIndex))
     {
+#ifdef __SWITCH__
+        // Non-layered BSP pre-tess surfaces share one vertex buffer and one
+        // material/pass state. Preserve the old firstVertex grouping, but
+        // submit those groups together using one Vulkan multi-draw call.
+        if (count > 1u && !switchRenderAuditEnabled &&
+            context.state->prim.device &&
+            context.state->prim.device->SupportsMultiDrawIndirect() &&
+            context.state->prim.vertDeclType < ARRAY_COUNT(g_layerDataStride) &&
+            g_layerDataStride[context.state->prim.vertDeclType] == 0)
+        {
+            static thread_local std::vector<VkDrawIndexedIndirectCommand>
+                switchIndirectCommands;
+            static thread_local std::vector<uint32_t> switchIndirectVertexCounts;
+            switchIndirectCommands.clear();
+            switchIndirectVertexCounts.clear();
+            switchIndirectCommands.reserve(count);
+            switchIndirectVertexCounts.reserve(count);
+
+            const srfTriangles_t *batchTris = nullptr;
+            uint32_t batchBaseIndex = baseIndex;
+            uint64_t batchTriCount = 0;
+            uint64_t runningBaseIndex = baseIndex;
+            uint64_t totalIndexCount = 0;
+            bool buildValid = true;
+
+            const auto flushIndirectBatch = [&]() -> bool
+            {
+                if (!batchTris || !batchTriCount)
+                    return true;
+                if (batchTriCount > static_cast<uint64_t>(INT_MAX) ||
+                    batchTriCount > UINT32_MAX / 3u ||
+                    batchTris->firstVertex > static_cast<uint32_t>(INT32_MAX) ||
+                    !batchTris->vertexCount)
+                    return false;
+
+                VkDrawIndexedIndirectCommand command{};
+                command.indexCount = static_cast<uint32_t>(batchTriCount * 3u);
+                command.instanceCount = 1u;
+                command.firstIndex = batchBaseIndex;
+                command.vertexOffset = static_cast<int32_t>(batchTris->firstVertex);
+                command.firstInstance = 0u;
+                switchIndirectCommands.emplace_back(command);
+                switchIndirectVertexCounts.emplace_back(batchTris->vertexCount);
+                batchTris = nullptr;
+                batchTriCount = 0;
+                return true;
+            };
+
+            for (uint32_t indirectIndex = 0; indirectIndex < count; ++indirectIndex)
+            {
+                const uint32_t indirectSurfaceIndex = list[indirectIndex].baseSurfIndex;
+                if (indirectSurfaceIndex >= rgp.world->surfaceCount)
+                {
+                    MyAssertHandler(
+                        ".\\r_draw_bsp.cpp",
+                        675,
+                        0,
+                        "surfIndex doesn't index rgp.world->surfaceCount\\n\\t%i not in [0, %i)",
+                        indirectSurfaceIndex,
+                        rgp.world->surfaceCount);
+                    buildValid = false;
+                    break;
+                }
+
+                const GfxSurface *indirectSurface =
+                    &rgp.world->dpvs.surfaces[indirectSurfaceIndex];
+                const srfTriangles_t *indirectTris = &indirectSurface->tris;
+                if (!list[indirectIndex].totalTriCount)
+                {
+                    buildValid = false;
+                    break;
+                }
+
+                if (!batchTris ||
+                    batchTris->firstVertex != indirectTris->firstVertex)
+                {
+                    if (!flushIndirectBatch())
+                    {
+                        buildValid = false;
+                        break;
+                    }
+                    batchTris = indirectTris;
+                    batchBaseIndex = static_cast<uint32_t>(runningBaseIndex);
+                }
+
+                batchTriCount += list[indirectIndex].totalTriCount;
+                const uint64_t surfaceIndexCount =
+                    static_cast<uint64_t>(list[indirectIndex].totalTriCount) * 3u;
+                runningBaseIndex += surfaceIndexCount;
+                totalIndexCount += surfaceIndexCount;
+                if (runningBaseIndex > UINT32_MAX ||
+                    totalIndexCount > UINT32_MAX ||
+                    batchTriCount > static_cast<uint64_t>(INT_MAX))
+                {
+                    buildValid = false;
+                    break;
+                }
+            }
+
+            if (buildValid && !flushIndirectBatch())
+                buildValid = false;
+
+            if (buildValid && switchIndirectCommands.size() > 1u &&
+                !switchIndirectCommands.empty() &&
+                list[0].baseSurfIndex < rgp.world->surfaceCount)
+            {
+                const GfxSurface *firstIndirectSurface =
+                    &rgp.world->dpvs.surfaces[list[0].baseSurfIndex];
+                R_SetStreamsForBspSurface(
+                    &context.state->prim, &firstIndirectSurface->tris);
+                R_SetStreamSource(
+                    &context.state->prim, rgp.world->vd.worldVb, 0u, 44u);
+
+                if (context.state->prim.device->DrawIndexedPrimitiveIndirect(
+                        switchIndirectCommands.data(),
+                        switchIndirectVertexCounts.data(),
+                        static_cast<uint32_t>(switchIndirectCommands.size())) == S_OK)
+                {
+                    for (const VkDrawIndexedIndirectCommand &command :
+                         switchIndirectCommands)
+                        RB_TrackDrawPrimCall(static_cast<int>(command.indexCount / 3u));
+
+                    g_frameStatsCur.geoIndexCount +=
+                        static_cast<uint32_t>(totalIndexCount);
+                    iassert(g_primStats);
+                    g_primStats->dynamicIndexCount +=
+                        static_cast<uint32_t>(totalIndexCount);
+                    continue;
+                }
+            }
+        }
+#endif
         prevTris = 0;
         triCount = 0;
 #ifdef __SWITCH__
