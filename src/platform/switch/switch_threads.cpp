@@ -147,8 +147,18 @@ static bool g_renderDataLogged = false;
 static bool WaitSwitchEvent(SwitchEvent &event, uint32_t timeoutMsec)
 {
     std::unique_lock<std::mutex> lock(event.mutex);
-    const bool ready = event.cv.wait_for(
-        lock, std::chrono::milliseconds(timeoutMsec), [&] { return event.signaled; });
+    bool ready = false;
+    if (timeoutMsec == UINT32_MAX)
+    {
+        event.cv.wait(lock, [&] { return event.signaled; });
+        ready = true;
+    }
+    else
+    {
+        ready = event.cv.wait_for(
+            lock, std::chrono::milliseconds(timeoutMsec),
+            [&] { return event.signaled; });
+    }
     if (ready && !event.manual)
         event.signaled = false;
     return ready;
@@ -766,7 +776,9 @@ void __cdecl Sys_WaitForWorkerCmd()
 
     const bool measureWait=Switch_PerfDiagEnabled()&&(uint32_t)g_threadContext<4u;
     const uint64_t waitStart=measureWait?Kisak_RawTimerTicks():0;
-    WaitSwitchEvent(g_workerCmdEvent,1);
+    // Worker wakeups are event-driven; the queue producer publishes a signal
+    // on the empty-to-nonempty transition so idle workers need not poll every ms.
+    WaitSwitchEvent(g_workerCmdEvent, isWorker ? UINT32_MAX : 1u);
     if(measureWait)g_switchWorkerCommandWait[(uint32_t)g_threadContext].Add(Kisak_RawTimerTicks()-waitStart);
     if(isWorker)WaitForThreadResume(g_threadContext);
 }
