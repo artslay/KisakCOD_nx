@@ -99,6 +99,18 @@ int s_modelLightingSampleDelta[64];
 
 void __cdecl R_SetModelLightingCoords(uint16_t handle, float *out)
 {
+#ifdef __SWITCH__
+    // Both coordinates are integer texel offsets multiplied by powers of two.
+    // Their results are exactly representable as float, so avoid double intermediates
+    // in this per-model hot path without changing the generated coordinates.
+    const uint32_t entryIndex = R_ModelLightingIndexFromHandle(handle);
+    const uint32_t xCoord = ((entryIndex & 0x3Fu) << 2u) + 2u;
+    const uint32_t yCoord = ((entryIndex & 0xFFFFFFC0u) >> 4u) + 2u;
+    out[0] = static_cast<float>(xCoord) * (1.0f / 256.0f);
+    out[1] = static_cast<float>(yCoord) * modelLightGlob.invImageHeight;
+    out[2] = 0.5f;
+    out[3] = 1.0f;
+#else
     uint32_t entryIndex; // [esp+10h] [ebp-18h]
     float yCoord; // [esp+14h] [ebp-14h]
     float xCoord; // [esp+24h] [ebp-4h]
@@ -110,6 +122,7 @@ void __cdecl R_SetModelLightingCoords(uint16_t handle, float *out)
     out[1] = yCoord;
     out[2] = 0.5;
     out[3] = 1.0;
+#endif
 }
 
 void __cdecl R_GetPackedStaticModelLightingCoords(uint32_t smodelIndex, PackedLightingCoords *packedCoords)
