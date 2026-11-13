@@ -7526,7 +7526,7 @@ bool IDirect3DDevice9::BindUniformSet(
         m_uniformDynamicDescriptorPool != descriptorPool)
     {
         for (auto &stageSets : m_uniformDynamicDescriptorSets)
-            stageSets.fill(VK_NULL_HANDLE);
+            stageSets.clear();
         for (auto &slotCache : m_uniformBindCache)
             slotCache.fill(UniformBindCacheEntry{});
         m_uniformDynamicDescriptorDevice = descriptorDevice;
