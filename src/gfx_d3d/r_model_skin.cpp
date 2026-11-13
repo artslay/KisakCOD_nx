@@ -83,8 +83,38 @@ static void R_LogModelTransformCpuSkin(
 //uint32_t const *const g_shortBoneWeightPerm__uint4 820f4950     gfx_d3d : r_model_skin.obj
 //struct __vector4 const g_shortBoneWeightPerm 85b981d0     gfx_d3d : r_model_skin.obj
 
-static void __cdecl R_MultiplySkelMat(const DObjSkelMat *mat0, const DObjSkelMat *mat1, DObjSkelMat *out)
+static void __cdecl R_MultiplySkelMat(
+    const DObjSkelMat *mat0,
+    const DObjSkelMat *mat1,
+    DObjSkelMat *out)
 {
+#ifdef __SWITCH__
+    // Compose the three bone basis rows in parallel. A skin command performs
+    // this once for every active bone, so using four NEON lanes avoids the
+    // repeated scalar multiply/add chain on the CPU hot path.
+    const float32x4_t basis0 = vld1q_f32(mat1->axis[0]);
+    const float32x4_t basis1 = vld1q_f32(mat1->axis[1]);
+    const float32x4_t basis2 = vld1q_f32(mat1->axis[2]);
+
+    for (uint32_t row = 0; row < 3u; ++row)
+    {
+        float32x4_t result =
+            vmulq_n_f32(basis0, mat0->axis[row][0]);
+        result = vfmaq_n_f32(result, basis1, mat0->axis[row][1]);
+        result = vfmaq_n_f32(result, basis2, mat0->axis[row][2]);
+        vst1q_f32(out->axis[row], result);
+        out->axis[row][3] = 0.0f;
+    }
+
+    const float32x4_t parentOrigin = vld1q_f32(mat1->origin);
+    float32x4_t translated =
+        vmulq_n_f32(basis0, mat0->origin[0]);
+    translated = vfmaq_n_f32(translated, basis1, mat0->origin[1]);
+    translated = vfmaq_n_f32(translated, basis2, mat0->origin[2]);
+    translated = vaddq_f32(translated, parentOrigin);
+    vst1q_f32(out->origin, translated);
+    out->origin[3] = 1.0f;
+#else
     out->axis[0][0] = mat0->axis[0][0] * mat1->axis[0][0]
         + mat0->axis[0][1] * mat1->axis[1][0]
         + mat0->axis[0][2] * mat1->axis[2][0];
@@ -124,6 +154,7 @@ static void __cdecl R_MultiplySkelMat(const DObjSkelMat *mat0, const DObjSkelMat
         + mat0->origin[1] * mat1->axis[1][2]
         + mat0->origin[2] * mat1->axis[2][2]
         + mat1->origin[2];
+#endif
 }
 
 void R_SkinXModelCmd(_WORD *data)
