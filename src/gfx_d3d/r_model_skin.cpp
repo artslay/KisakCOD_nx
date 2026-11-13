@@ -278,6 +278,15 @@ void R_SkinXModelCmd(_WORD *data)
     }
 }
 
+static void __cdecl R_SkinXSurfaceSkinnedInternal(
+    const XSurface *, const DObjSkelMat *, GfxPackedVertex *, bool);
+static void __cdecl R_SkinXSurfaceWeightInternal(const GfxPackedVertex *,const XSurfaceVertexInfo *,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceRigidInternal(const XSurface *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight0Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight1Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight2Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight3Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+
 #ifdef __SWITCH__
 void __cdecl R_SkinXSurfaceSkinnedSse(
     const XSurface *xsurf,
@@ -318,13 +327,6 @@ void __cdecl R_SkinXSurfaceSkinnedSse(
 #endif
 
 
-static void __cdecl R_SkinXSurfaceWeightInternal(const GfxPackedVertex *,const XSurfaceVertexInfo *,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceRigidInternal(const XSurface *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight0Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight1Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight2Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight3Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-
 static void __cdecl R_SkinXSurfaceSkinnedInternal(
     const XSurface *xsurf,
     const DObjSkelMat *boneMatrix,
@@ -340,7 +342,14 @@ static void __cdecl R_SkinXSurfaceSkinnedInternal(
             transformBasis);
 }
 
-void __cdecl R_SkinXSurfaceSkinned(const XSurface *a,const DObjSkelMat *b,GfxPackedVertex *c){R_SkinXSurfaceSkinnedInternal(a,b,c,true);}
+void __cdecl R_SkinXSurfaceSkinned(
+    const XSurface *xsurf,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *skinVerticesOut)
+{
+    R_SkinXSurfaceSkinnedInternal(
+        xsurf, boneMatrix, skinVerticesOut, true);
+}
 
 
 static void __cdecl R_SkinXSurfaceWeightInternal(
@@ -378,7 +387,15 @@ static void __cdecl R_SkinXSurfaceWeightInternal(
         R_SkinXSurfaceWeight3Internal(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[3], boneMatrix, &outVerts[vertIndex], transformBasis);
 }
 
-void __cdecl R_SkinXSurfaceWeight(const GfxPackedVertex *a,const XSurfaceVertexInfo *b,const DObjSkelMat *c,GfxPackedVertex *d){R_SkinXSurfaceWeightInternal(a,b,c,d,true);}
+void __cdecl R_SkinXSurfaceWeight(
+    const GfxPackedVertex *inVerts,
+    const XSurfaceVertexInfo *vertexInfo,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *outVerts)
+{
+    R_SkinXSurfaceWeightInternal(
+        inVerts, vertexInfo, boneMatrix, outVerts, true);
+}
 
 
 
@@ -508,7 +525,16 @@ static void __cdecl R_SkinXSurfaceWeight0Internal(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight0(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight0Internal(a,b,c,d,e,true);}
+void __cdecl R_SkinXSurfaceWeight0(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut)
+{
+    R_SkinXSurfaceWeight0Internal(
+        vertsIn, vertexBlend, vertCount, boneMatrix, vertsOut, true);
+}
 
 
 static void __cdecl R_SkinXSurfaceWeight1Internal(
@@ -549,7 +575,16 @@ static void __cdecl R_SkinXSurfaceWeight1Internal(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight1(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight1Internal(a,b,c,d,e,true);}
+void __cdecl R_SkinXSurfaceWeight1(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut)
+{
+    R_SkinXSurfaceWeight1Internal(
+        vertsIn, vertexBlend, vertCount, boneMatrix, vertsOut, true);
+}
 
 
 static void __cdecl R_SkinXSurfaceWeight2Internal(
@@ -598,7 +633,16 @@ static void __cdecl R_SkinXSurfaceWeight2Internal(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight2(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight2Internal(a,b,c,d,e,true);}
+void __cdecl R_SkinXSurfaceWeight2(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut)
+{
+    R_SkinXSurfaceWeight2Internal(
+        vertsIn, vertexBlend, vertCount, boneMatrix, vertsOut, true);
+}
 
 
 static void __cdecl R_SkinXSurfaceWeight3Internal(
@@ -653,7 +697,16 @@ static void __cdecl R_SkinXSurfaceWeight3Internal(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight3(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight3Internal(a,b,c,d,e,true);}
+void __cdecl R_SkinXSurfaceWeight3(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut)
+{
+    R_SkinXSurfaceWeight3Internal(
+        vertsIn, vertexBlend, vertCount, boneMatrix, vertsOut, true);
+}
 
 
 static void __cdecl R_SkinXSurfaceRigidInternal(
@@ -699,6 +752,14 @@ static void __cdecl R_SkinXSurfaceRigidInternal(
     iassert(vertex - vertices == totalVertCount);
 }
 
-void __cdecl R_SkinXSurfaceRigid(const XSurface *a,int b,const DObjSkelMat *c,GfxPackedVertex *d){R_SkinXSurfaceRigidInternal(a,b,c,d,true);}
+void __cdecl R_SkinXSurfaceRigid(
+    const XSurface *surf,
+    int totalVertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertices)
+{
+    R_SkinXSurfaceRigidInternal(
+        surf, totalVertCount, boneMatrix, vertices, true);
+}
 
 
