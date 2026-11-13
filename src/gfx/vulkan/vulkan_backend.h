@@ -38,6 +38,8 @@ struct VulkanImageUpload2D
 #ifdef __SWITCH__
 enum class SwitchGpuTimingStage : uint32_t
 {
+    SunShadowCascade0,
+    SunShadowCascade1,
     SunShadowMaps,
     SpotShadowMaps,
     SetupDepthPrepass,
