@@ -698,7 +698,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
             {
                 if (!batchTris || !batchTriCount)
                     return true;
-                if (batchTriCount > static_cast<uint64_t>(INT_MAX) ||
+                if (batchTriCount > static_cast<uint64_t>(INT32_MAX) ||
                     batchTriCount > UINT32_MAX / 3u ||
                     batchTris->firstVertex > static_cast<uint32_t>(INT32_MAX) ||
                     !batchTris->vertexCount)
@@ -726,7 +726,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                         ".\\r_draw_bsp.cpp",
                         675,
                         0,
-                        "surfIndex doesn't index rgp.world->surfaceCount\\n\\t%i not in [0, %i)",
+                        "surfIndex doesn't index rgp.world->surfaceCount\n\t%i not in [0, %i)",
                         indirectSurfaceIndex,
                         rgp.world->surfaceCount);
                     buildValid = false;
@@ -761,7 +761,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                 totalIndexCount += surfaceIndexCount;
                 if (runningBaseIndex > UINT32_MAX ||
                     totalIndexCount > UINT32_MAX ||
-                    batchTriCount > static_cast<uint64_t>(INT_MAX))
+                    batchTriCount > static_cast<uint64_t>(INT32_MAX))
                 {
                     buildValid = false;
                     break;
