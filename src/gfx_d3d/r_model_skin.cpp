@@ -34,6 +34,36 @@ static inline SwitchSkinMatrix Switch_LoadSkinMatrix(const DObjSkelMat *mat)
     };
 }
 
+static inline void Switch_TransformSkelMat(
+    const float *position,
+    const DObjSkelMat *mat,
+    float *out)
+{
+    // Match R_TransformSkelMat's grouping per output component:
+    // x = p0x + (p2x + p1x), y/z = p1 + (p0 + p2), then translation.
+    const float32x4_t basis0 = vld1q_f32(mat->axis[0]);
+    const float32x4_t basis1 = vld1q_f32(mat->axis[1]);
+    const float32x4_t basis2 = vld1q_f32(mat->axis[2]);
+    const float32x4_t p0 = vmulq_n_f32(basis0, position[0]);
+    const float32x4_t p1 = vmulq_n_f32(basis1, position[1]);
+    const float32x4_t p2 = vmulq_n_f32(basis2, position[2]);
+    const float32x4_t innerX = vaddq_f32(p2, p1);
+    const float32x4_t innerYZ = vaddq_f32(p0, p2);
+    const uint32x4_t selectX = {0xffffffffu, 0u, 0u, 0u};
+    const float32x4_t inner = vbslq_f32(selectX, innerX, innerYZ);
+
+    float32x4_t outer = vdupq_n_f32(0.0f);
+    outer = vsetq_lane_f32(vgetq_lane_f32(p0, 0), outer, 0);
+    outer = vsetq_lane_f32(vgetq_lane_f32(p1, 1), outer, 1);
+    outer = vsetq_lane_f32(vgetq_lane_f32(p1, 2), outer, 2);
+    float32x4_t result = vaddq_f32(outer, inner);
+    result = vaddq_f32(result, vld1q_f32(mat->origin));
+
+    out[0] = vgetq_lane_f32(result, 0);
+    out[1] = vgetq_lane_f32(result, 1);
+    out[2] = vgetq_lane_f32(result, 2);
+}
+
 static void R_LogModelTransformCpuSkin(
     const GfxModelSkinnedSurface *surface, const XSurface *xsurf,
     const GfxPackedVertex *vertices, const DObjSkelMat *boneMatrices,
@@ -657,7 +687,11 @@ static void __cdecl R_SkinXSurfaceWeight1Internal(
             vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         boneWeight = (double)vertexBlend[2] * 0.0000152587890625;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrix, offset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrix, offset);
+#endif
         Vec3Scale(offset, boneWeight, offset);
         boneWeight = 1.0 - boneWeight;
         Vec3Mad(offset, boneWeight, vertsOut->xyz, vertsOut->xyz);
@@ -710,12 +744,20 @@ static void __cdecl R_SkinXSurfaceWeight2Internal(
             vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
+#endif
         Vec3Scale(totalOffset, totalBoneWeight, totalOffset);
         matrixa = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[3]);
         boneWeight = (double)vertexBlend[4] * 0.0000152587890625;
         totalBoneWeight = totalBoneWeight + boneWeight;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrixa, offset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrixa, offset);
+#endif
         Vec3Mad(totalOffset, boneWeight, offset, totalOffset);
         boneWeight = 1.0 - totalBoneWeight;
         Vec3Mad(totalOffset, boneWeight, vertsOut->xyz, vertsOut->xyz);
@@ -769,17 +811,29 @@ static void __cdecl R_SkinXSurfaceWeight3Internal(
             vertsOut, transformBasis, nullptr);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
+#endif
         Vec3Scale(totalOffset, totalBoneWeight, totalOffset);
         matrixa = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[3]);
         boneWeight = (double)vertexBlend[4] * 0.0000152587890625;
         totalBoneWeight = totalBoneWeight + boneWeight;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrixa, offset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrixa, offset);
+#endif
         Vec3Mad(totalOffset, boneWeight, offset, totalOffset);
         matrixb = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[5]);
         boneWeight = (double)vertexBlend[6] * 0.0000152587890625;
         totalBoneWeight = totalBoneWeight + boneWeight;
+#ifdef __SWITCH__
+        Switch_TransformSkelMat(vertsIn->xyz, matrixb, offset);
+#else
         R_TransformSkelMat(vertsIn->xyz, matrixb, offset);
+#endif
         Vec3Mad(totalOffset, boneWeight, offset, totalOffset);
         boneWeight = 1.0 - totalBoneWeight;
         Vec3Mad(totalOffset, boneWeight, vertsOut->xyz, vertsOut->xyz);
