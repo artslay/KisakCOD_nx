@@ -124,7 +124,7 @@ public:
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
     bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
     bool SupportsSamplerAnisotropy() const { return m_samplerAnisotropy; }
-    bool SupportsMultiDrawIndirect() const { return m_multiDrawIndirect; }
+    bool SupportsMultiDrawIndirect() const { return m_multiDrawIndirect && m_maxDrawIndirectCount > 1u; }
     uint32_t MaxDrawIndirectCount() const { return m_maxDrawIndirectCount; }
     bool SupportsShaderDemoteToHelperInvocation() const { return m_shaderDemoteToHelperInvocation; }
 #ifdef VK_EXT_depth_bias_control
