@@ -596,6 +596,8 @@ public:
     HRESULT SetRenderState(uint32_t,uint32_t);
     HRESULT DrawPrimitiveUP(uint32_t,uint32_t,const void*,uint32_t);
     HRESULT DrawIndexedPrimitive(uint32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
+    HRESULT DrawIndexedPrimitiveIndirect(
+        const VkDrawIndexedIndirectCommand *, const uint32_t *, uint32_t);
     HRESULT UpdateTexture(IDirect3DVolumeTexture9*,IDirect3DVolumeTexture9*);
     HRESULT TestCooperativeLevel();
     HRESULT Clear(uint32_t,const tagRECT*,uint32_t,uint32_t,float,uint32_t);
