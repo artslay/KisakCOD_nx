@@ -3425,8 +3425,11 @@ bool VulkanBackend::AllocateResourceMemory(
         resourceClass == MemoryResourceClass::Image
             ? VkDeviceSize(16u * 1024u * 1024u)
             : VkDeviceSize(8u * 1024u * 1024u);
-    const bool dedicated = requiresDedicated || prefersDedicated ||
-        requirements.size >= preferredSize / 2u;
+    // "Prefers dedicated" is advisory. Keep smaller resources in pooled blocks
+    // and reserve one-off allocations for required or genuinely large resources.
+    const bool dedicated = requiresDedicated ||
+        requirements.size >= preferredSize / 2u ||
+        (prefersDedicated && requirements.size >= preferredSize / 4u);
     const auto alignUp = [](VkDeviceSize value, VkDeviceSize alignment,
                             VkDeviceSize *result)
     {
@@ -3647,12 +3650,45 @@ void VulkanBackend::ReleaseMemoryAllocation(
         block.freeRanges.size() == 1 &&
         block.freeRanges[0].offset == 0 &&
         block.freeRanges[0].size == block.size;
-    if (block.dedicated || empty)
+    if (block.dedicated)
     {
         if (block.mapped)
             vkUnmapMemory(m_device, block.memory);
         vkFreeMemory(m_device, block.memory, nullptr);
         m_memoryBlocks.erase(blockIt);
+        return;
+    }
+
+    if (empty)
+    {
+        // Retain one empty block per resource class and memory type. This
+        // avoids returning to vkAllocateMemory/vkFreeMemory churn when transient
+        // upload buffers and short-lived images are repeatedly created.
+        bool anotherEmptyBlock = false;
+        for (const auto &entry : m_memoryBlocks)
+        {
+            if (entry.first == block.memory)
+                continue;
+            const MemoryBlock &candidate = entry.second;
+            if (!candidate.dedicated &&
+                candidate.resourceClass == block.resourceClass &&
+                candidate.memoryTypeIndex == block.memoryTypeIndex &&
+                candidate.liveAllocations == 0 &&
+                candidate.freeRanges.size() == 1 &&
+                candidate.freeRanges[0].offset == 0 &&
+                candidate.freeRanges[0].size == candidate.size)
+            {
+                anotherEmptyBlock = true;
+                break;
+            }
+        }
+        if (anotherEmptyBlock)
+        {
+            if (block.mapped)
+                vkUnmapMemory(m_device, block.memory);
+            vkFreeMemory(m_device, block.memory, nullptr);
+            m_memoryBlocks.erase(blockIt);
+        }
     }
 }
 
