@@ -612,7 +612,6 @@ private:
         bool valid = false;
         uint64_t frameSerial = 0;
         uint64_t shaderSerial = 0;
-        uint64_t samplerStateRevision = 0;
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         VkImageView defaultDummyImageView = VK_NULL_HANDLE;
@@ -621,6 +620,8 @@ private:
         const MOJOSHADER_parseData *parse = nullptr;
         VkDescriptorSet set = VK_NULL_HANDLE;
         std::array<IDirect3DBaseTexture9 *, 16> textures{};
+        // Only active shader sampler slots participate in descriptor identity.
+        std::array<std::array<uint32_t, 16>, 16> samplerStates{};
         std::array<VkImage, 16> images{};
         std::array<VkImageView, 16> views{};
         std::array<VkImageView, 16> baseMipViews{};
@@ -673,7 +674,6 @@ private:
     std::array<std::array<int32_t,4>,256> m_vsInt{}, m_psInt{};
     std::array<int32_t,256> m_vsBool{}, m_psBool{};
     uint32_t m_samplerState[16][16]{};
-    uint64_t m_samplerStateRevision = 1;
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
     bool m_markMeshPassActive=false;
