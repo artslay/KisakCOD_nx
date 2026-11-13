@@ -1130,7 +1130,13 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
             "!prepassContext.state || (prepassContext.state->technique->passCount == 1)");
     passPrepassContext.source = prepassContext.source;
     subListCount = 0;
-    for (passIndex = 0; passIndex < listArgs->context.state->technique->passCount; ++passIndex)
+    const uint32_t drawSurfPassCount =
+        listArgs->context.state->technique->passCount;
+    const uint32_t drawSurfType = drawSurf.fields.surfType;
+    iassert(!drawSurfPassCount || drawSurfType < ARRAY_COUNT(rb_tessTable));
+    const auto drawSurfTessFunc = drawSurfPassCount
+        ? rb_tessTable[drawSurfType] : nullptr;
+    for (passIndex = 0; passIndex < drawSurfPassCount; ++passIndex)
     {
 #ifdef __SWITCH__
         const auto switchPassSetupStart = Switch_RendererTimingStart();
@@ -1172,11 +1178,10 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
             auditState?auditState->passIndex:passIndex,
             drawSurf.fields.surfType,drawSurf.fields.objectId);
 #endif
-        iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
 #ifdef __SWITCH__
         const auto switchGeometryStart = Switch_RendererTimingStart();
 #endif
-        subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        subListCount = drawSurfTessFunc(listArgs, passPrepassContext);
 #ifdef __SWITCH__
         if (Switch_PerfDiagEnabled())
         {
