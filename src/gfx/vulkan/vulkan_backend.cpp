@@ -5330,7 +5330,6 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
                 ++runEnd;
             }
 
-            const size_t runCount = runEnd - runBegin;
             std::vector<VkBufferMemoryBarrier> &beforeCopy =
                 m_bufferUpdateBeforeBarriers;
             std::vector<VkBufferMemoryBarrier> &afterCopy =
