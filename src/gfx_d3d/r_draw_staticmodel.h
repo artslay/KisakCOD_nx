@@ -49,7 +49,11 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurfLighting(
     GfxStaticModelPreTessSurf pretessSurf,
     uint32_t firstIndex,
     uint32_t count,
-    GfxCmdBufContext context);
+    GfxCmdBufContext context
+#ifdef __SWITCH__
+    , SwitchReflectionProbeBindingCache *probeCache
+#endif
+);
 
 void __cdecl R_DrawStaticModelSkinnedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
 void __cdecl R_DrawStaticModelSkinnedSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
