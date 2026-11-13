@@ -1617,7 +1617,7 @@ void Com_InitDvars()
         "sys_lockThreads",
         s_lockThreadNames,
 #ifdef __SWITCH__
-        1, // Keep THREAD_LOCK_MINIMAL while adaptive GPU sync is disabled.
+        0, // Let Horizon schedule renderer and worker threads across the process core mask.
 #else
         0,
 #endif
