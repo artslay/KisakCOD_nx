@@ -334,52 +334,14 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
     else
     {
         iassert( !g_cmdExecFailed[type] );
-        uint32_t batchCount = 10;
-#ifdef __SWITCH__
-        // DPVS, shadow-caster and skinning commands have highly variable
-        // per-item cost. Smaller claims let other consumers steal the tail
-        // sooner while keeping cheap FX commands batched.
-        switch (type)
+        if (InterlockedExchangeAdd((LONG*)&workerCmds->outSize, -9) < 9)
         {
-        case WRKCMD_DPVS_CELL_STATIC:
-        case WRKCMD_DPVS_CELL_SCENE_ENT:
-        case WRKCMD_DPVS_CELL_DYN_MODEL:
-        case WRKCMD_DPVS_CELL_DYN_BRUSH:
-        case WRKCMD_DPVS_ENTITY:
-        case WRKCMD_SPOT_SHADOW_ENT:
-        case WRKCMD_BOUNDS_ENT_DELAYED:
-        case WRKCMD_SKIN_ENT_DELAYED:
-        case WRKCMD_SKIN_CACHED_STATICMODEL:
-        case WRKCMD_SKIN_XMODEL:
-            batchCount = 2;
-            break;
-        default:
-            break;
-        }
-        if (batchCount == 2)
-        {
-            // Keep small tails available to other consumers; larger queues
-            // retain two-item claims to reduce atomic queue traffic.
-            const LONG remainingReadyCommands =
-                InterlockedCompareExchange(
-                    (LONG*)&workerCmds->outSize, 0, 0);
-            if (remainingReadyCommands <= 2)
-                batchCount = 1;
-        }
-#endif
-        const LONG additionalBatchCount = static_cast<LONG>(batchCount - 1u);
-        if (additionalBatchCount > 0 &&
-            InterlockedExchangeAdd(
-                (LONG*)&workerCmds->outSize, -additionalBatchCount) <
-                additionalBatchCount)
-        {
-            InterlockedExchangeAdd(
-                (LONG*)&workerCmds->outSize, additionalBatchCount);
+            InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 9);
             count = 1;
         }
         else
         {
-            count = batchCount;
+            count = 10;
         }
         do
         {
@@ -756,13 +718,7 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
 #endif
             }
 #endif
-            const LONG previousOutSize =
-                InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 1);
-            // Wake workers immediately when the ready queue transitions
-            // from empty to non-empty; their timeout remains a fallback for
-            // dependency-blocked commands and shared-event reset races.
-            if (previousOutSize == 0)
-                Sys_SetWorkerCmdEvent();
+            InterlockedExchangeAdd((LONG*)&workerCmds->outSize,1);
             R_NotifyWorkerCmdType(type);
             return;
         }
