@@ -378,6 +378,7 @@ private:
     bool CreateCommandResources();
     bool CreateDescriptorResources();
     bool CreateUniformRing();
+    bool CreateUploadRing();
     bool CreateSync();
     bool CreateDummyTexture();
     void DestroySwapchain();
@@ -396,6 +397,11 @@ private:
         VkDeviceMemory memory);
     void DestroyMemoryAllocator();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
+    bool AllocateUploadRange(
+        size_t size, VkDeviceSize alignment, VkBuffer *buffer,
+        VkDeviceSize *offset, void **mapped);
+    bool AllocateUpload(
+        const void *data, size_t size, VkBuffer *buffer, VkDeviceSize *offset);
 
     struct QueuedBufferUpdate
     {
@@ -566,12 +572,22 @@ private:
     VkBuffer m_uniformRing = VK_NULL_HANDLE;
     VkDeviceMemory m_uniformRingMemory = VK_NULL_HANDLE;
     uint8_t *m_uniformMapped = nullptr;
-    // A densely populated world can consume several MiB of per-draw constants and queued copy staging in one frame.
+    // Per-draw shader constants have their own frame-fenced mapped ring.
+    // Transfer payloads use the dedicated upload ring below.
     VkDeviceSize m_uniformCapacity = 16u * 1024u * 1024u;
-    // Each frame slot owns a disjoint range of the shared mapped uniform/staging ring.
+    // Each frame slot owns a disjoint range of the mapped uniform ring.
     VkDeviceSize m_uniformOffset = 0;
     VkDeviceSize m_uniformFrameBase = 0;
     VkDeviceSize m_uniformAlignment = 256;
+
+    // Transfer staging is independent of shader constants. Each in-flight frame
+    // owns an 8 MiB slice; overflow spills to fence-retired temporary buffers.
+    VkBuffer m_uploadRing = VK_NULL_HANDLE;
+    VkDeviceMemory m_uploadRingMemory = VK_NULL_HANDLE;
+    uint8_t *m_uploadMapped = nullptr;
+    VkDeviceSize m_uploadCapacity = 8u * 1024u * 1024u;
+    VkDeviceSize m_uploadOffset = 0;
+    VkDeviceSize m_uploadFrameBase = 0;
 
     uint32_t m_swapchainIndex = 0;
     std::atomic<bool> m_initialized{false};

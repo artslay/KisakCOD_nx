@@ -991,6 +991,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         !CreateCommandResources() ||
         !CreateDescriptorResources() ||
         !CreateUniformRing() ||
+        !CreateUploadRing() ||
         !CreateDummyTexture() ||
         !CreateSync())
     {
@@ -1083,6 +1084,14 @@ void VulkanBackend::Shutdown()
     m_uploadStagingMapped = nullptr;
     m_uploadStagingCapacity = 0;
 
+    if (m_uploadRing || m_uploadRingMemory)
+        DestroyBuffer(m_uploadRing, m_uploadRingMemory, m_uploadMapped != nullptr);
+    m_uploadRing = VK_NULL_HANDLE;
+    m_uploadRingMemory = VK_NULL_HANDLE;
+    m_uploadMapped = nullptr;
+    m_uploadOffset = 0;
+    m_uploadFrameBase = 0;
+
     if (m_uniformRing || m_uniformRingMemory)
         DestroyBuffer(m_uniformRing, m_uniformRingMemory, m_uniformMapped != nullptr);
     m_uniformRing = VK_NULL_HANDLE;
@@ -1147,6 +1156,11 @@ void VulkanBackend::Shutdown()
     m_uniformRingMemory = VK_NULL_HANDLE;
     m_uniformMapped = nullptr;
     m_uniformOffset = 0;
+    m_uploadRing = VK_NULL_HANDLE;
+    m_uploadRingMemory = VK_NULL_HANDLE;
+    m_uploadMapped = nullptr;
+    m_uploadOffset = 0;
+    m_uploadFrameBase = 0;
     m_initialized = false;
     m_deviceLost.store(false, std::memory_order_release);
 #ifdef VK_EXT_device_fault
@@ -1970,10 +1984,23 @@ bool VulkanBackend::CreateUniformRing()
     return CreateBuffer(
         m_uniformCapacity * FramesInFlight,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &m_uniformRing, &m_uniformRingMemory,
         reinterpret_cast<void **>(&m_uniformMapped));
+}
+
+bool VulkanBackend::CreateUploadRing()
+{
+    // Upload traffic has its own per-frame staging slices. Uniform allocations
+    // can no longer exhaust transfer staging, and a frame split can recycle
+    // upload bytes independently after its fence completes.
+    return CreateBuffer(
+        m_uploadCapacity * FramesInFlight,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &m_uploadRing, &m_uploadRingMemory,
+        reinterpret_cast<void **>(&m_uploadMapped));
 }
 
 bool VulkanBackend::CreateDummyTexture()
@@ -2202,6 +2229,8 @@ bool VulkanBackend::RecreateSwapchain()
     m_backbufferClearedThisFrame = false;
     m_uniformOffset = 0;
     m_uniformFrameBase = 0;
+    m_uploadOffset = 0;
+    m_uploadFrameBase = 0;
     m_swapchainIndex = 0;
     m_currentFrameSlot = 0;
     m_nextFrameSlot = 0;
@@ -2437,6 +2466,9 @@ bool VulkanBackend::BeginFrame()
     m_uniformFrameBase =
         static_cast<VkDeviceSize>(slotIndex) * m_uniformCapacity;
     m_uniformOffset = 0;
+    m_uploadFrameBase =
+        static_cast<VkDeviceSize>(slotIndex) * m_uploadCapacity;
+    m_uploadOffset = 0;
 
     // Keep the fence signaled until this frame is ready for final submission.
     const VkResult resetPoolResult =
@@ -2626,11 +2658,10 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     }
 
     // All commands recorded before the resource lock have completed. Their
-    // uniform and buffer-copy staging slices are no longer in flight, so the
-    // per-frame ring can be reused for commands recorded after this split.
-    // Keeping the old offset made a full ring stay exhausted for every later
-    // upload in the same frame, forcing repeated synchronous submits.
+    // uniform and upload-ring slices are no longer in flight, so both per-frame
+    // arenas can be reused for commands recorded after this split.
     m_uniformOffset = 0;
+    m_uploadOffset = 0;
 
     const VkResult resetResult = vkResetCommandPool(m_device, m_commandPool, 0);
     if (resetResult != VK_SUCCESS)
@@ -4615,35 +4646,41 @@ bool VulkanBackend::UploadImage2D(
     if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
         IsFrameRecordingThread())
     {
-        VkDescriptorBufferInfo uploadSource{};
-        if (!AllocateUniform(data, bytes, &uploadSource))
-        {
-            // The ring belongs to this frame slot. Retire its current contents
-            // before recycling the slice, then try the upload allocation once
-            // more. This is the exceptional path, not the normal texture-write path.
-            if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
-                return false;
-            if (AllocateUniform(data, bytes, &uploadSource))
-            {
-                EndRendering();
-                recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
-#ifdef __SWITCH__
-                g_switchFrameStage = "frame/upload/image2d_recorded_in_frame";
-#endif
-                (void)format;
-                return true;
-            }
-        }
-        else
+        VkBuffer uploadBuffer = VK_NULL_HANDLE;
+        VkDeviceSize uploadOffset = 0;
+        if (AllocateUpload(data, bytes, &uploadBuffer, &uploadOffset))
         {
             EndRendering();
-            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+            recordUpload(m_commandBuffer, uploadBuffer, uploadOffset);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/upload/image2d_recorded_in_frame";
 #endif
             (void)format;
             return true;
         }
+
+        // The frame upload ring is deliberately non-blocking. If its current
+        // slice is exhausted, spill this upload to a temporary host-visible
+        // buffer and retire it only after the frame fence completes.
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void *mapped = nullptr;
+        if (!CreateBuffer(
+                bytes,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &staging, &stagingMemory, &mapped))
+            return false;
+        std::memcpy(mapped, data, bytes);
+        EndRendering();
+        recordUpload(m_commandBuffer, staging, 0);
+        DeferDestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/image2d_recorded_spill";
+#endif
+        (void)format;
+        return true;
     }
 
     // Most texture mips fit in this reusable upload buffer. ImmediateSubmit
@@ -4732,6 +4769,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
     toFinal.resize(count);
     copyRegions.resize(count);
     VkDeviceSize stagingSize = 0;
+    VkDeviceSize stagingAlignment = 16u;
     VkPipelineStageFlags sourceStages = 0;
     VkPipelineStageFlags finalStages = 0;
 
@@ -4747,6 +4785,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
 
         VkDeviceSize alignment = std::max<VkDeviceSize>(
             4u, upload.bufferOffsetAlignment);
+        stagingAlignment = std::max(stagingAlignment, alignment);
         if ((alignment & (alignment - 1u)) != 0 ||
             stagingSize > std::numeric_limits<VkDeviceSize>::max() - (alignment - 1u))
             return false;
@@ -4906,10 +4945,12 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
         stagingSize <= static_cast<VkDeviceSize>(
             std::numeric_limits<size_t>::max()))
     {
-        VkDescriptorBufferInfo uploadSource{};
+        VkBuffer uploadBuffer = VK_NULL_HANDLE;
+        VkDeviceSize uploadBaseOffset = 0;
         void *mappedUpload = nullptr;
-        if (AllocateUniformRange(
-                static_cast<size_t>(stagingSize), &uploadSource, &mappedUpload))
+        if (AllocateUploadRange(
+                static_cast<size_t>(stagingSize), stagingAlignment,
+                &uploadBuffer, &uploadBaseOffset, &mappedUpload))
         {
             for (uint32_t i = 0; i < count; ++i)
             {
@@ -4920,7 +4961,7 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
                     uploads[i].bytes);
             }
             EndRendering();
-            recordBatch(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+            recordBatch(m_commandBuffer, uploadBuffer, uploadBaseOffset);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/upload/images2d_recorded_in_frame";
 #endif
@@ -5224,11 +5265,12 @@ bool VulkanBackend::UploadImage3D(
     if (recordInActiveFrame && m_frameActive && m_commandBuffer &&
         IsFrameRecordingThread())
     {
-        VkDescriptorBufferInfo uploadSource{};
-        if (AllocateUniform(data, bytes, &uploadSource))
+        VkBuffer uploadBuffer = VK_NULL_HANDLE;
+        VkDeviceSize uploadOffset = 0;
+        if (AllocateUpload(data, bytes, &uploadBuffer, &uploadOffset))
         {
             EndRendering();
-            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+            recordUpload(m_commandBuffer, uploadBuffer, uploadOffset);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/upload/image3d_recorded_in_frame";
 #endif
@@ -5236,21 +5278,27 @@ bool VulkanBackend::UploadImage3D(
             return true;
         }
 
-        // If the ring is full, retire the current frame before recycling its
-        // staging bytes. If the upload itself is larger than the ring, use the
-        // standalone staging path after that one required split.
-        if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted))
+        // Keep the frame recording asynchronous when its upload slice is full.
+        // The spill is retired by the same frame fence as the recorded copy.
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void *mapped = nullptr;
+        if (!CreateBuffer(
+                bytes,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &staging, &stagingMemory, &mapped))
             return false;
-        if (AllocateUniform(data, bytes, &uploadSource))
-        {
-            EndRendering();
-            recordUpload(m_commandBuffer, uploadSource.buffer, uploadSource.offset);
+        std::memcpy(mapped, data, bytes);
+        EndRendering();
+        recordUpload(m_commandBuffer, staging, 0);
+        DeferDestroyBuffer(staging, stagingMemory, true);
 #ifdef __SWITCH__
-            g_switchFrameStage = "frame/upload/image3d_recorded_in_frame";
+        g_switchFrameStage = "frame/upload/image3d_recorded_spill";
 #endif
-            (void)format;
-            return true;
-        }
+        (void)format;
+        return true;
     }
 
     static constexpr VkDeviceSize kImmediateUploadStagingCapacity =
@@ -5505,6 +5553,49 @@ bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorB
         return false;
     void *mapped = nullptr;
     if (!AllocateUniformRange(size, info, &mapped))
+        return false;
+    std::memcpy(mapped, data, size);
+    return true;
+}
+
+bool VulkanBackend::AllocateUploadRange(
+    size_t size, VkDeviceSize alignment, VkBuffer *buffer,
+    VkDeviceSize *offset, void **mapped)
+{
+    if (!m_uploadMapped || !buffer || !offset || !mapped ||
+        !m_frameActive || !IsFrameRecordingThread() ||
+        alignment == 0 || (alignment & (alignment - 1u)) != 0 ||
+        size > std::numeric_limits<VkDeviceSize>::max() - 15u)
+        return false;
+
+    // Copy-buffer sources need four-byte alignment; 16 bytes also keeps
+    // subsequent texture-plane and buffer-copy slices naturally aligned.
+    alignment = std::max<VkDeviceSize>(16u, alignment);
+    if (m_uploadOffset >
+        std::numeric_limits<VkDeviceSize>::max() - (alignment - 1u))
+        return false;
+    const VkDeviceSize alignedOffset =
+        (m_uploadOffset + alignment - 1u) & ~(alignment - 1u);
+    const VkDeviceSize alignedSize =
+        (static_cast<VkDeviceSize>(size) + 15u) & ~VkDeviceSize(15u);
+    if (alignedOffset > m_uploadCapacity ||
+        alignedSize > m_uploadCapacity - alignedOffset)
+        return false;
+
+    *buffer = m_uploadRing;
+    *offset = m_uploadFrameBase + alignedOffset;
+    *mapped = m_uploadMapped + *offset;
+    m_uploadOffset = alignedOffset + alignedSize;
+    return true;
+}
+
+bool VulkanBackend::AllocateUpload(
+    const void *data, size_t size, VkBuffer *buffer, VkDeviceSize *offset)
+{
+    if (!data || !buffer || !offset)
+        return false;
+    void *mapped = nullptr;
+    if (!AllocateUploadRange(size, 16u, buffer, offset, &mapped))
         return false;
     std::memcpy(mapped, data, size);
     return true;
@@ -5770,7 +5861,7 @@ bool VulkanBackend::FlushQueuedImageUploads()
                 break;
             if (!batch.empty() &&
                 alignedOffset + static_cast<VkDeviceSize>(source.bytes) >
-                    m_uniformCapacity)
+                    m_uploadCapacity)
                 break;
 
             VulkanImageUpload2D upload = source;
@@ -5779,7 +5870,7 @@ bool VulkanBackend::FlushQueuedImageUploads()
             batch.emplace_back(upload);
             batchBytes = alignedOffset + static_cast<VkDeviceSize>(source.bytes);
             ++index;
-            if (batchBytes >= m_uniformCapacity)
+            if (batchBytes >= m_uploadCapacity)
                 break;
         }
 
@@ -5922,7 +6013,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
                 const size_t candidateEnd =
                     std::max(dataEnd, update.dataOffset + update.size);
                 if (segmentEnd != i &&
-                    candidateEnd - candidateBegin > m_uniformCapacity)
+                    candidateEnd - candidateBegin > m_uploadCapacity)
                     break;
                 if (candidateEnd - candidateBegin > m_uniformCapacity)
                 {
@@ -5935,20 +6026,34 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             ++segmentEnd;
         }
 
-        VkDescriptorBufferInfo source{};
+        VkBuffer sourceBuffer = VK_NULL_HANDLE;
+        VkDeviceSize sourceBaseOffset = 0;
+        VkBuffer spillStaging = VK_NULL_HANDLE;
+        VkDeviceMemory spillStagingMemory = VK_NULL_HANDLE;
         const size_t stagedSize = dataEnd > dataBegin ? dataEnd - dataBegin : 0;
         if (stagedSize != 0)
         {
             const void *stagedData =
                 m_pendingBufferUpdateData.data() + dataBegin;
-            if (!AllocateUniform(stagedData, stagedSize, &source))
+            if (!AllocateUpload(stagedData, stagedSize, &sourceBuffer, &sourceBaseOffset))
             {
-                if (!SynchronizeActiveFrame(FrameSyncReason::UniformRingExhausted) ||
-                    !AllocateUniform(stagedData, stagedSize, &source))
+                // Do not split and synchronously wait for the active frame just
+                // because transfer staging is full. Spill this batch and let
+                // its frame fence retire the temporary buffer after the copies.
+                void *spillMapped = nullptr;
+                if (!CreateBuffer(
+                        stagedSize,
+                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        &spillStaging, &spillStagingMemory, &spillMapped))
                 {
                     requeueRemaining(i);
                     return false;
                 }
+                std::memcpy(spillMapped, stagedData, stagedSize);
+                sourceBuffer = spillStaging;
+                sourceBaseOffset = 0;
             }
         }
 
@@ -6014,8 +6119,8 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             sourceWrite.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             sourceWrite.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             sourceWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            sourceWrite.buffer = m_uniformRing;
-            sourceWrite.offset = source.offset;
+            sourceWrite.buffer = sourceBuffer;
+            sourceWrite.offset = sourceBaseOffset;
             sourceWrite.size = static_cast<VkDeviceSize>(stagedSize);
             beforeCopy.emplace_back(sourceWrite);
 
@@ -6025,7 +6130,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
                 const QueuedBufferUpdate &update =
                     m_pendingBufferUpdates[updateIndex];
                 const VkDeviceSize sourceOffset =
-                    source.offset +
+                    sourceBaseOffset +
                     static_cast<VkDeviceSize>(update.dataOffset - dataBegin);
 
                 VkBufferMemoryBarrier destinationBefore{};
@@ -6079,7 +6184,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
 
             vkCmdCopyBuffer(
                 m_commandBuffer,
-                m_uniformRing,
+                sourceBuffer,
                 destination,
                 static_cast<uint32_t>(copies.size()),
                 copies.data());
@@ -6095,6 +6200,8 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
 
             runBegin = runEnd;
         }
+        if (spillStaging)
+            DeferDestroyBuffer(spillStaging, spillStagingMemory, true);
         i = segmentEnd;
     }
 
