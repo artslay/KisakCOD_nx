@@ -297,13 +297,50 @@ void R_SkinXModelCmd(_WORD *data)
 }
 
 static void __cdecl R_SkinXSurfaceSkinnedInternal(
-    const XSurface *, const DObjSkelMat *, GfxPackedVertex *, bool);
-static void __cdecl R_SkinXSurfaceWeightInternal(const GfxPackedVertex *,const XSurfaceVertexInfo *,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceRigidInternal(const XSurface *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight0Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight1Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight2Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
-static void __cdecl R_SkinXSurfaceWeight3Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+    const XSurface *xsurf,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *skinVerticesOut,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceWeightInternal(
+    const GfxPackedVertex *inVerts,
+    const XSurfaceVertexInfo *vertexInfo,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *outVerts,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceRigidInternal(
+    const XSurface *surf,
+    int totalVertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertices,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceWeight0Internal(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceWeight1Internal(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceWeight2Internal(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut,
+    bool transformBasis);
+static void __cdecl R_SkinXSurfaceWeight3Internal(
+    const GfxPackedVertex *vertsIn,
+    const uint16_t *vertexBlend,
+    int vertCount,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *vertsOut,
+    bool transformBasis);
 
 #ifdef __SWITCH__
 void __cdecl R_SkinXSurfaceSkinnedSse(
@@ -433,14 +470,14 @@ static void __cdecl MatrixTransformVertexAndBasis(
     // Load a bone matrix once, then evaluate its three output components in
     // parallel for position, normal and tangent. Keep the multiply/add order
     // aligned with the scalar CoD4 transform.
-    const SwitchSkinMatrix loadedMatrix =
-        preloadedMatrix
-            ? SwitchSkinMatrix{}
-            : Switch_LoadSkinMatrix(mat);
+    SwitchSkinMatrix loadedMatrix;
     const SwitchSkinMatrix *bone =
-        preloadedMatrix
-            ? static_cast<const SwitchSkinMatrix *>(preloadedMatrix)
-            : &loadedMatrix;
+        static_cast<const SwitchSkinMatrix *>(preloadedMatrix);
+    if (!bone)
+    {
+        loadedMatrix = Switch_LoadSkinMatrix(mat);
+        bone = &loadedMatrix;
+    }
     const float32x4_t axis0 = bone->axis0;
     const float32x4_t axis1 = bone->axis1;
     const float32x4_t axis2 = bone->axis2;
