@@ -36,6 +36,7 @@
 #include <universal/timing.h>
 #ifdef __SWITCH__
 #include <chrono>
+#include <platform/switch/switch_perf_diag.h>
 #include <cstdio>
 #include <cstring>
 #include <gfx/gfx_backend.h>
@@ -66,10 +67,19 @@ static inline uint64_t KisakRendererClock()
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
+static inline std::chrono::steady_clock::time_point Switch_RendererTimingStart()
+{
+    return Switch_PerfDiagEnabled()
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
+}
+
 static inline void Switch_RecordBackendTimingElapsed(
     SwitchBackendTimingStage stage,
     std::chrono::steady_clock::time_point start)
 {
+    if (!Switch_PerfDiagEnabled())
+        return;
     const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - start).count();
     Switch_RecordBackendTiming(stage, static_cast<uint64_t>(elapsedNs));
@@ -924,7 +934,7 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
     }
     g_viewStats->drawSurfCount += info->drawSurfCount;
 #ifdef __SWITCH__
-    const auto switchDrawSurfTessEndStart = std::chrono::steady_clock::now();
+    const auto switchDrawSurfTessEndStart = Switch_RendererTimingStart();
 #endif
     R_TessEnd(context, prepassContext);
 #ifdef __SWITCH__
@@ -969,7 +979,7 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
 #ifdef __SWITCH__
-    const auto switchMaterialSetupStart = std::chrono::steady_clock::now();
+    const auto switchMaterialSetupStart = Switch_RendererTimingStart();
 #endif
     const bool materialReady =
         R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf) != 0;
@@ -1100,7 +1110,7 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
     for (passIndex = 0; passIndex < listArgs->context.state->technique->passCount; ++passIndex)
     {
 #ifdef __SWITCH__
-        const auto switchPassSetupStart = std::chrono::steady_clock::now();
+        const auto switchPassSetupStart = Switch_RendererTimingStart();
 #endif
         R_UpdateMaterialTime(listArgs->context.source, 0.0);
         R_SetupPass(listArgs->context, passIndex);
@@ -1115,7 +1125,7 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
         else
         {
 #ifdef __SWITCH__
-            const auto switchPrepassSetupStart = std::chrono::steady_clock::now();
+            const auto switchPrepassSetupStart = Switch_RendererTimingStart();
 #endif
             R_SetupPass(prepassContext, 0);
 #ifdef __SWITCH__
@@ -1137,66 +1147,69 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
 #endif
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
 #ifdef __SWITCH__
-        const auto switchGeometryStart = std::chrono::steady_clock::now();
+        const auto switchGeometryStart = Switch_RendererTimingStart();
 #endif
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
 #ifdef __SWITCH__
-        const auto switchGeometryElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now() - switchGeometryStart).count();
-        const uint64_t switchGeometryElapsedNs =
-            static_cast<uint64_t>(switchGeometryElapsed);
-        Switch_RecordBackendTiming(
-            SwitchBackendTimingStage::DrawSurfGeometry, switchGeometryElapsedNs);
-        SwitchBackendTimingStage switchSurfaceTypeStage =
-            SwitchBackendTimingStage::DrawSurfTriangles;
-        bool switchHasSurfaceTypeStage = true;
-        switch (drawSurf.fields.surfType)
+        if (Switch_PerfDiagEnabled())
         {
-        case SF_TRIANGLES:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTriangles;
-            break;
-        case SF_TRIANGLES_PRETESS:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTrianglesPreTess;
-            break;
-        case SF_STATICMODEL_RIGID:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelRigid;
-            break;
-        case SF_STATICMODEL_PRETESS:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelPreTess;
-            break;
-        case SF_STATICMODEL_CACHED:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelCached;
-            break;
-        case SF_STATICMODEL_SKINNED:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelSkinned;
-            break;
-        case SF_BMODEL:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfBModel;
-            break;
-        case SF_XMODEL_RIGID:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigid;
-            break;
-        case SF_XMODEL_RIGID_SKINNED:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigidSkinned;
-            break;
-        case SF_XMODEL_SKINNED:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelSkinned;
-            break;
-        case SF_CODE_MESH:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfCodeMesh;
-            break;
-        case SF_MARK_MESH:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfMarkMesh;
-            break;
-        case SF_PARTICLE_CLOUD:
-            switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfParticleCloud;
-            break;
-        default:
-            switchHasSurfaceTypeStage = false;
-            break;
+            const auto switchGeometryElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - switchGeometryStart).count();
+            const uint64_t switchGeometryElapsedNs =
+                static_cast<uint64_t>(switchGeometryElapsed);
+            Switch_RecordBackendTiming(
+                SwitchBackendTimingStage::DrawSurfGeometry, switchGeometryElapsedNs);
+            SwitchBackendTimingStage switchSurfaceTypeStage =
+                SwitchBackendTimingStage::DrawSurfTriangles;
+            bool switchHasSurfaceTypeStage = true;
+            switch (drawSurf.fields.surfType)
+            {
+            case SF_TRIANGLES:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTriangles;
+                break;
+            case SF_TRIANGLES_PRETESS:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfTrianglesPreTess;
+                break;
+            case SF_STATICMODEL_RIGID:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelRigid;
+                break;
+            case SF_STATICMODEL_PRETESS:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelPreTess;
+                break;
+            case SF_STATICMODEL_CACHED:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelCached;
+                break;
+            case SF_STATICMODEL_SKINNED:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfStaticModelSkinned;
+                break;
+            case SF_BMODEL:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfBModel;
+                break;
+            case SF_XMODEL_RIGID:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigid;
+                break;
+            case SF_XMODEL_RIGID_SKINNED:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelRigidSkinned;
+                break;
+            case SF_XMODEL_SKINNED:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfXModelSkinned;
+                break;
+            case SF_CODE_MESH:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfCodeMesh;
+                break;
+            case SF_MARK_MESH:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfMarkMesh;
+                break;
+            case SF_PARTICLE_CLOUD:
+                switchSurfaceTypeStage = SwitchBackendTimingStage::DrawSurfParticleCloud;
+                break;
+            default:
+                switchHasSurfaceTypeStage = false;
+                break;
+            }
+            if (switchHasSurfaceTypeStage)
+                Switch_RecordBackendTiming(switchSurfaceTypeStage, switchGeometryElapsedNs);
         }
-        if (switchHasSurfaceTypeStage)
-            Switch_RecordBackendTiming(switchSurfaceTypeStage, switchGeometryElapsedNs);
 #endif
     }
     if (isPixelCostEnabled)
@@ -3549,7 +3562,7 @@ void __cdecl RB_CallExecuteRenderCommands()
         if (backEndData->viewInfoCount)
         {
 #ifdef __SWITCH__
-            const auto switchCommonStart = std::chrono::steady_clock::now();
+            const auto switchCommonStart = Switch_RendererTimingStart();
 #endif
             RB_Draw3DCommon();
 #ifdef __SWITCH__
@@ -3576,7 +3589,7 @@ void __cdecl RB_CallExecuteRenderCommands()
         if (backEndData->cmds)
         {
 #ifdef __SWITCH__
-            const auto switchCommandLoopStart = std::chrono::steady_clock::now();
+            const auto switchCommandLoopStart = Switch_RendererTimingStart();
 #endif
             RB_ExecuteRenderCommandsLoop(backEndData->cmds);
 #ifdef __SWITCH__
@@ -3619,7 +3632,7 @@ void __cdecl RB_CallExecuteRenderCommands()
             // EndScene must go through the D3D9 compatibility layer so it can
             // queue the active offscreen render target for Vulkan presentation.
 #ifdef __SWITCH__
-            const auto switchEndSceneStart = std::chrono::steady_clock::now();
+            const auto switchEndSceneStart = Switch_RendererTimingStart();
 #endif
             hr = dx.device->EndScene();
 #ifdef __SWITCH__
@@ -3646,7 +3659,7 @@ void __cdecl RB_CallExecuteRenderCommands()
             {
                 R_AcquireGpuFenceLock();
 #ifdef __SWITCH__
-                const auto switchAdaptiveSyncStart = std::chrono::steady_clock::now();
+                const auto switchAdaptiveSyncStart = Switch_RendererTimingStart();
 #endif
                 RB_AdaptiveGpuSyncFinal();
 #ifdef __SWITCH__
@@ -3838,19 +3851,19 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
     {
         KISAK_NULLSUB();
 #ifdef __SWITCH__
-        auto switchStageStart = std::chrono::steady_clock::now();
+        auto switchStageStart = Switch_RendererTimingStart();
 #endif
         RB_BeginFrame(data);
 #ifdef __SWITCH__
         Switch_RecordBackendTimingElapsed(
             SwitchBackendTimingStage::BackendBeginFrame, switchStageStart);
-        switchStageStart = std::chrono::steady_clock::now();
+        switchStageStart = Switch_RendererTimingStart();
 #endif
         RB_Draw3D();
 #ifdef __SWITCH__
         Switch_RecordBackendTimingElapsed(
             SwitchBackendTimingStage::BackendDraw3D, switchStageStart);
-        switchStageStart = std::chrono::steady_clock::now();
+        switchStageStart = Switch_RendererTimingStart();
 #endif
         RB_CallExecuteRenderCommands();
 #ifdef __SWITCH__
@@ -3869,7 +3882,7 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
     {
         PROF_SCOPED("WaitRenderSwap");
 #ifdef __SWITCH__
-        const auto switchSwapWaitStart = std::chrono::steady_clock::now();
+        const auto switchSwapWaitStart = Switch_RendererTimingStart();
 #endif
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
 #ifdef __SWITCH__

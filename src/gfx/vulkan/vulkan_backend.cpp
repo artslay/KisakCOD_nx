@@ -81,6 +81,8 @@ struct SwitchFrameTimingCounter
 
     void Add(uint64_t elapsedNs)
     {
+        if (!Switch_PerfDiagEnabled())
+            return;
         calls.fetch_add(1, std::memory_order_relaxed);
         totalNs.fetch_add(elapsedNs, std::memory_order_relaxed);
         uint64_t previousMax = maxNs.load(std::memory_order_relaxed);
@@ -128,8 +130,17 @@ SwitchFrameTimingStats g_switchFrameTimingStats;
 thread_local SwitchFrameClock::time_point g_switchFrameCpuStart;
 thread_local bool g_switchFrameCpuStartValid = false;
 
+SwitchFrameClock::time_point SwitchFrameTimingStart()
+{
+    return Switch_PerfDiagEnabled()
+        ? SwitchFrameClock::now()
+        : SwitchFrameClock::time_point{};
+}
+
 uint64_t SwitchElapsedNs(SwitchFrameClock::time_point start)
 {
+    if (!Switch_PerfDiagEnabled())
+        return 0;
     return static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             SwitchFrameClock::now() - start).count());
@@ -137,6 +148,11 @@ uint64_t SwitchElapsedNs(SwitchFrameClock::time_point start)
 
 void Switch_RecordFrameCpuEnd()
 {
+    if (!Switch_PerfDiagEnabled())
+    {
+        g_switchFrameCpuStartValid = false;
+        return;
+    }
     if (g_switchFrameCpuStartValid)
     {
         g_switchFrameTimingStats.frameCpu.Add(
@@ -2102,7 +2118,7 @@ bool VulkanBackend::RecreateSwapchain()
         std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        const auto idleStart = SwitchFrameClock::now();
+        const auto idleStart = SwitchFrameTimingStart();
 #endif
         const VkResult idleResult = vkDeviceWaitIdle(m_device);
 #ifdef __SWITCH__
@@ -2220,7 +2236,7 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
     // The lock also protects the backend/device lifetime while Shutdown
     // replaces and destroys per-frame synchronization objects.
 #ifdef __SWITCH__
-    const auto waitStart = SwitchFrameClock::now();
+    const auto waitStart = SwitchFrameTimingStart();
 #endif
     std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
     if (!m_device || !m_initialized || m_deviceLost)
@@ -2258,12 +2274,15 @@ void VulkanBackend::RecordModelLightingUpload(
     uint64_t regions, uint64_t bytes, uint64_t fullBytes)
 {
 #ifdef __SWITCH__
-    g_switchFrameTimingStats.modelLightingRegions.fetch_add(
-        regions, std::memory_order_relaxed);
-    g_switchFrameTimingStats.modelLightingBytes.fetch_add(
-        bytes, std::memory_order_relaxed);
-    g_switchFrameTimingStats.modelLightingFullBytes.fetch_add(
-        fullBytes, std::memory_order_relaxed);
+    if (Switch_PerfDiagEnabled())
+    {
+        g_switchFrameTimingStats.modelLightingRegions.fetch_add(
+            regions, std::memory_order_relaxed);
+        g_switchFrameTimingStats.modelLightingBytes.fetch_add(
+            bytes, std::memory_order_relaxed);
+        g_switchFrameTimingStats.modelLightingFullBytes.fetch_add(
+            fullBytes, std::memory_order_relaxed);
+    }
 #else
     (void)regions;
     (void)bytes;
@@ -2279,8 +2298,9 @@ bool VulkanBackend::BeginFrame()
         return true;
 
 #ifdef __SWITCH__
-    g_switchFrameCpuStart = SwitchFrameClock::now();
-    g_switchFrameCpuStartValid = true;
+    g_switchFrameCpuStartValid = Switch_PerfDiagEnabled();
+    if (g_switchFrameCpuStartValid)
+        g_switchFrameCpuStart = SwitchFrameClock::now();
 #endif
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
@@ -2303,7 +2323,7 @@ bool VulkanBackend::BeginFrame()
     FrameSync &frame = m_frameSync[slotIndex];
     VkResult waitResult;
 #ifdef __SWITCH__
-    const auto slotWaitStart = SwitchFrameClock::now();
+    const auto slotWaitStart = SwitchFrameTimingStart();
 #endif
     {
         std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
@@ -2384,7 +2404,7 @@ bool VulkanBackend::BeginFrame()
     }
 
 #ifdef __SWITCH__
-    const auto acquireStart = SwitchFrameClock::now();
+    const auto acquireStart = SwitchFrameTimingStart();
 #endif
     VkResult result = vkAcquireNextImageKHR(
         m_device,
@@ -2470,7 +2490,7 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     if (!m_commandBuffer || !m_commandPool || !m_graphicsQueue)
         return false;
 #ifdef __SWITCH__
-    const auto syncStart = SwitchFrameClock::now();
+    const auto syncStart = SwitchFrameTimingStart();
 #endif
 
     EndRendering();
@@ -2649,7 +2669,7 @@ static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
 bool VulkanBackend::EndFrame()
 {
 #ifdef __SWITCH__
-    const auto switchEndFrameStart = SwitchFrameClock::now();
+    const auto switchEndFrameStart = SwitchFrameTimingStart();
 #endif
     struct FrameOwnerScope
     {
@@ -2821,7 +2841,7 @@ bool VulkanBackend::EndFrame()
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/present/queue_submit";
-            const auto submitStart = SwitchFrameClock::now();
+            const auto submitStart = SwitchFrameTimingStart();
 #endif
             submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, frame.fence);
 #ifdef __SWITCH__
@@ -2897,7 +2917,7 @@ bool VulkanBackend::EndFrame()
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        const auto presentStart = SwitchFrameClock::now();
+        const auto presentStart = SwitchFrameTimingStart();
 #endif
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
 #ifdef __SWITCH__
@@ -3082,7 +3102,7 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        const auto idleStart = SwitchFrameClock::now();
+        const auto idleStart = SwitchFrameTimingStart();
 #endif
         const VkResult idleResult = vkQueueWaitIdle(m_graphicsQueue);
 #ifdef __SWITCH__
@@ -3225,7 +3245,7 @@ void VulkanBackend::WaitForGpu()
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        const auto idleStart = SwitchFrameClock::now();
+        const auto idleStart = SwitchFrameTimingStart();
 #endif
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
 #ifdef __SWITCH__
@@ -3242,7 +3262,7 @@ void VulkanBackend::Flush()
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        const auto idleStart = SwitchFrameClock::now();
+        const auto idleStart = SwitchFrameTimingStart();
 #endif
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
 #ifdef __SWITCH__
@@ -3971,7 +3991,7 @@ bool VulkanBackend::ImmediateSubmit(
                     g_switchFrameStage = "frame/upload/immediate_wait_fence";
 #endif
 #ifdef __SWITCH__
-                    const auto immediateWaitStart = SwitchFrameClock::now();
+                    const auto immediateWaitStart = SwitchFrameTimingStart();
 #endif
                     const VkResult waitResult =
                         vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);

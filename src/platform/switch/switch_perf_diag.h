@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstdlib>
 #include <universal/timing.h>
 enum SwitchMainFrameStage : uint32_t {
  SWITCH_MAIN_COM_FRAME_TOTAL=0, SWITCH_MAIN_FRAME_TOTAL, SWITCH_MAIN_EVENT_LOOP,
@@ -7,7 +8,16 @@ enum SwitchMainFrameStage : uint32_t {
  SWITCH_MAIN_PREFRAME, SWITCH_MAIN_CLIENT, SWITCH_MAIN_SCREEN, SWITCH_MAIN_RAGDOLL,
  SWITCH_MAIN_END_WAIT, SWITCH_MAIN_DB_UPDATE, SWITCH_MAIN_FRAME_STAGE_COUNT
 };
-extern "C" bool Switch_PerfDiagEnabled();
+extern "C" inline bool Switch_PerfDiagEnabled()
+{
+    // Keep detailed CPU/GPU timing out of normal gameplay. Set this variable
+    // to 1 only when collecting a diagnostic capture.
+    static const bool enabled = []() noexcept {
+        const char *value = std::getenv("KISAK_SWITCH_PERF_DIAG");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
 extern "C" void Switch_RecordMainFrameStage(uint32_t stage,uint64_t elapsedNs);
 extern "C" void Switch_LogThreadDiagSummary();
 extern "C" void Switch_LogWorkerDiagSummary();
