@@ -1076,6 +1076,11 @@ void VulkanBackend::Shutdown()
             vkDestroyCommandPool(m_device, frame.commandPool, nullptr);
         frame = FrameSync{};
     }
+#ifdef __SWITCH__
+    m_gpuTimestampQueriesEnabled = false;
+    m_graphicsQueueTimestampValidBits = 0;
+    m_gpuTimestampPeriodNs = 0.0;
+#endif
     if (m_immediateCommandPool)
         vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
 
@@ -2051,7 +2056,7 @@ bool VulkanBackend::CreateSync()
     char gpuQueryStatus[192];
     std::snprintf(
         gpuQueryStatus, sizeof(gpuQueryStatus),
-        "[KisakCOD][VK FRAME TIMING] gpu_timestamps enabled=%u valid_bits=%u period_ns=%.4f\\n",
+        "[KisakCOD][VK FRAME TIMING] gpu_timestamps enabled=%u valid_bits=%u period_ns=%.4f\n",
         m_gpuTimestampQueriesEnabled ? 1u : 0u,
         m_graphicsQueueTimestampValidBits,
         m_gpuTimestampPeriodNs);
