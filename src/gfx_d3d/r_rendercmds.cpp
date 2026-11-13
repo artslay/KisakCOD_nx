@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
+#include <platform/switch/switch_perf_diag.h>
 extern thread_local const char *g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -118,6 +119,9 @@ bool Switch_WaitForFrontendFrameSlot(
     SwitchFrontendWaitPhase phase,
     uint32_t poolMask)
 {
+    if (!Switch_PerfDiagEnabled())
+        return backend->WaitForFrameSlot(frameSlot);
+
     const auto waitStart = std::chrono::steady_clock::now();
     const bool waitSucceeded = backend->WaitForFrameSlot(frameSlot);
     const auto elapsed = std::chrono::steady_clock::now() - waitStart;
@@ -213,6 +217,9 @@ void Switch_ReportFrontendFenceWaitWindow()
 
 void Switch_EndFrontendFenceWaitFrame()
 {
+    if (!Switch_PerfDiagEnabled())
+        return;
+
     if (++s_switchFrontendFenceWaitFrames >= 60u)
     {
         Switch_ReportFrontendFenceWaitWindow();
