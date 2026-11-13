@@ -351,6 +351,10 @@ private:
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint64_t submittedFrameSerial = 0;
+#ifdef __SWITCH__
+        VkQueryPool gpuTimestampPool = VK_NULL_HANDLE;
+        bool gpuTimestampPending = false;
+#endif
     };
 
     bool CreateInstance();
@@ -404,6 +408,11 @@ private:
     VkDevice m_device = VK_NULL_HANDLE;
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     uint32_t m_graphicsQueueFamily = UINT32_MAX;
+#ifdef __SWITCH__
+    uint32_t m_graphicsQueueTimestampValidBits = 0;
+    double m_gpuTimestampPeriodNs = 0.0;
+    bool m_gpuTimestampQueriesEnabled = false;
+#endif
 
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     VkSwapchainKHR m_swapchain = VK_NULL_HANDLE;

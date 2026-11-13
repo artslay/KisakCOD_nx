@@ -116,6 +116,7 @@ struct SwitchFrameTimingStats
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateWaitByReason;
     SwitchFrameTimingCounter queueIdle;
     SwitchFrameTimingCounter frameCpu;
+    SwitchFrameTimingCounter gpuFrame;
     std::array<SwitchFrameTimingCounter,
         static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStages;
     std::atomic<uint64_t> modelLightingRegions{0};
@@ -169,6 +170,7 @@ void Switch_RecordFrameCpuEnd()
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonMaxNs{};
     uint64_t idleCalls = 0, idleNs = 0, idleMaxNs = 0;
     uint64_t cpuCalls = 0, cpuNs = 0, cpuMaxNs = 0;
+    uint64_t gpuCalls = 0, gpuNs = 0, gpuMaxNs = 0;
     std::array<uint64_t,
         static_cast<size_t>(SwitchBackendTimingStage::Count)> backendStageCalls{};
     std::array<uint64_t,
@@ -210,6 +212,8 @@ void Switch_RecordFrameCpuEnd()
         &idleCalls, &idleNs, &idleMaxNs);
     g_switchFrameTimingStats.frameCpu.Reset(
         &cpuCalls, &cpuNs, &cpuMaxNs);
+    g_switchFrameTimingStats.gpuFrame.Reset(
+        &gpuCalls, &gpuNs, &gpuMaxNs);
     for (size_t i = 0; i < g_switchFrameTimingStats.backendStages.size(); ++i)
     {
         g_switchFrameTimingStats.backendStages[i].Reset(
@@ -355,8 +359,11 @@ void Switch_RecordFrameCpuEnd()
     char message[4096];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
-        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs), backendStageText, draw3dStageText,
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f gpu_ms=%llu:%.2f/%.2f %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
+        static_cast<unsigned long long>(gpuCalls),
+        averageMs(gpuNs, gpuCalls), maximumMs(gpuMaxNs),
+        backendStageText, draw3dStageText,
         drawSurfStageText, drawSurfTypeText, drawIndexedStageText,
         static_cast<unsigned long long>(slotCalls),
         averageMs(slotNs, slotCalls), maximumMs(slotMaxNs),
@@ -1061,6 +1068,10 @@ void VulkanBackend::Shutdown()
             vkDestroySemaphore(m_device, frame.imageAvailable, nullptr);
         if (frame.fence)
             vkDestroyFence(m_device, frame.fence, nullptr);
+#ifdef __SWITCH__
+        if (frame.gpuTimestampPool)
+            vkDestroyQueryPool(m_device, frame.gpuTimestampPool, nullptr);
+#endif
         if (frame.commandPool)
             vkDestroyCommandPool(m_device, frame.commandPool, nullptr);
         frame = FrameSync{};
@@ -1220,6 +1231,9 @@ bool VulkanBackend::SelectPhysicalDevice()
             {
                 m_physicalDevice = device;
                 m_graphicsQueueFamily = i;
+#ifdef __SWITCH__
+                m_graphicsQueueTimestampValidBits = queues[i].timestampValidBits;
+#endif
                 return true;
             }
         }
@@ -1404,6 +1418,9 @@ bool VulkanBackend::CreateDevice()
     features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+#ifdef __SWITCH__
+    m_gpuTimestampPeriodNs = static_cast<double>(properties.limits.timestampPeriod);
+#endif
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
     char featureMsg[384];
@@ -1995,6 +2012,52 @@ bool VulkanBackend::CreateSync()
         frame.submittedFrameSerial = 0;
     }
 
+#ifdef __SWITCH__
+    if (!m_gpuTimestampQueriesEnabled &&
+        Switch_PerfDiagEnabled() &&
+        m_graphicsQueueTimestampValidBits != 0 &&
+        m_gpuTimestampPeriodNs > 0.0)
+    {
+        bool timestampPoolsCreated = true;
+        VkQueryPoolCreateInfo queryInfo{};
+        queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queryInfo.queryCount = 2;
+        for (uint32_t slotIndex = 0; slotIndex < FramesInFlight; ++slotIndex)
+        {
+            FrameSync &frame = m_frameSync[slotIndex];
+            const VkResult queryResult =
+                vkCreateQueryPool(m_device, &queryInfo, nullptr, &frame.gpuTimestampPool);
+            if (queryResult != VK_SUCCESS)
+            {
+                timestampPoolsCreated = false;
+                break;
+            }
+        }
+        if (!timestampPoolsCreated)
+        {
+            for (FrameSync &frame : m_frameSync)
+            {
+                if (frame.gpuTimestampPool)
+                    vkDestroyQueryPool(m_device, frame.gpuTimestampPool, nullptr);
+                frame.gpuTimestampPool = VK_NULL_HANDLE;
+            }
+        }
+        else
+        {
+            m_gpuTimestampQueriesEnabled = true;
+        }
+    }
+    char gpuQueryStatus[192];
+    std::snprintf(
+        gpuQueryStatus, sizeof(gpuQueryStatus),
+        "[KisakCOD][VK FRAME TIMING] gpu_timestamps enabled=%u valid_bits=%u period_ns=%.4f\\n",
+        m_gpuTimestampQueriesEnabled ? 1u : 0u,
+        m_graphicsQueueTimestampValidBits,
+        m_gpuTimestampPeriodNs);
+    Switch_LogWrite(gpuQueryStatus);
+#endif
+
     m_currentFrameSlot = 0;
     m_nextFrameSlot = 0;
     m_commandPool = m_frameSync[0].commandPool;
@@ -2251,6 +2314,39 @@ bool VulkanBackend::BeginFrame()
         return false;
     }
 
+#ifdef __SWITCH__
+    if (m_gpuTimestampQueriesEnabled &&
+        frame.gpuTimestampPool &&
+        frame.gpuTimestampPending)
+    {
+        uint64_t timestampValues[2] = {};
+        const VkResult timestampResult = vkGetQueryPoolResults(
+            m_device,
+            frame.gpuTimestampPool,
+            0,
+            2,
+            sizeof(timestampValues),
+            timestampValues,
+            sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT);
+        if (timestampResult == VK_SUCCESS)
+        {
+            uint64_t elapsedTicks = timestampValues[1] - timestampValues[0];
+            if (m_graphicsQueueTimestampValidBits < 64u)
+            {
+                const uint64_t timestampMask =
+                    (uint64_t(1) << m_graphicsQueueTimestampValidBits) - 1u;
+                elapsedTicks &= timestampMask;
+            }
+            const double elapsedNs =
+                static_cast<double>(elapsedTicks) * m_gpuTimestampPeriodNs;
+            g_switchFrameTimingStats.gpuFrame.Add(
+                static_cast<uint64_t>(elapsedNs + 0.5));
+        }
+        frame.gpuTimestampPending = false;
+    }
+#endif
+
     uint64_t completedSerial =
         m_completedFrameSerial.load(std::memory_order_relaxed);
     while (completedSerial < frame.submittedFrameSerial &&
@@ -2326,6 +2422,18 @@ bool VulkanBackend::BeginFrame()
         return false;
     }
 
+#ifdef __SWITCH__
+    if (m_gpuTimestampQueriesEnabled && frame.gpuTimestampPool)
+    {
+        vkCmdResetQueryPool(m_commandBuffer, frame.gpuTimestampPool, 0, 2);
+        vkCmdWriteTimestamp(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            frame.gpuTimestampPool,
+            0);
+        frame.gpuTimestampPending = false;
+    }
+#endif
     m_frameActive = true;
     g_frameRecordingBackend = this;
     m_frameSerial.fetch_add(1, std::memory_order_relaxed);
@@ -2647,6 +2755,16 @@ bool VulkanBackend::EndFrame()
         m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     }
 
+#ifdef __SWITCH__
+    if (m_gpuTimestampQueriesEnabled && frame.gpuTimestampPool)
+    {
+        vkCmdWriteTimestamp(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            frame.gpuTimestampPool,
+            1);
+    }
+#endif
     const VkResult endResult = vkEndCommandBuffer(m_commandBuffer);
     if (endResult != VK_SUCCESS)
     {
@@ -2753,6 +2871,10 @@ bool VulkanBackend::EndFrame()
     }
     m_imageAvailablePending = false;
     frame.submittedFrameSerial = FrameSerial();
+#ifdef __SWITCH__
+    frame.gpuTimestampPending =
+        m_gpuTimestampQueriesEnabled && frame.gpuTimestampPool != VK_NULL_HANDLE;
+#endif
 
 
     VkPresentInfoKHR present{};
