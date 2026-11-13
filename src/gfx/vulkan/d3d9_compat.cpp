@@ -381,17 +381,29 @@ static bool Switch_IsFloorAuditContextActive()
 // Expensive per-object auditing is disabled by default to keep gameplay fast.
 // Set KISAK_VK_RENDER_OBJECT_FILTER to a material-name substring (or "all")
 // only while collecting a targeted renderer trace.
-static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
+static const std::string &Switch_RenderObjectAuditFilter()
 {
     static const std::string filter = []()
     {
         const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
         return value && *value ? std::string(value) : std::string("off");
     }();
+    return filter;
+}
+
+bool Switch_IsRenderObjectAuditEnabled()
+{
+    const std::string &filter = Switch_RenderObjectAuditFilter();
+    return filter != "off" && filter != "0" && filter != "none";
+}
+
+static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
+{
+    const std::string &filter = Switch_RenderObjectAuditFilter();
     // Keep the disabled default on the shortest path: this function is
     // queried from material setup and GPU draw handling, so even a diagnostic
     // one-time atomic exchange here would otherwise run for every draw.
-    if (filter == "off" || filter == "0" || filter == "none")
+    if (!Switch_IsRenderObjectAuditEnabled())
         return false;
 
     static std::atomic<bool> filterLogged{false};
@@ -602,6 +614,8 @@ void Switch_SetRenderAuditContext(const Material *material,const char *technique
 }
 void Switch_SetRenderAuditObject(uint32_t surfaceType,uint32_t objectId)
 {
+    if (!g_switchRenderAuditContext.material)
+        return;
     g_switchRenderAuditContext.surfaceType=surfaceType;
     g_switchRenderAuditContext.objectId=objectId;
 }

@@ -14,6 +14,7 @@
 #include <cstring>
 extern uint32_t g_switchFloorRasterProbeSurfaceIndex;
 extern void Switch_LogWrite(const char *msg);
+extern bool Switch_IsRenderObjectAuditEnabled();
 extern void Switch_BeginWorldDrawAudit(
     const Material *material, const char *techniqueName,
     const char *vertexShaderName, const char *pixelShaderName,
@@ -72,6 +73,13 @@ static void R_SwitchDrawBspTrisAudited(
     GfxCmdBufPrimState *state, const srfTriangles_t *tris,
     uint32_t triangleCount, const GfxSurface *surface, uint32_t surfaceIndex)
 {
+    static const bool auditEnabled = Switch_IsRenderObjectAuditEnabled();
+    if (!auditEnabled)
+    {
+        R_DrawBspTris(state, tris, triangleCount);
+        return;
+    }
+
     const Material *material = surface ? surface->material : nullptr;
     const MaterialPass *pass = s_switchBspAuditPass;
     Switch_BeginWorldDrawAudit(
@@ -211,6 +219,7 @@ void __cdecl R_DrawTrianglesLit(
     GfxTexture *reflectionProbeTextures; // [esp+40h] [ebp-38h]
     const GfxSurface *bspSurf; // [esp+44h] [ebp-34h]
 #ifdef __SWITCH__
+    const bool switchRenderAuditEnabled = Switch_IsRenderObjectAuditEnabled();
     const GfxSurface *prevBspSurf;
     uint32_t prevBspSurfIndex;
 #endif
@@ -434,7 +443,8 @@ void __cdecl R_DrawTrianglesLit(
                 }
             }
 #ifdef __SWITCH__
-            R_SwitchQueueBspAuditSurface(bspSurf,surfIndex,tris->tris.triCount,s_switchBspAuditTechnique,s_switchBspAuditPass,s_switchBspAuditPassIndex);
+            if (switchRenderAuditEnabled)
+                R_SwitchQueueBspAuditSurface(bspSurf,surfIndex,tris->tris.triCount,s_switchBspAuditTechnique,s_switchBspAuditPass,s_switchBspAuditPassIndex);
 #endif
             triCount += tris->tris.triCount;
             iassert( !prepassPrimState );
@@ -509,6 +519,7 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
     int triCount; // [esp+14h] [ebp-14h]
     const GfxSurface *bspSurf; // [esp+18h] [ebp-10h]
 #ifdef __SWITCH__
+    const bool switchRenderAuditEnabled = Switch_IsRenderObjectAuditEnabled();
     const GfxSurface *prevBspSurf;
     uint32_t prevBspSurfIndex;
 #endif
@@ -555,7 +566,8 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
                 }
             }
 #ifdef __SWITCH__
-            R_SwitchQueueBspAuditSurface(bspSurf,list[index],tris->tris.triCount,s_switchBspAuditTechnique,s_switchBspAuditPass,s_switchBspAuditPassIndex);
+            if (switchRenderAuditEnabled)
+                R_SwitchQueueBspAuditSurface(bspSurf,list[index],tris->tris.triCount,s_switchBspAuditTechnique,s_switchBspAuditPass,s_switchBspAuditPassIndex);
 #endif
             triCount += tris->tris.triCount;
         }
@@ -600,6 +612,13 @@ static void R_SwitchDrawPreTessTrisAudited(
     const MaterialTechnique *technique,
     const MaterialPass *pass)
 {
+    static const bool auditEnabled = Switch_IsRenderObjectAuditEnabled();
+    if (!auditEnabled)
+    {
+        R_DrawPreTessTris(state, tris, baseIndex, triangleCount);
+        return;
+    }
+
     Switch_BeginWorldDrawAudit(
         surface ? surface->material : nullptr,
         technique ? technique->name : nullptr,
@@ -626,6 +645,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
     uint32_t triCount; // [esp+18h] [ebp-14h]
     const GfxSurface *bspSurf; // [esp+1Ch] [ebp-10h]
 #ifdef __SWITCH__
+    const bool switchRenderAuditEnabled = Switch_IsRenderObjectAuditEnabled();
     const GfxSurface *prevBspSurf;
     uint32_t prevBspSurfIndex;
 #endif
@@ -681,7 +701,8 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                 baseVertex = tris->firstVertex;
             }
 #ifdef __SWITCH__
-            R_SwitchQueueBspAuditSurface(bspSurf,surfIndex,list[index].totalTriCount,context.state->technique,context.state->pass,context.state->passIndex);
+            if (switchRenderAuditEnabled)
+                R_SwitchQueueBspAuditSurface(bspSurf,surfIndex,list[index].totalTriCount,context.state->technique,context.state->pass,context.state->passIndex);
 #endif
             triCount += list[index].totalTriCount;
         }
@@ -699,8 +720,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
 void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
 #ifdef __SWITCH__
-    
-    
+    const bool switchRenderAuditEnabled = Switch_IsRenderObjectAuditEnabled();
 #endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
@@ -790,10 +810,11 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 batchBaseIndex = baseIndex;
             }
 
-            R_SwitchQueueBspAuditSurface(
-                bspSurf, surfIndex, list[index].totalTriCount,
-                context.state->technique, context.state->pass,
-                context.state->passIndex);
+            if (switchRenderAuditEnabled)
+                R_SwitchQueueBspAuditSurface(
+                    bspSurf, surfIndex, list[index].totalTriCount,
+                    context.state->technique, context.state->pass,
+                    context.state->passIndex);
             batchTriCount += list[index].totalTriCount;
 #else
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
