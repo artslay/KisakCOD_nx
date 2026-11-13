@@ -69,7 +69,7 @@ static bool Switch_IsStaticDpvsPerfEnabled()
     static const bool enabled = []()
     {
         const char *value = std::getenv("KISAK_SWITCH_DPVS_PERF");
-        return value && value[0] == '1' && value[1] == '\\0';
+        return value && value[0] == '1' && value[1] == 0;
     }();
     return enabled;
 }
