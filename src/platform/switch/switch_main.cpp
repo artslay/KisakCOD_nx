@@ -817,6 +817,10 @@ int main()
     // passes; production shader compilation must run the complete pass chain.
     (void)::unsetenv("NIR_SKIP");
 
+    // Enable the built-in performance capture for this diagnostic build.
+    // Switch users do not have a shell in which to set process environment variables.
+    (void)::setenv("KISAK_SWITCH_PERF_DIAG", "1", 1);
+
     const SwitchRustTlsStatus rustTlsStatus = SwitchInstallRustTlsPointer();
 
     // Restore NAK's default register allocation for the next crash comparison.
