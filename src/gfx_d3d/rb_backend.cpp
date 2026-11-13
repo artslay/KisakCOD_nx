@@ -36,7 +36,30 @@
 #include <universal/timing.h>
 #ifdef __SWITCH__
 #include <chrono>
+#include <atomic>
 #include <platform/switch/switch_perf_diag.h>
+
+static bool Switch_TakeOneShotTraceIndex(
+    std::atomic<uint32_t> &counter,
+    uint32_t limit,
+    uint32_t *index)
+{
+    if (!index)
+        return false;
+    uint32_t current = counter.load(std::memory_order_relaxed);
+    while (current < limit)
+    {
+        if (counter.compare_exchange_weak(
+                current, current + 1u,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed))
+        {
+            *index = current;
+            return true;
+        }
+    }
+    return false;
+}
 #include <cstdio>
 #include <cstring>
 #include <gfx/gfx_backend.h>
@@ -1040,10 +1063,10 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
         }
         if (drawSurf.fields.surfType == SF_PARTICLE_CLOUD)
         {
-            static volatile uint32_t switchCloudMaterialSkipTraceCount = 0;
-            const uint32_t traceIndex =
-                __sync_fetch_and_add(&switchCloudMaterialSkipTraceCount, 1u);
-            if (traceIndex < 8u)
+            static std::atomic<uint32_t> switchCloudMaterialSkipTraceCount{0};
+            uint32_t traceIndex = 0;
+            if (Switch_TakeOneShotTraceIndex(
+                    switchCloudMaterialSkipTraceCount, 8u, &traceIndex))
             {
                 char trace[384];
                 std::snprintf(
@@ -1072,10 +1095,10 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
 #ifdef __SWITCH__
     if (drawSurf.fields.surfType == SF_PARTICLE_CLOUD)
     {
-        static volatile uint32_t switchCloudMaterialReadyTraceCount = 0;
-        const uint32_t traceIndex =
-            __sync_fetch_and_add(&switchCloudMaterialReadyTraceCount, 1u);
-        if (traceIndex < 8u)
+        static std::atomic<uint32_t> switchCloudMaterialReadyTraceCount{0};
+        uint32_t traceIndex = 0;
+        if (Switch_TakeOneShotTraceIndex(
+                switchCloudMaterialReadyTraceCount, 8u, &traceIndex))
         {
             const Material *material = listArgs->context.state->material;
             const MaterialTechnique *technique = listArgs->context.state->technique;
