@@ -22,6 +22,7 @@
 #include <setjmp.h>
 #ifdef __SWITCH__
 #include <atomic>
+#include <cstdlib>
 #include <universal/timing.h>
 #endif
 
@@ -60,6 +61,18 @@ struct alignas(64) SwitchStaticDpvsPerfBucket
 };
 
 SwitchStaticDpvsPerfBucket s_switchStaticDpvsPerf[4];
+
+static bool Switch_IsStaticDpvsPerfEnabled()
+{
+    // Per-cell clock reads and atomic counters are diagnostic only. Keep the
+    // worker hot path free of that overhead unless explicitly requested.
+    static const bool enabled = []()
+    {
+        const char *value = std::getenv("KISAK_SWITCH_DPVS_PERF");
+        return value && value[0] == '1' && value[1] == '\\0';
+    }();
+    return enabled;
+}
 }
 
 extern "C" void Switch_ReadStaticDpvsPerf(
@@ -360,6 +373,12 @@ void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
     case WRKCMD_DPVS_CELL_STATIC:
 #ifdef __SWITCH__
     {
+        if (!Switch_IsStaticDpvsPerfEnabled())
+        {
+            R_AddCellStaticSurfacesInFrustumCmd((DpvsStaticCellCmd *)data);
+            break;
+        }
+
         const uint32_t threadContext = Sys_GetSwitchThreadContext();
         uint32_t bucketIndex = 3;
         if (threadContext == THREAD_CONTEXT_MAIN)
