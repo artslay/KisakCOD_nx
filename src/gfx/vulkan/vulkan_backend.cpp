@@ -3403,7 +3403,9 @@ bool VulkanBackend::AllocateResourceMemory(
 {
     if (!memory || !memoryOffset || !m_device ||
         requirements.size == 0 || requirements.alignment == 0 ||
-        memoryTypeIndex == UINT32_MAX)
+        memoryTypeIndex == UINT32_MAX ||
+        (resourceClass == MemoryResourceClass::Buffer && !buffer) ||
+        (resourceClass == MemoryResourceClass::Image && !image))
         return false;
     *memory = VK_NULL_HANDLE;
     *memoryOffset = 0;
@@ -3438,6 +3440,10 @@ bool VulkanBackend::AllocateResourceMemory(
     std::lock_guard<std::mutex> lock(m_memoryAllocatorMutex);
     const auto reserve = [&](MemoryBlock &block) -> bool
     {
+        // Validate persistent mapping before changing the free list or the
+        // allocation tables, so a failed map cannot leak a reserved range.
+        if (requestMapped && (!mapped || !block.mapped))
+            return false;
         for (size_t i = 0; i < block.freeRanges.size(); ++i)
         {
             const MemoryFreeRange range = block.freeRanges[i];
@@ -3479,7 +3485,7 @@ bool VulkanBackend::AllocateResourceMemory(
                 *mapped = block.mapped
                     ? static_cast<void *>(static_cast<uint8_t *>(block.mapped) + offset)
                     : nullptr;
-            return !requestMapped || (mapped && *mapped != nullptr);
+            return true;
         }
         return false;
     };
