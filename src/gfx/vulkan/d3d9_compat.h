@@ -650,7 +650,6 @@ private:
         VkDevice device = VK_NULL_HANDLE;
         const MOJOSHADER_parseData *parse = nullptr;
         VkDescriptorSet set = VK_NULL_HANDLE;
-        uint32_t dynamicOffset = 0;
     };
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
@@ -710,13 +709,7 @@ private:
     // Descriptor sets are isolated per in-flight frame slot. The GPU may
     // still consume the previous slot while the CPU rewrites this slot's sets.
     std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_samplerDescriptorSets{};
-    // Uniform descriptor sets are immutable and shared by both frame slots.
-    // Dynamic offsets select each draw's data in the frame-fenced uniform ring.
-    std::array<std::unordered_map<VkDeviceSize, VkDescriptorSet>,2>
-        m_uniformDynamicDescriptorSets{};
-    VkDevice m_uniformDynamicDescriptorDevice = VK_NULL_HANDLE;
-    VkDescriptorPool m_uniformDynamicDescriptorPool = VK_NULL_HANDLE;
-    VkDeviceSize m_uniformDynamicMaxRange = 0;
+    std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_uniformDescriptorSets{};
     // Immutable sampler descriptor snapshots, deduplicated within a frame.
     // Descriptor sets are never rewritten after a recorded draw has referenced them.
     std::array<std::array<
@@ -728,6 +721,7 @@ private:
     // Cache their slot lookup so each draw does not rebuild the same 16-slot map.
     std::array<ActiveSamplerDeclarationCacheEntry,2> m_activeSamplerDeclarations{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
+    std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
     std::array<std::array<UniformBindCacheEntry,2>,2> m_uniformBindCache{};
     uint64_t m_vsUniformRevision = 1;
@@ -740,8 +734,6 @@ private:
     VkCommandBuffer m_cachedCommandBuffer = VK_NULL_HANDLE;
     VkPipeline m_cachedBoundPipeline = VK_NULL_HANDLE;
     std::array<VkDescriptorSet,4> m_cachedBoundDescriptorSets{};
-    std::array<uint32_t,4> m_cachedUniformDynamicOffsets{
-        UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
     // Vulkan vertex/index bindings persist across draw calls and dynamic-rendering
     // restarts. Cache them per command-buffer recording just like pipeline state.
     std::array<VkBuffer,16> m_cachedBoundVertexBuffers{};
@@ -772,9 +764,6 @@ private:
     void ResetCachedCommandState();
     void BindDescriptorSetIfChanged(
         VkPipelineBindPoint bindPoint, uint32_t setIndex, VkDescriptorSet set);
-    void BindUniformDescriptorSetIfChanged(
-        VkPipelineBindPoint bindPoint, uint32_t setIndex,
-        VkDescriptorSet set, uint32_t dynamicOffset);
     void BindPipelineIfChanged(VkPipeline pipeline);
     bool BindDescriptorSets();
     bool PrepareDraw();
