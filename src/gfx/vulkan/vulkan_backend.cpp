@@ -4491,6 +4491,50 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
         }
     }
 
+    static constexpr VkDeviceSize kImmediateUploadStagingCapacity =
+        4u * 1024u * 1024u;
+    if (stagingSize <= kImmediateUploadStagingCapacity)
+    {
+        std::lock_guard<std::mutex> stagingLock(m_uploadStagingMutex);
+        if (!m_uploadStagingBuffer)
+        {
+            if (!CreateBuffer(
+                    kImmediateUploadStagingCapacity,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    &m_uploadStagingBuffer,
+                    &m_uploadStagingMemory,
+                    &m_uploadStagingMapped))
+                return false;
+            m_uploadStagingCapacity = kImmediateUploadStagingCapacity;
+        }
+
+        if (!m_uploadStagingMapped || stagingSize > m_uploadStagingCapacity)
+            return false;
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            std::memcpy(
+                static_cast<uint8_t *>(m_uploadStagingMapped) +
+                    static_cast<size_t>(offsets[i]),
+                uploads[i].data,
+                uploads[i].bytes);
+        }
+
+        const bool submitted = ImmediateSubmit(
+            [&](VkCommandBuffer command)
+            {
+                recordBatch(command, m_uploadStagingBuffer, 0);
+            },
+            ImmediateSubmitReason::ImageUploadBatch2D);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/images2d_submit_return";
+#endif
+        return submitted;
+    }
+
+    // Large batches retain their exact-size staging allocation.
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     void *mapped = nullptr;
@@ -4745,6 +4789,44 @@ bool VulkanBackend::UploadImage3D(
         }
     }
 
+    static constexpr VkDeviceSize kImmediateUploadStagingCapacity =
+        4u * 1024u * 1024u;
+    if (static_cast<VkDeviceSize>(bytes) <= kImmediateUploadStagingCapacity)
+    {
+        std::lock_guard<std::mutex> stagingLock(m_uploadStagingMutex);
+        if (!m_uploadStagingBuffer)
+        {
+            if (!CreateBuffer(
+                    kImmediateUploadStagingCapacity,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    &m_uploadStagingBuffer,
+                    &m_uploadStagingMemory,
+                    &m_uploadStagingMapped))
+                return false;
+            m_uploadStagingCapacity = kImmediateUploadStagingCapacity;
+        }
+
+        if (!m_uploadStagingMapped ||
+            static_cast<VkDeviceSize>(bytes) > m_uploadStagingCapacity)
+            return false;
+        std::memcpy(m_uploadStagingMapped, data, bytes);
+
+        const bool submitted = ImmediateSubmit(
+            [&](VkCommandBuffer command)
+            {
+                recordUpload(command, m_uploadStagingBuffer, 0);
+            },
+            ImmediateSubmitReason::ImageUpload3D);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/image3d_submit_return";
+#endif
+        (void)format;
+        return submitted;
+    }
+
+    // Oversized volumes keep the exact-size staging fallback.
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     void *mapped = nullptr;
