@@ -894,6 +894,14 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, gfxRenderTargets[R_RENDERTARGET_DYNAMICSHADOWS].image);
     else
         R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, rgp.whiteImage);
+
+    // A BSP pre-tess render list keeps the same material pass and source
+    // constants while surfaces switch lightmap/reflection-probe textures.
+    // Route pass arguments once here; per-surface lighting changes only need
+    // to update the corresponding sampler bindings below.
+    R_SetupPassPerObjectArgs(context);
+    R_SetupPassPerPrimArgs(context);
+
     cmdBuf.primDrawSurfPos = primDrawSurfPos;
     while (R_ReadBspPreTessDrawSurfs(&cmdBuf, &list, &count, &baseIndex))
     {
@@ -1042,8 +1050,6 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 lightmapIndex = bspSurf->lightmapIndex;
                 R_SetReflectionProbe(context, reflectionProbeIndex);
                 R_SetLightmap(context, lightmapIndex);
-                R_SetupPassPerObjectArgs(context);
-                R_SetupPassPerPrimArgs(context);
             }
 
             if (!batchTris)
