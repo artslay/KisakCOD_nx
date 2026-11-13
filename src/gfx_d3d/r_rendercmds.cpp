@@ -452,7 +452,7 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
         {
             if (frameSlotsToWait[next] == previousSlot)
             {
-                poolMask |= 1u << next;
+                poolMask |= poolBits[next];
                 frameSlotsToWait[next] = -1;
             }
         }
@@ -493,12 +493,12 @@ void Switch_WaitForNextFrontEndResources()
         if (frameSlot < 0)
             continue;
 
-        uint32_t poolMask = 1u << i;
+        uint32_t poolMask = poolBits[i];
         for (uint32_t next = i + 1u; next < 3; ++next)
         {
             if (frameSlots[next] == frameSlot)
             {
-                poolMask |= 1u << next;
+                poolMask |= poolBits[next];
                 frameSlots[next] = -1;
             }
         }
