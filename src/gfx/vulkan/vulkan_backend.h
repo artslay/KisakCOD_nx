@@ -27,6 +27,8 @@ struct VulkanImageUpload2D
     uint32_t mipLevel = 0;
     const void *data = nullptr;
     size_t bytes = 0;
+    // VkBufferImageCopy offsets must satisfy both four-byte and texel-block alignment.
+    VkDeviceSize bufferOffsetAlignment = 4;
     VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t baseArrayLayer = 0;
     VkOffset3D imageOffset{};
