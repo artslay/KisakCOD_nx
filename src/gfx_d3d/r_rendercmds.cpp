@@ -200,7 +200,7 @@ void Switch_ReportFrontendFenceWaitWindow()
         }
         append("}");
     }
-    append("\\n");
+    append("\n");
     Switch_LogWrite(line);
 
     for (uint32_t phase = 0; phase < 2; ++phase)
@@ -465,7 +465,7 @@ void Switch_WaitForNextFrontEndResources()
 {
     // Several frontend rings may have been consumed by the same GPU frame.
     // Collect their slot ownership and wait each distinct fence only once.
-    const int frameSlots[3] = {
+    int frameSlots[3] = {
         s_switchGpuSlotForSmpPool[gfxBuf.dynamicBufferFrame].exchange(-1, std::memory_order_acq_rel),
         s_switchGpuSlotForBackEndData[s_smpFrame].exchange(-1, std::memory_order_acq_rel),
         s_switchGpuSlotForViewInfo[g_frameIndex].exchange(-1, std::memory_order_acq_rel)
