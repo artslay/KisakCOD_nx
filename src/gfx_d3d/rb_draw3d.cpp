@@ -41,6 +41,18 @@ static inline void Switch_RecordDraw3DStage(
         std::chrono::steady_clock::now() - start).count();
     Switch_RecordBackendTiming(stage, static_cast<uint64_t>(elapsedNs));
 }
+
+static inline void Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage stage)
+{
+    if (VulkanBackend *backend = GetVulkanBackend())
+        backend->BeginGpuTimestamp(stage);
+}
+
+static inline void Switch_EndGpuDraw3DStage(SwitchGpuTimingStage stage)
+{
+    if (VulkanBackend *backend = GetVulkanBackend())
+        backend->EndGpuTimestamp(stage);
+}
 #endif
 #include "rb_postfx.h"
 #include "rb_spotshadow.h"
@@ -438,12 +450,22 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     if (dynamicShadowType == SHADOW_MAP)
     {
         if (Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+        {
+#ifdef __SWITCH__
+            Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::SunShadowMaps);
+#endif
             RB_SunShadowMaps(data, viewInfo);
 #ifdef __SWITCH__
+            Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::SunShadowMaps);
+#endif
+        }
+#ifdef __SWITCH__
         const auto switchSpotStart = Switch_Draw3DTimingStart();
+        Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::SpotShadowMaps);
 #endif
         RB_SpotShadowMaps(data, viewInfo);
 #ifdef __SWITCH__
+        Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::SpotShadowMaps);
         Switch_RecordDraw3DStage(
             SwitchBackendTimingStage::SpotShadowMaps, switchSpotStart);
 #endif
@@ -474,9 +496,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_InitContext(data, &cmdBuf);
 #ifdef __SWITCH__
         const auto switchSetupDepthStart = Switch_Draw3DTimingStart();
+        Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::SetupDepthPrepass);
 #endif
         R_DepthPrepass(setupRenderTargetId, viewInfo, &cmdBuf);
 #ifdef __SWITCH__
+        Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::SetupDepthPrepass);
         Switch_RecordDraw3DStage(
             SwitchBackendTimingStage::SetupDepthPrepass, switchSetupDepthStart);
 #endif
@@ -484,9 +508,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         {
 #ifdef __SWITCH__
             const auto switchCookiesStart = Switch_Draw3DTimingStart();
+            Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::ShadowCookies);
 #endif
             RB_DrawShadowCookies(viewInfo);
 #ifdef __SWITCH__
+            Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::ShadowCookies);
             Switch_RecordDraw3DStage(
                 SwitchBackendTimingStage::ShadowCookies, switchCookiesStart);
 #endif
@@ -510,9 +536,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_InitContext(data, &cmdBuf);
 #ifdef __SWITCH__
         const auto switchSceneDepthStart = Switch_Draw3DTimingStart();
+        Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::SceneDepthPrepass);
 #endif
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
 #ifdef __SWITCH__
+        Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::SceneDepthPrepass);
         Switch_RecordDraw3DStage(
             SwitchBackendTimingStage::SceneDepthPrepass, switchSceneDepthStart);
 #endif
@@ -520,18 +548,22 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_InitContext(data, &cmdBuf);
 #ifdef __SWITCH__
     const auto switchLitStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::LitSurfaces);
 #endif
     R_DrawLit(viewInfo, &cmdBuf, 0);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::LitSurfaces);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::LitSurfaces, switchLitStart);
 #endif
     R_InitContext(data, &cmdBuf);
 #ifdef __SWITCH__
     const auto switchDecalStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::DecalSurfaces);
 #endif
     R_DrawDecal(viewInfo, &cmdBuf, 0);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::DecalSurfaces);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::DecalSurfaces, switchDecalStart);
 #endif
@@ -548,9 +580,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->sceneViewport);
 #ifdef __SWITCH__
     const auto switchSunStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::SunGeometry);
 #endif
     RB_DrawSun(viewInfo->localClientNum);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::SunGeometry);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::SunGeometry, switchSunStart);
 #endif
@@ -559,9 +593,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     KISAK_NULLSUB();
 #ifdef __SWITCH__
     const auto switchLightsStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::PointLights);
 #endif
     R_DrawLights(viewInfo, &cmdBuf);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::PointLights);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::PointLights, switchLightsStart);
 #endif
@@ -572,9 +608,11 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
 #ifdef __SWITCH__
         const auto switchResolveStart = Switch_Draw3DTimingStart();
+        Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::DistortionResolve);
 #endif
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image);
 #ifdef __SWITCH__
+        Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::DistortionResolve);
         Switch_RecordDraw3DStage(
             SwitchBackendTimingStage::DistortionResolve, switchResolveStart);
 #endif
@@ -583,15 +621,19 @@ void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     KISAK_NULLSUB();
 #ifdef __SWITCH__
     const auto switchEmissiveStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::EmissiveSurfaces);
 #endif
     R_DrawEmissive(viewInfo, &cmdBuf);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::EmissiveSurfaces);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::EmissiveSurfaces, switchEmissiveStart);
     const auto switchEndSceneStart = Switch_Draw3DTimingStart();
+    Switch_BeginGpuDraw3DStage(SwitchGpuTimingStage::EndScene);
 #endif
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 #ifdef __SWITCH__
+    Switch_EndGpuDraw3DStage(SwitchGpuTimingStage::EndScene);
     Switch_RecordDraw3DStage(
         SwitchBackendTimingStage::EndScene, switchEndSceneStart);
 #endif
