@@ -869,6 +869,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         !switchRenderAuditEnabled &&
         context.state->prim.device &&
         context.state->prim.device->SupportsMultiDrawIndirect() &&
+        context.state->prim.vertDeclType < ARRAY_COUNT(g_layerDataStride) &&
         !r_drawPrimFloor->current.integer &&
         !r_drawPrimCap->current.integer &&
         !r_skipDrawTris->current.enabled &&
@@ -1011,7 +1012,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 if (vertexDelta <= static_cast<uint64_t>(INT32_MAX))
                 {
                     const uint32_t layerStride =
-                        static_cast<uint32_t>(g_layerDataStride[context.state->vertDeclType]);
+                        static_cast<uint32_t>(g_layerDataStride[context.state->prim.vertDeclType]);
                     compatibleIndirectVertexOffset = true;
                     if (layerStride)
                     {
