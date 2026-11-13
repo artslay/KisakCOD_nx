@@ -5110,19 +5110,21 @@ bool VulkanBackend::QueueMappedBufferUpdate(
     if (!m_queuedBufferUpdates.empty())
     {
         QueuedBufferUpdate &previous = m_queuedBufferUpdates.back();
-        const auto *previousMappedEnd =
-            static_cast<const uint8_t *>(previous.mappedDestination) +
-            previous.size;
         if (previous.mappedWrite &&
             previous.waitForGpu == waitForGpu &&
             previous.destination == destination &&
             previous.destinationOffset + previous.size == destinationOffset &&
-            previousMappedEnd == mappedDestination &&
             previous.dataOffset + previous.size == dataOffset)
         {
-            previous.size += size;
-            m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
-            return true;
+            const auto *previousMappedEnd =
+                static_cast<const uint8_t *>(previous.mappedDestination) +
+                previous.size;
+            if (previousMappedEnd == static_cast<const uint8_t *>(mappedDestination))
+            {
+                previous.size += size;
+                m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+                return true;
+            }
         }
     }
 
