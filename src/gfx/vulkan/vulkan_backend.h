@@ -35,6 +35,25 @@ struct VulkanImageUpload2D
     VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 };
 
+#ifdef __SWITCH__
+enum class SwitchGpuTimingStage : uint32_t
+{
+    SunShadowMaps,
+    SpotShadowMaps,
+    SetupDepthPrepass,
+    ShadowCookies,
+    SceneDepthPrepass,
+    LitSurfaces,
+    DecalSurfaces,
+    SunGeometry,
+    PointLights,
+    DistortionResolve,
+    EmissiveSurfaces,
+    EndScene,
+    Count
+};
+#endif
+
 class VulkanBackend final : public IGfxBackend
 {
 public:
@@ -48,6 +67,10 @@ public:
     bool IsDeviceLost() const override;
     bool BeginFrame();
     bool EndFrame();
+#ifdef __SWITCH__
+    void BeginGpuTimestamp(SwitchGpuTimingStage stage);
+    void EndGpuTimestamp(SwitchGpuTimingStage stage);
+#endif
     // True only on the thread that successfully began the active frame.
     // Command buffers and the frame uniform ring are not externally synchronized.
     bool IsFrameRecordingThread() const;
@@ -365,6 +388,8 @@ private:
 #ifdef __SWITCH__
         VkQueryPool gpuTimestampPool = VK_NULL_HANDLE;
         bool gpuTimestampPending = false;
+        std::array<uint8_t, static_cast<size_t>(SwitchGpuTimingStage::Count)>
+            gpuTimestampStageFlags{};
 #endif
     };
 
