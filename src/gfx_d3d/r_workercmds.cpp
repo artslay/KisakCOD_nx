@@ -708,7 +708,14 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
                 if(InterlockedCompareExchange(Destination,(dataSize+endPos)%bufSize,endPos)==endPos)break;
             }
 #ifdef __SWITCH__
-            if(measurePublishWait){SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];d.publishWaitNs.fetch_add(Kisak_RawTimerTicks()-publishWaitStart,std::memory_order_relaxed);d.publishSpinIterations.fetch_add(publishWaitSpins,std::memory_order_relaxed);d.publishSleepYields.fetch_add(publishSleepYields,std::memory_order_relaxed);}
+            if(measurePublishWait){
+                SwitchWorkerCommandDiag&d=s_switchWorkerCommandDiag[type];
+                d.publishWaitNs.fetch_add(Kisak_RawTimerTicks()-publishWaitStart,std::memory_order_relaxed);
+#ifdef KISAK_SWITCH
+                d.publishSpinIterations.fetch_add(publishWaitSpins,std::memory_order_relaxed);
+                d.publishSleepYields.fetch_add(publishSleepYields,std::memory_order_relaxed);
+#endif
+            }
 #endif
             InterlockedExchangeAdd((LONG*)&workerCmds->outSize,1);
             R_NotifyWorkerCmdType(type);

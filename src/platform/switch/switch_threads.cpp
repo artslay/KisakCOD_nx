@@ -54,6 +54,23 @@ struct SwitchDiagCounter {
 SwitchDiagCounter g_switchMainFrameStages[SWITCH_MAIN_FRAME_STAGE_COUNT],g_switchWorkerCommandWait[4],g_switchSuspendGateWait[THREAD_CONTEXT_COUNT];
 SwitchDiagCounter g_switchMainOwnershipWait,g_switchFrontendRunningWait,g_switchFrontendPausedWait;
 }
+static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
+static std::thread g_threads[THREAD_CONTEXT_COUNT];
+static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
+static std::atomic<Thread *> g_nativeThreads[THREAD_CONTEXT_COUNT] = {};
+
+struct SwitchThreadControl
+{
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool startReleased = false;
+    bool suspended = true;
+};
+static SwitchThreadControl g_threadControl[THREAD_CONTEXT_COUNT];
+static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
+static thread_local const char *g_switchThreadStage = "thread/bootstrap";
+static std::atomic<WinThreadLock> s_threadLock{THREAD_LOCK_NONE};
+
 extern "C" bool Switch_PerfDiagEnabled(){static const bool enabled=[](){const char*v=std::getenv("KISAK_SWITCH_PERF_DIAG");return v&&v[0]=='1'&&v[1]==0;}();return enabled;}
 extern "C" void Switch_RecordMainFrameStage(uint32_t stage,uint64_t ns){if(Switch_PerfDiagEnabled()&&stage<SWITCH_MAIN_FRAME_STAGE_COUNT)g_switchMainFrameStages[stage].Add(ns);}
 extern "C" void Switch_LogThreadDiagSummary(){
@@ -83,23 +100,6 @@ extern "C" void Switch_LogThreadDiagSummary(){
   (unsigned long long)oc,(double)ot/frames/1.0e6,(double)om/1.0e6,(unsigned long long)rc,(double)rt/frames/1.0e6,(double)rm/1.0e6,(unsigned long long)pc,(double)pt/frames/1.0e6,(double)pm/1.0e6);
  Switch_LogWrite(waits);
 }
-
-static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
-static std::thread g_threads[THREAD_CONTEXT_COUNT];
-static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
-static std::atomic<Thread *> g_nativeThreads[THREAD_CONTEXT_COUNT] = {};
-
-struct SwitchThreadControl
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool startReleased = false;
-    bool suspended = true;
-};
-static SwitchThreadControl g_threadControl[THREAD_CONTEXT_COUNT];
-static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
-static thread_local const char *g_switchThreadStage = "thread/bootstrap";
-static std::atomic<WinThreadLock> s_threadLock{THREAD_LOCK_NONE};
 
 #ifdef KISAK_SP
 int isDoingDatabaseInit = 0;
