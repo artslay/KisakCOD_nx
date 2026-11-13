@@ -2163,7 +2163,8 @@ bool VulkanBackend::CreateSync()
         VkQueryPoolCreateInfo queryInfo{};
         queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queryInfo.queryCount = 2;
+        queryInfo.queryCount =
+            2u + 2u * static_cast<uint32_t>(SwitchGpuTimingStage::Count);
         for (uint32_t slotIndex = 0; slotIndex < FramesInFlight; ++slotIndex)
         {
             FrameSync &frame = m_frameSync[slotIndex];
@@ -2466,6 +2467,20 @@ bool VulkanBackend::BeginFrame()
         frame.gpuTimestampPool &&
         frame.gpuTimestampPending)
     {
+        auto elapsedTimestampNs = [&](uint64_t begin, uint64_t end) -> uint64_t
+        {
+            uint64_t elapsedTicks = end - begin;
+            if (m_graphicsQueueTimestampValidBits < 64u)
+            {
+                const uint64_t timestampMask =
+                    (uint64_t(1) << m_graphicsQueueTimestampValidBits) - 1u;
+                elapsedTicks &= timestampMask;
+            }
+            const double elapsedNs =
+                static_cast<double>(elapsedTicks) * m_gpuTimestampPeriodNs;
+            return static_cast<uint64_t>(elapsedNs + 0.5);
+        };
+
         uint64_t timestampValues[2] = {};
         const VkResult timestampResult = vkGetQueryPoolResults(
             m_device,
@@ -2478,18 +2493,35 @@ bool VulkanBackend::BeginFrame()
             VK_QUERY_RESULT_64_BIT);
         if (timestampResult == VK_SUCCESS)
         {
-            uint64_t elapsedTicks = timestampValues[1] - timestampValues[0];
-            if (m_graphicsQueueTimestampValidBits < 64u)
-            {
-                const uint64_t timestampMask =
-                    (uint64_t(1) << m_graphicsQueueTimestampValidBits) - 1u;
-                elapsedTicks &= timestampMask;
-            }
-            const double elapsedNs =
-                static_cast<double>(elapsedTicks) * m_gpuTimestampPeriodNs;
             g_switchFrameTimingStats.gpuFrame.Add(
-                static_cast<uint64_t>(elapsedNs + 0.5));
+                elapsedTimestampNs(timestampValues[0], timestampValues[1]));
         }
+
+        for (size_t stageIndex = 0;
+             stageIndex < frame.gpuTimestampStageFlags.size(); ++stageIndex)
+        {
+            if (frame.gpuTimestampStageFlags[stageIndex] != 3u)
+                continue;
+
+            uint64_t stageValues[2] = {};
+            const uint32_t firstQuery =
+                2u + static_cast<uint32_t>(stageIndex) * 2u;
+            const VkResult stageResult = vkGetQueryPoolResults(
+                m_device,
+                frame.gpuTimestampPool,
+                firstQuery,
+                2,
+                sizeof(stageValues),
+                stageValues,
+                sizeof(uint64_t),
+                VK_QUERY_RESULT_64_BIT);
+            if (stageResult == VK_SUCCESS)
+            {
+                g_switchFrameTimingStats.gpuStages[stageIndex].Add(
+                    elapsedTimestampNs(stageValues[0], stageValues[1]));
+            }
+        }
+        frame.gpuTimestampStageFlags.fill(0u);
         frame.gpuTimestampPending = false;
     }
 #endif
@@ -2575,7 +2607,11 @@ bool VulkanBackend::BeginFrame()
 #ifdef __SWITCH__
     if (m_gpuTimestampQueriesEnabled && frame.gpuTimestampPool)
     {
-        vkCmdResetQueryPool(m_commandBuffer, frame.gpuTimestampPool, 0, 2);
+        constexpr uint32_t queryCount =
+            2u + 2u * static_cast<uint32_t>(SwitchGpuTimingStage::Count);
+        vkCmdResetQueryPool(
+            m_commandBuffer, frame.gpuTimestampPool, 0, queryCount);
+        frame.gpuTimestampStageFlags.fill(0u);
         vkCmdWriteTimestamp(
             m_commandBuffer,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -2605,6 +2641,56 @@ bool VulkanBackend::BeginFrame()
     return true;
 }
 
+
+#ifdef __SWITCH__
+void VulkanBackend::BeginGpuTimestamp(SwitchGpuTimingStage stage)
+{
+    if (!m_gpuTimestampQueriesEnabled || !m_frameActive ||
+        !IsFrameRecordingThread() || !m_commandBuffer)
+        return;
+
+    const size_t stageIndex = static_cast<size_t>(stage);
+    if (stageIndex >= m_frameSync[m_currentFrameSlot].gpuTimestampStageFlags.size())
+        return;
+
+    FrameSync &frame = m_frameSync[m_currentFrameSlot];
+    uint8_t &flags = frame.gpuTimestampStageFlags[stageIndex];
+    if (flags & 1u)
+        return;
+
+    const uint32_t query = 2u + static_cast<uint32_t>(stageIndex) * 2u;
+    vkCmdWriteTimestamp(
+        m_commandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        frame.gpuTimestampPool,
+        query);
+    flags |= 1u;
+}
+
+void VulkanBackend::EndGpuTimestamp(SwitchGpuTimingStage stage)
+{
+    if (!m_gpuTimestampQueriesEnabled || !m_frameActive ||
+        !IsFrameRecordingThread() || !m_commandBuffer)
+        return;
+
+    const size_t stageIndex = static_cast<size_t>(stage);
+    if (stageIndex >= m_frameSync[m_currentFrameSlot].gpuTimestampStageFlags.size())
+        return;
+
+    FrameSync &frame = m_frameSync[m_currentFrameSlot];
+    uint8_t &flags = frame.gpuTimestampStageFlags[stageIndex];
+    if (flags != 1u)
+        return;
+
+    const uint32_t query = 3u + static_cast<uint32_t>(stageIndex) * 2u;
+    vkCmdWriteTimestamp(
+        m_commandBuffer,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        frame.gpuTimestampPool,
+        query);
+    flags |= 2u;
+}
+#endif
 
 bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
 {
