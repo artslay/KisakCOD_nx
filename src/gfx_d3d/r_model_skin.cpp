@@ -296,7 +296,8 @@ void __cdecl R_SkinXSurfaceSkinnedSse(
     if (skinVertNormalIn)
         iassert(skinVertNormalOut);
 
-    R_SkinXSurfaceSkinned(xsurf, boneMatrix, skinVerticesOut);
+    R_SkinXSurfaceSkinnedInternal(
+        xsurf, boneMatrix, skinVerticesOut, skinVertNormalIn == nullptr);
 
     const int vertCount = xsurf->vertCount;
     if (skinVertNormalIn)
@@ -317,22 +318,36 @@ void __cdecl R_SkinXSurfaceSkinnedSse(
 #endif
 
 
-void __cdecl R_SkinXSurfaceSkinned(
+static void __cdecl R_SkinXSurfaceWeightInternal(const GfxPackedVertex *,const XSurfaceVertexInfo *,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceRigidInternal(const XSurface *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight0Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight1Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight2Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+static void __cdecl R_SkinXSurfaceWeight3Internal(const GfxPackedVertex *,const uint16_t *,int,const DObjSkelMat *,GfxPackedVertex *,bool);
+
+static void __cdecl R_SkinXSurfaceSkinnedInternal(
     const XSurface *xsurf,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *skinVerticesOut)
+    GfxPackedVertex *skinVerticesOut, bool transformBasis)
 {
     if (xsurf->deformed)
-        R_SkinXSurfaceWeight(xsurf->verts0, &xsurf->vertInfo, boneMatrix, skinVerticesOut);
+        R_SkinXSurfaceWeightInternal(
+            xsurf->verts0, &xsurf->vertInfo, boneMatrix, skinVerticesOut,
+            transformBasis);
     else
-        R_SkinXSurfaceRigid(xsurf, xsurf->vertCount, boneMatrix, skinVerticesOut);
+        R_SkinXSurfaceRigidInternal(
+            xsurf, xsurf->vertCount, boneMatrix, skinVerticesOut,
+            transformBasis);
 }
 
-void __cdecl R_SkinXSurfaceWeight(
+void __cdecl R_SkinXSurfaceSkinned(const XSurface *a,const DObjSkelMat *b,GfxPackedVertex *c){R_SkinXSurfaceSkinnedInternal(a,b,c,true);}
+
+
+static void __cdecl R_SkinXSurfaceWeightInternal(
     const GfxPackedVertex *inVerts,
     const XSurfaceVertexInfo *vertexInfo,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *outVerts)
+    GfxPackedVertex *outVerts, bool transformBasis)
 {
     const uint16_t *vertsBlend; // [esp+30h] [ebp-8h]
     int vertIndex; // [esp+34h] [ebp-4h]
@@ -343,25 +358,28 @@ void __cdecl R_SkinXSurfaceWeight(
     vertsBlend = vertexInfo->vertsBlend;
     if (vertexInfo->vertCount[0])
     {
-        R_SkinXSurfaceWeight0(inVerts, vertsBlend, vertexInfo->vertCount[0], boneMatrix, outVerts);
+        R_SkinXSurfaceWeight0Internal(inVerts, vertsBlend, vertexInfo->vertCount[0], boneMatrix, outVerts, transformBasis);
         vertIndex = vertexInfo->vertCount[0];
         vertsBlend += vertIndex;
     }
     if (vertexInfo->vertCount[1])
     {
-        R_SkinXSurfaceWeight1(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[1], boneMatrix, &outVerts[vertIndex]);
+        R_SkinXSurfaceWeight1Internal(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[1], boneMatrix, &outVerts[vertIndex], transformBasis);
         vertIndex += vertexInfo->vertCount[1];
         vertsBlend += 3 * vertexInfo->vertCount[1];
     }
     if (vertexInfo->vertCount[2])
     {
-        R_SkinXSurfaceWeight2(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[2], boneMatrix, &outVerts[vertIndex]);
+        R_SkinXSurfaceWeight2Internal(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[2], boneMatrix, &outVerts[vertIndex], transformBasis);
         vertIndex += vertexInfo->vertCount[2];
         vertsBlend += 5 * vertexInfo->vertCount[2];
     }
     if (vertexInfo->vertCount[3])
-        R_SkinXSurfaceWeight3(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[3], boneMatrix, &outVerts[vertIndex]);
+        R_SkinXSurfaceWeight3Internal(&inVerts[vertIndex], vertsBlend, vertexInfo->vertCount[3], boneMatrix, &outVerts[vertIndex], transformBasis);
 }
+
+void __cdecl R_SkinXSurfaceWeight(const GfxPackedVertex *a,const XSurfaceVertexInfo *b,const DObjSkelMat *c,GfxPackedVertex *d){R_SkinXSurfaceWeightInternal(a,b,c,d,true);}
+
 
 
 static void __cdecl MatrixTransformVertexAndBasis(
@@ -370,7 +388,8 @@ static void __cdecl MatrixTransformVertexAndBasis(
     PackedUnitVec normal,
     PackedUnitVec tangent,
     const DObjSkelMat *mat,
-    GfxPackedVertex *vert)
+    GfxPackedVertex *vert,
+    bool transformBasis)
 {
 #ifdef __SWITCH__
     // Tegra X1 is AArch64/NEON. The original desktop path uses scalar-style
@@ -392,6 +411,8 @@ static void __cdecl MatrixTransformVertexAndBasis(
     vert->xyz[2] = vgetq_lane_f32(transformed, 2);
     vert->binormalSign = binormalSign;
 
+    if (transformBasis)
+    {
     float unpacked[3];
     Vec3UnpackUnitVec(normal, unpacked);
     transformed = vmulq_n_f32(axis0, unpacked[0]);
@@ -418,6 +439,7 @@ static void __cdecl MatrixTransformVertexAndBasis(
         vgetq_lane_f32(transformed, 2) * 127.0f + 127.5f);
     tangent.array[3] = 63;
     vert->tangent = tangent;
+    }
 #else
     float rotated[3];
     float unpacked[3];
@@ -427,6 +449,8 @@ static void __cdecl MatrixTransformVertexAndBasis(
     vert->xyz[2] = *offset * mat->axis[0][2] + offset[1] * mat->axis[1][2] + offset[2] * mat->axis[2][2] + mat->origin[2];
     vert->binormalSign = binormalSign;
 
+    if (transformBasis)
+    {
     Vec3UnpackUnitVec(normal, unpacked);
 
     rotated[0] = unpacked[0] * mat->axis[0][0] + unpacked[1] * mat->axis[1][0] + unpacked[2] * mat->axis[2][0];
@@ -451,15 +475,16 @@ static void __cdecl MatrixTransformVertexAndBasis(
     tangent.array[3] = 63;
 
     vert->tangent = tangent;
+    }
 #endif
 }
 
-void __cdecl R_SkinXSurfaceWeight0(
+static void __cdecl R_SkinXSurfaceWeight0Internal(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *vertsOut)
+    GfxPackedVertex *vertsOut, bool transformBasis)
 {
     int vertIndex; // [esp+1Ch] [ebp-4h]
 
@@ -473,7 +498,7 @@ void __cdecl R_SkinXSurfaceWeight0(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut);
+            vertsOut, transformBasis);
         vertsOut->color.packed = vertsIn->color.packed;
         vertsOut->texCoord.packed = vertsIn->texCoord.packed;
         ++vertIndex;
@@ -483,12 +508,15 @@ void __cdecl R_SkinXSurfaceWeight0(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight1(
+void __cdecl R_SkinXSurfaceWeight0(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight0Internal(a,b,c,d,e,true);}
+
+
+static void __cdecl R_SkinXSurfaceWeight1Internal(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *vertsOut)
+    GfxPackedVertex *vertsOut, bool transformBasis)
 {
     const DObjSkelMat *matrix; // [esp+18h] [ebp-1Ch]
     float offset[3]; // [esp+20h] [ebp-14h] BYREF
@@ -505,7 +533,7 @@ void __cdecl R_SkinXSurfaceWeight1(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut);
+            vertsOut, transformBasis);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         boneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, offset);
@@ -521,12 +549,15 @@ void __cdecl R_SkinXSurfaceWeight1(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight2(
+void __cdecl R_SkinXSurfaceWeight1(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight1Internal(a,b,c,d,e,true);}
+
+
+static void __cdecl R_SkinXSurfaceWeight2Internal(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *vertsOut)
+    GfxPackedVertex *vertsOut, bool transformBasis)
 {
     const DObjSkelMat *matrix; // [esp+1Ch] [ebp-2Ch]
     const DObjSkelMat *matrixa; // [esp+1Ch] [ebp-2Ch]
@@ -546,7 +577,7 @@ void __cdecl R_SkinXSurfaceWeight2(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut);
+            vertsOut, transformBasis);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
@@ -567,12 +598,15 @@ void __cdecl R_SkinXSurfaceWeight2(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight3(
+void __cdecl R_SkinXSurfaceWeight2(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight2Internal(a,b,c,d,e,true);}
+
+
+static void __cdecl R_SkinXSurfaceWeight3Internal(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *vertsOut)
+    GfxPackedVertex *vertsOut, bool transformBasis)
 {
     const DObjSkelMat *matrix; // [esp+20h] [ebp-2Ch]
     const DObjSkelMat *matrixa; // [esp+20h] [ebp-2Ch]
@@ -593,7 +627,7 @@ void __cdecl R_SkinXSurfaceWeight3(
             vertsIn->normal,
             vertsIn->tangent,
             (const DObjSkelMat *)((char *)boneMatrix + *vertexBlend),
-            vertsOut);
+            vertsOut, transformBasis);
         matrix = (const DObjSkelMat *)((char *)boneMatrix + vertexBlend[1]);
         totalBoneWeight = (double)vertexBlend[2] * 0.0000152587890625;
         R_TransformSkelMat(vertsIn->xyz, matrix, totalOffset);
@@ -619,11 +653,14 @@ void __cdecl R_SkinXSurfaceWeight3(
     }
 }
 
-void __cdecl R_SkinXSurfaceRigid(
+void __cdecl R_SkinXSurfaceWeight3(const GfxPackedVertex *a,const uint16_t *b,int c,const DObjSkelMat *d,GfxPackedVertex *e){R_SkinXSurfaceWeight3Internal(a,b,c,d,e,true);}
+
+
+static void __cdecl R_SkinXSurfaceRigidInternal(
     const XSurface *surf,
     int totalVertCount,
     const DObjSkelMat *boneMatrix,
-    GfxPackedVertex *vertices)
+    GfxPackedVertex *vertices, bool transformBasis)
 {
     uint32_t i; // [esp+44h] [ebp-1Ch]
     int vertCount; // [esp+48h] [ebp-18h]
@@ -649,7 +686,9 @@ void __cdecl R_SkinXSurfaceRigid(
         bone = (const DObjSkelMat *)((char *)boneMatrix + vertList->boneOffset);
         for (vertIndex = 0; vertIndex < vertCount; ++vertIndex)
         {
-            MatrixTransformVertexAndBasis(v->xyz, v->binormalSign, v->normal, v->tangent, bone, vertex);
+            MatrixTransformVertexAndBasis(
+                v->xyz, v->binormalSign, v->normal, v->tangent, bone,
+                vertex, transformBasis);
             vertex->color.packed = v->color.packed;
             vertex->texCoord.packed = v->texCoord.packed;
             ++v;
@@ -659,4 +698,7 @@ void __cdecl R_SkinXSurfaceRigid(
 
     iassert(vertex - vertices == totalVertCount);
 }
+
+void __cdecl R_SkinXSurfaceRigid(const XSurface *a,int b,const DObjSkelMat *c,GfxPackedVertex *d){R_SkinXSurfaceRigidInternal(a,b,c,d,true);}
+
 
