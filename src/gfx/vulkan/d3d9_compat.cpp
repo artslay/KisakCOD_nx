@@ -5092,11 +5092,9 @@ HRESULT KisakVkBuffer::Unlock()
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
         VulkanBackend *backend = GetVulkanBackend();
-        // NOOVERWRITE promises that this range is not referenced by earlier
-        // draws in the current frame, but does not prove that a previous frame
-        // has finished reading the allocation. Only streams tagged to the
-        // current, fence-completed frame slot use mapped writes; all other
-        // dynamic buffers retain the ordered GPU-copy path.
+        // NOOVERWRITE ranges are safe when tied to the current frame slot.
+        // Tracked DISCARD mesh ranges additionally require an unused frontend
+        // pool whose previous-use fence completed before it was selected.
         const bool frameSlotNoOverwrite =
             (lockFlags & D3DLOCK_NOOVERWRITE) != 0 &&
             frameSlotSerial != 0 &&
@@ -5105,18 +5103,41 @@ HRESULT KisakVkBuffer::Unlock()
             frameSlotDevice == backend->Device() &&
             frameSlot == backend->CurrentFrameSlot() &&
             frameSlotSerial == backend->FrameSerial();
+        const uint32_t expectedMeshFrameSlot = backend
+            ? (backend->IsFrameActive()
+                ? backend->CurrentFrameSlot() : backend->NextFrameSlot())
+            : UINT32_MAX;
+        const bool frameSlotMeshPoolSafe =
+            frameSlotMeshWriteSafe &&
+            backend &&
+            backend->IsInitialized() &&
+            !backend->IsDeviceLost() &&
+            frameSlotDevice == backend->Device() &&
+            frameSlot == expectedMeshFrameSlot &&
+            (memoryProperties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+        const bool frameSlotMeshWrite =
+            lockMeshWriteTracking &&
+            frameSlotMeshPoolSafe &&
+            (!backend->IsFrameActive() ||
+             lastDrawFrameSerial.load(std::memory_order_acquire) !=
+                 backend->FrameSerial());
+        const bool frameSlotMeshNoOverwrite =
+            (lockFlags & D3DLOCK_NOOVERWRITE) != 0 &&
+            frameSlotMeshPoolSafe;
+        const bool frameSlotMappedWrite =
+            frameSlotNoOverwrite || frameSlotMeshWrite ||
+            frameSlotMeshNoOverwrite;
 
         const auto queueShadowRange =
-            [this, backend, frameSlotNoOverwrite](uint32_t begin, uint32_t end) -> bool
+            [this, backend, frameSlotMappedWrite](uint32_t begin, uint32_t end) -> bool
         {
             if (begin >= end)
                 return true;
 
-            if (frameSlotNoOverwrite)
+            if (frameSlotMappedWrite)
             {
-                // This is a fresh, non-overlapping range in a dynamic stream
-                // whose frame-slot fence has already completed. Queue an
-                // exact mapped write instead of staging a GPU buffer copy.
+                // The owning frame-slot fence has completed for this range.
+                // Queue an exact mapped write instead of staging a GPU buffer copy.
                 return backend->QueueMappedBufferUpdate(
                     buffer,
                     begin,
@@ -5191,7 +5212,7 @@ HRESULT KisakVkBuffer::Unlock()
                     (static_cast<VkDeviceSize>(lockWriteEnd) + 3u) & ~VkDeviceSize(3u);
                 const bool noOverwrite =
                     (lockFlags & D3DLOCK_NOOVERWRITE) != 0;
-                if (noOverwrite)
+                if (frameSlotMeshWrite || noOverwrite)
                 {
                     if (!queueShadowRange(lockWriteBegin, lockWriteEnd))
                         return E_FAIL;
@@ -11462,6 +11483,27 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_cachedPipelineFastPathValid = false;
     }
 
+#ifdef __SWITCH__
+    // Mark buffers before PrepareDraw flushes queued updates. If a mesh is
+    // reset and rewritten after an earlier draw in this recording, its DISCARD
+    // update must keep the ordered staging-copy path.
+    if (m_backend && m_backend->IsFrameActive())
+    {
+        const uint64_t drawFrameSerial = m_backend->FrameSerial();
+        for (uint32_t stream = 0; stream < 16u; ++stream)
+        {
+            if ((m_streamSourceMask & (1u << stream)) && m_streams[stream].buffer)
+            {
+                static_cast<KisakVkBuffer *>(m_streams[stream].buffer)
+                    ->lastDrawFrameSerial.store(
+                        drawFrameSerial, std::memory_order_release);
+            }
+        }
+        if (m_indices)
+            m_indices->lastDrawFrameSerial.store(
+                drawFrameSerial, std::memory_order_release);
+    }
+#endif
     if (!PrepareDraw())
     {
         char msg[320];

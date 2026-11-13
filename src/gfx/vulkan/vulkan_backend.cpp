@@ -5973,9 +5973,10 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         QueuedBufferUpdate &firstUpdate = m_pendingBufferUpdates[i];
         if (firstUpdate.mappedWrite)
         {
-            // NOOVERWRITE targets bytes that earlier draws do not read. Because
-            // these allocations are HOST_VISIBLE|HOST_COHERENT, backend-thread
-            // writes before queue submission need no transfer commands/barrier.
+            // Queued mapped writes are non-overlapping NOOVERWRITE ranges or
+            // tracked frontend ranges whose previous-use fence completed and
+            // which have not been consumed by this frame yet. HOST_VISIBLE|
+            // HOST_COHERENT writes before submission need no transfer barrier.
             if (firstUpdate.waitForGpu &&
                 !SynchronizeActiveFrame(FrameSyncReason::MappedBufferWrite))
             {

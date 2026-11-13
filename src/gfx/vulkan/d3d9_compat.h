@@ -241,6 +241,12 @@ struct KisakVkBuffer : IDirect3DResource9 {
     uint32_t frameSlot = UINT32_MAX;
     uint64_t frameSlotSerial = 0;
     VkDevice frameSlotDevice = VK_NULL_HANDLE;
+    // Set after the owning frontend pool's previous GPU fence has completed.
+    // Tracked mesh DISCARD locks can then use mapped writes without staging copies.
+    bool frameSlotMeshWriteSafe = false;
+    // Last active frame that recorded a draw using this buffer. Tracked DISCARD
+    // writes cannot use mapped memory after the current frame has consumed it.
+    std::atomic<uint64_t> lastDrawFrameSerial{0};
     // Dynamic shadow storage remains authoritative while in-frame uploads are queued.
     bool shadowInitialized=false;
     uint32_t size=0;

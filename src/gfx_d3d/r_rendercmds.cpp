@@ -69,6 +69,10 @@ namespace
 std::atomic<int> s_switchGpuSlotForSmpPool[2] = {-1, -1};
 std::atomic<int> s_switchGpuSlotForBackEndData[2] = {-1, -1};
 std::atomic<int> s_switchGpuSlotForViewInfo[2] = {-1, -1};
+// Preserve the selected frame slot across Sys_WakeRenderer. The renderer may
+// advance its frame state before the frontend finishes rotating its CPU pools.
+uint32_t s_switchPendingFrontendFrameSlot = UINT32_MAX;
+VkDevice s_switchPendingFrontendDevice = VK_NULL_HANDLE;
 
 void Switch_AssociateGpuPool(std::atomic<int> (&slotMap)[2],
     uint32_t poolIndex, uint32_t frameSlot)
@@ -134,6 +138,62 @@ void Switch_WaitForViewInfoGpuUse(uint32_t poolIndex)
 void Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(uint32_t frameSlot);
 void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll);
 void Switch_WaitForNextFrontEndResources();
+
+void Switch_TagFrontendBuffer(IDirect3DVertexBuffer9 *buffer,
+    uint32_t frameSlot, VkDevice device)
+{
+    if (!buffer)
+        return;
+    auto *vkBuffer = static_cast<KisakVkBuffer *>(buffer);
+    vkBuffer->frameSlot = frameSlot;
+    vkBuffer->frameSlotSerial = 0;
+    vkBuffer->frameSlotDevice = device;
+    vkBuffer->frameSlotMeshWriteSafe = true;
+}
+
+void Switch_TagFrontendIndexBuffer(IDirect3DIndexBuffer9 *buffer,
+    uint32_t frameSlot, VkDevice device)
+{
+    if (!buffer)
+        return;
+    auto *vkBuffer = static_cast<KisakVkBuffer *>(buffer);
+    vkBuffer->frameSlot = frameSlot;
+    vkBuffer->frameSlotSerial = 0;
+    vkBuffer->frameSlotDevice = device;
+    vkBuffer->frameSlotMeshWriteSafe = true;
+}
+
+void Switch_TagFrontendMesh(GfxMeshData &mesh,
+    uint32_t frameSlot, VkDevice device)
+{
+    Switch_TagFrontendBuffer(mesh.vb.buffer, frameSlot, device);
+}
+
+void Switch_TagCurrentFrontendPools(uint32_t frameSlot, VkDevice device)
+{
+    if (frameSlot >= VulkanBackend::FramesInFlight ||
+        device == VK_NULL_HANDLE || !frontEndDataOut)
+        return;
+
+    if (frontEndDataOut->skinnedCacheVb)
+        Switch_TagFrontendBuffer(
+            frontEndDataOut->skinnedCacheVb->buffer, frameSlot, device);
+    Switch_TagFrontendIndexBuffer(frontEndDataOut->preTessIb, frameSlot, device);
+
+    // Dynamic meshes embedded in GfxBackEndData.
+    Switch_TagFrontendMesh(frontEndDataOut->codeMesh, frameSlot, device);
+    Switch_TagFrontendMesh(frontEndDataOut->markMesh, frameSlot, device);
+
+    // Point-light meshes live in the independently rotated GfxViewInfo ring.
+    if (frontEndDataOut->viewInfo)
+    {
+        for (uint32_t view = 0; view < 4; ++view)
+            for (uint32_t partition = 0; partition < 4; ++partition)
+                Switch_TagFrontendMesh(
+                    frontEndDataOut->viewInfo[view].pointLightMeshData[partition],
+                    frameSlot, device);
+    }
+}
 }
 #endif
 //  int marker_r_rendercmds  85827cb8     gfx_d3d : r_rendercmds.obj
@@ -726,6 +786,8 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
             const uint32_t frameSlot = continuedFrame
                 ? backend->CurrentFrameSlot()
                 : backend->NextFrameSlot();
+            s_switchPendingFrontendFrameSlot = frameSlot;
+            s_switchPendingFrontendDevice = backend->Device();
             Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(frameSlot);
 
             // Wait the fences protecting the pools about to be reused. A
@@ -848,6 +910,22 @@ DebugGlobals *R_ToggleSmpFrame()
     DebugGlobals *result; // eax
     volatile int surfPos; // [esp+0h] [ebp-Ch]
     DebugGlobals *debugGlobalsEntry; // [esp+8h] [ebp-4h]
+#ifdef __SWITCH__
+    uint32_t frontendWriteFrameSlot = s_switchPendingFrontendFrameSlot;
+    VkDevice frontendWriteDevice = s_switchPendingFrontendDevice;
+    s_switchPendingFrontendFrameSlot = UINT32_MAX;
+    s_switchPendingFrontendDevice = VK_NULL_HANDLE;
+    if (frontendWriteFrameSlot >= VulkanBackend::FramesInFlight)
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        if (backend && backend->IsInitialized() && !backend->IsDeviceLost())
+        {
+            frontendWriteFrameSlot = backend->IsFrameActive()
+                ? backend->CurrentFrameSlot() : backend->NextFrameSlot();
+            frontendWriteDevice = backend->Device();
+        }
+    }
+#endif
 
     if (!rg.viewInfoCount)
         CG_CalculateFPS();
@@ -880,6 +958,11 @@ DebugGlobals *R_ToggleSmpFrame()
     frontEndDataOut->modelLightingPatchCount = 0;
     frontEndDataOut->skinnedCacheVb->used = 0;
     s_cmdList = frontEndDataOut->commands;
+#ifdef __SWITCH__
+    // These CPU pools passed their previous-use fences above. Mark their
+    // dynamic buffers for exact mapped writes in the upcoming GPU frame.
+    Switch_TagCurrentFrontendPools(frontendWriteFrameSlot, frontendWriteDevice);
+#endif
     KISAK_NULLSUB();
     if (frontEndDataOut->drawSurfCount > 0x8000u)
         MyAssertHandler(
