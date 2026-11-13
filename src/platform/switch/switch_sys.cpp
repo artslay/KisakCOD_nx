@@ -3957,6 +3957,12 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
     return false;
 }
 
+static bool Switch_LogIsStaticModelCacheDiagnostic(const char *msg)
+{
+    static constexpr const char prefix[] = "[KisakCOD][SMC DIAG]";
+    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
+}
+
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
     // Keep the generic PERF/PROFILING categories out of the runtime log.
@@ -4113,6 +4119,7 @@ void Switch_LogWrite(const char *msg)
         !isVkFrameTiming &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
+        !Switch_LogIsStaticModelCacheDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
         !Switch_LogIsStartupMessage(msg) &&
         !Switch_LogIsLevelLoadMessage(msg))
