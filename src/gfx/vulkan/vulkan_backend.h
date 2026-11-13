@@ -124,6 +124,8 @@ public:
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
     bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
     bool SupportsSamplerAnisotropy() const { return m_samplerAnisotropy; }
+    bool SupportsMultiDrawIndirect() const { return m_multiDrawIndirect; }
+    uint32_t MaxDrawIndirectCount() const { return m_maxDrawIndirectCount; }
     bool SupportsShaderDemoteToHelperInvocation() const { return m_shaderDemoteToHelperInvocation; }
 #ifdef VK_EXT_depth_bias_control
     bool SupportsDepthBiasFloatRepresentation() const { return m_depthBiasFloatRepresentation; }
@@ -626,6 +628,7 @@ private:
 #endif
     bool m_fillModeNonSolid = false;
     bool m_samplerAnisotropy = false;
+    bool m_multiDrawIndirect = false;
     bool m_shaderDemoteToHelperInvocation = false;
 #ifdef VK_EXT_depth_bias_control
     bool m_depthBiasFloatRepresentation = false;
@@ -634,6 +637,7 @@ private:
 #endif
     float m_maxSamplerAnisotropy = 1.0f;
     float m_maxSamplerLodBias = 0.0f;
+    uint32_t m_maxDrawIndirectCount = 1;
     std::atomic<bool> m_frameActive{false};
     bool m_imageAvailablePending = false;
     bool m_renderingActive = false;
