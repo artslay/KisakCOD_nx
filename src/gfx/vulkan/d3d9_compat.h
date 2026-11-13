@@ -595,6 +595,7 @@ public:
     HRESULT SetScissorRect(const tagRECT*);
     HRESULT SetRenderState(uint32_t,uint32_t);
     HRESULT DrawPrimitiveUP(uint32_t,uint32_t,const void*,uint32_t);
+    bool SupportsMultiDrawIndirect() const;
     HRESULT DrawIndexedPrimitive(uint32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
     HRESULT DrawIndexedPrimitiveIndirect(
         const VkDrawIndexedIndirectCommand *, const uint32_t *, uint32_t);
