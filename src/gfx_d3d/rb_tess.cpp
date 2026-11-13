@@ -721,6 +721,9 @@ uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
     uint32_t drawSurfCount; // [esp+B8h] [ebp-4h]
 
     PROF_SCOPED("TessXModSkin");
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+#endif
 
     context = listArgs->context;
     commonSource = listArgs->context.source;
@@ -781,7 +784,11 @@ uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
                 if (prepassContext.state)
                     R_DrawXModelSkinnedModelSurf(prepassContext, modelSurf);
                 R_SetModelLightingCoordsForSource(modelSurf->info.lightingHandle, commonSource);
+#ifdef __SWITCH__
+                R_SetReflectionProbeCached(context, drawSurf.fields.reflectionProbeIndex, &reflectionProbeCache);
+#else
                 R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
+#endif
                 R_SetupPassPerPrimArgs(context);
                 R_DrawXModelSkinnedModelSurf(context, modelSurf);
 
@@ -1161,9 +1168,18 @@ void __cdecl R_DrawStaticModelPreTessSurfLit(const uint32_t *primDrawSurfPos, Gf
     R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, rgp.whiteImage);
     R_SetupCachedStaticModelLighting(context.source);
     R_SetupPassPerObjectArgs(context);
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+#endif
     readCmdBuf.primDrawSurfPos = primDrawSurfPos;
     while (R_ReadStaticModelPreTessDrawSurf(&readCmdBuf, &pretessSurf, &firstIndex, &count))
+    {
+#ifdef __SWITCH__
+        R_DrawStaticModelsPreTessDrawSurfLighting(pretessSurf, firstIndex, count, context, &reflectionProbeCache);
+#else
         R_DrawStaticModelsPreTessDrawSurfLighting(pretessSurf, firstIndex, count, context);
+#endif
+    }
 }
 
 void __cdecl R_DrawStaticModelPreTessSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)

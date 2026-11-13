@@ -244,6 +244,19 @@ void __cdecl R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeT
 const GfxImage *__cdecl R_OverrideGrayscaleImage(const dvar_s *dvar);
 void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex);
 void __cdecl R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionProbeIndex);
+#ifdef __SWITCH__
+struct GfxImage;
+struct SwitchReflectionProbeBindingCache
+{
+    uint32_t index;
+    const GfxImage *image;
+    const void *basemap;
+};
+void __cdecl R_SetReflectionProbeCached(
+    GfxCmdBufContext context,
+    uint32_t reflectionProbeIndex,
+    SwitchReflectionProbeBindingCache *cache);
+#endif
 void __cdecl R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType);
 void __cdecl R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewport, float nearValue, float farValue);
 int __cdecl R_BeginMaterial(GfxCmdBufState *state, const Material *material, MaterialTechniqueType techType);

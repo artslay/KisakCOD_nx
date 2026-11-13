@@ -17,10 +17,15 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-#ifdef __SWITCH__
+extern bool Switch_IsRenderObjectAuditEnabled();
 extern void Switch_SetRenderAuditObject(uint32_t surfaceType, uint32_t objectId);
 extern void Switch_QueueRenderAuditObject(uint32_t surfaceType, uint32_t objectId, uint32_t vertexCount, uint32_t triangleCount, uint32_t baseIndex);
-#endif
+
+static inline bool Switch_RenderObjectAuditConfigured()
+{
+    static const bool enabled = Switch_IsRenderObjectAuditEnabled();
+    return enabled;
+}
 
 static void R_LogStaticModelSurfPointerReject(const char *reason, const uint32_t *word, uint32_t slot)
 {
@@ -223,6 +228,10 @@ void __cdecl R_DrawStaticModelDrawSurfLightingNonOptimized(
     uint16_t lightingHandle; // [esp+24h] [ebp-4h]
 
     xsurf = drawStream->localSurf;
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+    const bool switchRenderAuditEnabled = Switch_RenderObjectAuditConfigured();
+#endif
     R_SetupStaticModelPrim(xsurf, &args, &context.state->prim);
     R_SetStaticModelVertexBuffer(&context.state->prim, xsurf);
     smodelCount = drawStream->smodelCount;
@@ -231,13 +240,18 @@ void __cdecl R_DrawStaticModelDrawSurfLightingNonOptimized(
     for (index = 0; index < smodelCount; ++index)
     {
         smodelDrawInst = &smodelDrawInsts[list[index]];
+#ifdef __SWITCH__
+        R_SetReflectionProbeCached(context, smodelDrawInst->reflectionProbeIndex, &reflectionProbeCache);
+#else
         R_SetReflectionProbe(context, smodelDrawInst->reflectionProbeIndex);
+#endif
         R_DrawStaticModelDrawSurfPlacement(smodelDrawInst, context.source);
         lightingHandle = smodelDrawInst->lightingHandle;
         R_SetModelLightingCoordsForSource(lightingHandle, context.source);
         R_SetupPassPerPrimArgs(context);
 #ifdef __SWITCH__
-        Switch_SetRenderAuditObject(2u, static_cast<uint32_t>(list[index]));
+        if (switchRenderAuditEnabled)
+            Switch_SetRenderAuditObject(2u, static_cast<uint32_t>(list[index]));
 #endif
         R_DrawIndexedPrimitive(&context.state->prim, &args);
     }
@@ -329,6 +343,7 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
 
     xsurf = drawStream->localSurf;
 #ifdef __SWITCH__
+    const bool switchRenderAuditEnabled = Switch_RenderObjectAuditConfigured();
     if (!rgp.world || !rgp.world->dpvs.smodelDrawInsts)
     {
         Com_Error(
@@ -359,7 +374,8 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
         R_DrawStaticModelDrawSurfPlacement(&smodelDrawInsts[list[index]], context.source);
         R_SetupPassPerPrimArgs(context);
 #ifdef __SWITCH__
-        Switch_SetRenderAuditObject(2u, static_cast<uint32_t>(list[index]));
+        if (switchRenderAuditEnabled)
+            Switch_SetRenderAuditObject(2u, static_cast<uint32_t>(list[index]));
 #endif
         R_DrawIndexedPrimitive(&context.state->prim, &args);
     }
@@ -460,7 +476,13 @@ void __cdecl R_SetStaticModelCachedBuffer(GfxCmdBufState *state, uint32_t cached
     R_SetStreamSource(&state->prim, gfxBuf.smodelCacheVb, ((cachedIndex - 1) & 0xFFFFF000) << 9, 32);
 }
 
-void __cdecl R_DrawStaticModelsCachedDrawSurfLighting(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context)
+void __cdecl R_DrawStaticModelsCachedDrawSurfLighting(
+    GfxStaticModelDrawStream *drawStream,
+    GfxCmdBufContext context
+#ifdef __SWITCH__
+    , SwitchReflectionProbeBindingCache *probeCache
+#endif
+)
 {
     uint32_t copyBaseIndex; // [esp+0h] [ebp-30h]
     uint32_t baseIndex; // [esp+4h] [ebp-2Ch]
@@ -478,7 +500,11 @@ void __cdecl R_DrawStaticModelsCachedDrawSurfLighting(GfxStaticModelDrawStream *
     R_SetStaticModelCachedPrimArgs(xsurf, &args);
     R_SetStaticModelCachedBuffer(context.state, *list);
     R_SetupPassPerPrimArgs(context);
+#ifdef __SWITCH__
+    R_SetReflectionProbeCached(context, reflectionProbeIndex, probeCache);
+#else
     R_SetReflectionProbe(context, reflectionProbeIndex);
+#endif
     surfBaseIndex = 3 * xsurf->baseTriIndex;
     args.triCount = smodelCount * xsurf->triCount;
     args.baseIndex = R_ReserveIndexData(&context.state->prim, args.triCount);
@@ -491,7 +517,8 @@ void __cdecl R_DrawStaticModelsCachedDrawSurfLighting(GfxStaticModelDrawStream *
 #ifdef __SWITCH__
         {
             const GfxCachedSModelSurf *cached=R_GetCachedSModelSurf(list[index]);
-            Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
+            if (Switch_RenderObjectAuditConfigured())
+                Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
         }
 #endif
         copyBaseIndex = R_SetIndexData(&context.state->prim, (unsigned char*)&gfxBuf.smodelCache.indices[baseIndex], xsurf->triCount);
@@ -530,7 +557,8 @@ void __cdecl R_DrawStaticModelsCachedDrawSurf(GfxStaticModelDrawStream *drawStre
 #ifdef __SWITCH__
         {
             const GfxCachedSModelSurf *cached=R_GetCachedSModelSurf(list[index]);
-            Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
+            if (Switch_RenderObjectAuditConfigured())
+                Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
         }
 #endif
         copyBaseIndex = R_SetIndexData(&context.state->prim, (unsigned char*)&gfxBuf.smodelCache.indices[baseIndex], xsurf->triCount);
@@ -554,8 +582,17 @@ void __cdecl R_DrawStaticModelCachedSurfLit(const uint32_t *primDrawSurfPos, Gfx
 #endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+#endif
     while (R_GetNextStaticModelCachedSurf(&drawStream))
+    {
+#ifdef __SWITCH__
+        R_DrawStaticModelsCachedDrawSurfLighting(&drawStream, context, &reflectionProbeCache);
+#else
         R_DrawStaticModelsCachedDrawSurfLighting(&drawStream, context);
+#endif
+    }
     context.state->samplerTexture[1] = drawStream.reflectionProbeTexture;
 }
 
@@ -672,9 +709,10 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurf(
         R_ChangeIndices(&context.state->prim, ib);
     args.baseIndex = firstIndex;
 #ifdef __SWITCH__
-    Switch_QueueRenderAuditObject(4u,
-        auditSmodelDrawInst ? static_cast<uint32_t>(auditSmodelDrawInst-rgp.world->dpvs.smodelDrawInsts) : pretessSurf.fields.cachedIndex,
-        args.vertexCount,args.triCount,args.baseIndex);
+    if (Switch_RenderObjectAuditConfigured())
+        Switch_QueueRenderAuditObject(4u,
+            auditSmodelDrawInst ? static_cast<uint32_t>(auditSmodelDrawInst-rgp.world->dpvs.smodelDrawInsts) : pretessSurf.fields.cachedIndex,
+            args.vertexCount,args.triCount,args.baseIndex);
 #endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 }
@@ -683,7 +721,11 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurfLighting(
     GfxStaticModelPreTessSurf pretessSurf,
     uint32_t firstIndex,
     uint32_t count,
-    GfxCmdBufContext context)
+    GfxCmdBufContext context
+#ifdef __SWITCH__
+    , SwitchReflectionProbeBindingCache *probeCache
+#endif
+)
 {
     IDirect3DIndexBuffer9 *ib; // [esp+0h] [ebp-30h]
     const GfxStaticModelDrawInst *smodelDrawInst; // [esp+20h] [ebp-10h]
@@ -699,15 +741,20 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurfLighting(
         &args,
         0);
     R_SetupPassPerPrimArgs(context);
+#ifdef __SWITCH__
+    R_SetReflectionProbeCached(context, smodelDrawInst->reflectionProbeIndex, probeCache);
+#else
     R_SetReflectionProbe(context, smodelDrawInst->reflectionProbeIndex);
+#endif
     ib = context.source->input.data->preTessIb;
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
     args.baseIndex = firstIndex;
 #ifdef __SWITCH__
-    Switch_QueueRenderAuditObject(4u,
-        static_cast<uint32_t>(smodelDrawInst-rgp.world->dpvs.smodelDrawInsts),
-        args.vertexCount,args.triCount,args.baseIndex);
+    if (Switch_RenderObjectAuditConfigured())
+        Switch_QueueRenderAuditObject(4u,
+            static_cast<uint32_t>(smodelDrawInst-rgp.world->dpvs.smodelDrawInsts),
+            args.vertexCount,args.triCount,args.baseIndex);
 #endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 }
@@ -724,11 +771,18 @@ void __cdecl R_DrawStaticModelSkinnedDrawSurfLighting(
     const GfxStaticModelDrawInst *smodelDrawInst,
     uint16_t lightingHandle,
     GfxDrawPrimArgs *args,
-    GfxCmdBufContext context)
-{
-    R_SetReflectionProbe(context, smodelDrawInst->reflectionProbeIndex);
+    GfxCmdBufContext context
 #ifdef __SWITCH__
-    Switch_SetRenderAuditObject(5u, static_cast<uint32_t>(smodelDrawInst - rgp.world->dpvs.smodelDrawInsts));
+    , SwitchReflectionProbeBindingCache *probeCache
+#endif
+)
+{
+#ifdef __SWITCH__
+    R_SetReflectionProbeCached(context, smodelDrawInst->reflectionProbeIndex, probeCache);
+    if (Switch_RenderObjectAuditConfigured())
+        Switch_SetRenderAuditObject(5u, static_cast<uint32_t>(smodelDrawInst - rgp.world->dpvs.smodelDrawInsts));
+#else
+    R_SetReflectionProbe(context, smodelDrawInst->reflectionProbeIndex);
 #endif
     R_DrawStaticModelDrawSurfPlacement(smodelDrawInst, context.source);
     R_SetModelLightingCoordsForSource(lightingHandle, context.source);
@@ -759,11 +813,18 @@ void __cdecl R_DrawStaticModelsSkinnedDrawSurfLighting(GfxStaticModelDrawStream 
     smodelCount = drawStream->smodelCount;
     smodelDrawInsts = rgp.world->dpvs.smodelDrawInsts;
     list = drawStream->smodelList;
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+#endif
     for (index = 0; index < smodelCount; ++index)
     {
         smodelDrawInst = &smodelDrawInsts[list[index]];
         lightingHandle = smodelDrawInst->lightingHandle;
+#ifdef __SWITCH__
+        R_DrawStaticModelSkinnedDrawSurfLighting(smodelDrawInst, lightingHandle, &args, context, &reflectionProbeCache);
+#else
         R_DrawStaticModelSkinnedDrawSurfLighting(smodelDrawInst, lightingHandle, &args, context);
+#endif
     }
 }
 
@@ -792,7 +853,8 @@ void __cdecl R_DrawStaticModelSkinnedDrawSurf(
     GfxCmdBufContext context)
 {
 #ifdef __SWITCH__
-    Switch_SetRenderAuditObject(5u, static_cast<uint32_t>(smodelDrawInst - rgp.world->dpvs.smodelDrawInsts));
+    if (Switch_RenderObjectAuditConfigured())
+        Switch_SetRenderAuditObject(5u, static_cast<uint32_t>(smodelDrawInst - rgp.world->dpvs.smodelDrawInsts));
 #endif
     R_DrawStaticModelDrawSurfPlacement(smodelDrawInst, context.source);
     R_SetupPassPerPrimArgs(context);

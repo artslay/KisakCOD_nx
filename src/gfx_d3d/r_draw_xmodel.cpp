@@ -2,10 +2,16 @@
 #include "r_draw_xmodel.h"
 #ifdef __SWITCH__
 extern void Switch_SetRenderAuditObject(uint32_t surfaceType, uint32_t objectId);
+extern bool Switch_IsRenderObjectAuditEnabled();
 extern bool Switch_IsModelTransformTraceEnabled();
 extern void Switch_SetModelTransformTraceContext(
     const char *drawKind, const char *materialName, const void *xsurf,
     uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix);
+static inline bool Switch_RenderObjectAuditConfigured()
+{
+    static const bool enabled = Switch_IsRenderObjectAuditEnabled();
+    return enabled;
+}
 #endif
 #include "rb_stats.h"
 #include <database/database.h>
@@ -158,6 +164,10 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
     drawSurfKey = drawSurf.packed & 0xFFFFFFFFFF000000uLL;
     drawSurfIndex = 0;
 
+#ifdef __SWITCH__
+    SwitchReflectionProbeBindingCache reflectionProbeCache{UINT32_MAX, nullptr, nullptr};
+#endif
+
     eyeOffset.v[0] = context.source->eyeOffset[0];
     eyeOffset.v[1] = context.source->eyeOffset[1];
     eyeOffset.v[2] = context.source->eyeOffset[2];
@@ -179,9 +189,12 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
 
         R_SetModelLightingCoordsForSource(modelSurf->surf.info.lightingHandle, context.source);
-        R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
 #ifdef __SWITCH__
-        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+        R_SetReflectionProbeCached(context, drawSurf.fields.reflectionProbeIndex, &reflectionProbeCache);
+        if (Switch_RenderObjectAuditConfigured())
+            Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+#else
+        R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
 #endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)
@@ -261,7 +274,8 @@ uint32_t __cdecl R_DrawXModelRigidSurfCameraInternal(
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
 #ifdef __SWITCH__
-        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+        if (Switch_RenderObjectAuditConfigured())
+            Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
 #endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
 
@@ -333,7 +347,8 @@ uint32_t __cdecl R_DrawXModelRigidSurfInternal(
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
 #ifdef __SWITCH__
-        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+        if (Switch_RenderObjectAuditConfigured())
+            Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
 #endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)

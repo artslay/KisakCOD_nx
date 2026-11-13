@@ -1,6 +1,9 @@
 #pragma once
 #include "rb_backend.h"
 #include "rb_tess.h"
+#ifdef __SWITCH__
+struct SwitchReflectionProbeBindingCache;
+#endif
 
 struct GfxStaticModelDrawStream // sizeof=0x1C
 {                                       // ...

@@ -700,6 +700,46 @@ void __cdecl R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionP
         R_SetSampler(context, 1u, 0x72u, rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage);
 }
 
+#ifdef __SWITCH__
+void __cdecl R_SetReflectionProbeCached(
+    GfxCmdBufContext context,
+    uint32_t reflectionProbeIndex,
+    SwitchReflectionProbeBindingCache *cache)
+{
+    iassert(cache);
+    iassert(rgp.world);
+    iassert(reflectionProbeIndex != REFLECTION_PROBE_INVALID);
+    if (reflectionProbeIndex >= rgp.world->reflectionProbeCount)
+        MyAssertHandler(
+            ".\\r_state.cpp",
+            683,
+            0,
+            "reflectionProbeIndex doesn't index rgp.world->reflectionProbeCount\n\t%i not in [0, %i)",
+            reflectionProbeIndex,
+            rgp.world->reflectionProbeCount);
+
+    const GfxImage *image =
+        rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage;
+    iassert(image);
+    const void *basemap =
+        image ? static_cast<const void *>(image->texture.basemap) : nullptr;
+
+    // A null image/resource may be in a load transition; keep calling the
+    // original setter in that case so it retains its validation/reload behavior.
+    if (image && basemap &&
+        cache->index == reflectionProbeIndex &&
+        cache->image == image &&
+        cache->basemap == basemap)
+        return;
+
+    R_SetReflectionProbe(context, reflectionProbeIndex);
+    cache->index = reflectionProbeIndex;
+    cache->image = image;
+    cache->basemap = basemap;
+}
+#endif
+
+
 void __cdecl R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType)
 {
     float v2; // [esp+8h] [ebp-28h]
