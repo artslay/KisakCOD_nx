@@ -394,7 +394,7 @@ void __cdecl CL_ParseServerCommands(msg_t *msg)
 {
     int Short; // r3
     int v3; // r31
-    char v4[32]; // [sp+50h] [-4020h] BYREF
+    char v4[0x4000]; // server command text buffer
 
     Short = MSG_ReadShort(msg);
     if (Short > 0)
@@ -414,7 +414,7 @@ void __cdecl CL_RecordServerCommands(serverCommands_s *serverCommands)
 {
     int i; // r31
     msg_t v3; // [sp+50h] [-4050h] BYREF
-    unsigned __int8 v4[32]; // [sp+80h] [-4020h] BYREF
+    unsigned __int8 v4[0x4000]; // demo message buffer
 
     if (!cls.demorecording)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_parse.cpp", 213, 0, "%s", "cls.demorecording");
