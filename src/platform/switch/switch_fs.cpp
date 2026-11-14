@@ -81,6 +81,7 @@ static std::unordered_map<std::string, uint32_t> g_iwdEntries;
 static std::string g_switchSelectedLanguage = "english";
 static std::string g_switchPrimaryGame = "main";
 static bool g_switchLanguageResolved = false;
+static bool g_switchLanguageDvarSynchronized = false;
 static SwitchZipHandle g_zipHandles[65] = {};
 
 const char *FS_SwitchGetStartupLanguage();
@@ -1181,12 +1182,17 @@ const char *FS_SwitchGetStartupLanguage()
         g_switchLanguageResolved = true;
     }
 
-    int languageIndex = 0;
-    if (loc_language &&
-        SEH_GetLanguageIndexForName(
-            g_switchSelectedLanguage.c_str(),
-            &languageIndex))
-        Dvar_SetInt((dvar_s *)loc_language, languageIndex);
+    if (loc_language && !g_switchLanguageDvarSynchronized)
+    {
+        int languageIndex = 0;
+        if (SEH_GetLanguageIndexForName(
+                g_switchSelectedLanguage.c_str(),
+                &languageIndex))
+        {
+            Dvar_SetInt((dvar_s *)loc_language, languageIndex);
+            g_switchLanguageDvarSynchronized = true;
+        }
+    }
 
     return g_switchSelectedLanguage.c_str();
 }
