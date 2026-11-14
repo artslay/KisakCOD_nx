@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 
 static inline bool Switch_UIUtils_BadRuntimePointer(const void *ptr)
 {
