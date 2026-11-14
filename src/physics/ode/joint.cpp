@@ -648,9 +648,10 @@ static void ballGetInfo2 (dxJointBall *joint, dxJoint::Info2 *info)
 }
 
 
-extern "C" void dJointSetBallAnchor (dxJointBall *joint,
+extern "C" void dJointSetBallAnchor (dJointID jointId,
 				     dReal x, dReal y, dReal z)
 {
+  dxJointBall *joint = static_cast<dxJointBall *>(jointId);
   dUASSERT(joint,"bad joint argument");
   dUASSERT(joint->typenum == dJointTypeBall, "joint is not a ball");
   setAnchors (joint,x,y,z,joint->anchor1,joint->anchor2);
@@ -814,9 +815,10 @@ static void hingeComputeInitialRelativeRotation (dxJointHinge *joint)
 }
 
 
-extern "C" void dJointSetHingeAnchor (dxJointHinge *joint,
+extern "C" void dJointSetHingeAnchor (dJointID jointId,
 				      dReal x, dReal y, dReal z)
 {
+  dxJointHinge *joint = static_cast<dxJointHinge *>(jointId);
   dUASSERT(joint,"bad joint argument");
   dUASSERT(joint->typenum == dJointTypeHinge,"joint is not a hinge");
   setAnchors (joint,x,y,z,joint->anchor1,joint->anchor2);
@@ -824,9 +826,10 @@ extern "C" void dJointSetHingeAnchor (dxJointHinge *joint,
 }
 
 
-extern "C" void dJointSetHingeAxis (dxJointHinge *joint,
+extern "C" void dJointSetHingeAxis (dJointID jointId,
 				    dReal x, dReal y, dReal z)
 {
+  dxJointHinge *joint = static_cast<dxJointHinge *>(jointId);
   dUASSERT(joint,"bad joint argument");
   dUASSERT(joint->typenum == dJointTypeHinge, "joint is not a hinge");
   setAxes (joint,x,y,z,joint->axis1,joint->axis2);
@@ -867,9 +870,10 @@ extern "C" void dJointGetHingeAxis (dxJointHinge *joint, dVector3 result)
 }
 
 
-extern "C" void dJointSetHingeParam (dxJointHinge *joint,
+extern "C" void dJointSetHingeParam (dJointID jointId,
 				     int parameter, dReal value)
 {
+  dxJointHinge *joint = static_cast<dxJointHinge *>(jointId);
   dUASSERT(joint,"bad joint argument");
   dUASSERT(joint->typenum == dJointTypeHinge, "joint is not a hinge");
   joint->limot.set (parameter,value);
@@ -2373,8 +2377,9 @@ static void amotorGetInfo2 (dxJointAMotor *joint, dxJoint::Info2 *info)
 }
 
 
-extern "C" void dJointSetAMotorNumAxes (dxJointAMotor *joint, int num)
+extern "C" void dJointSetAMotorNumAxes (dJointID jointId, int num)
 {
+  dxJointAMotor *joint = static_cast<dxJointAMotor *>(jointId);
   dAASSERT(joint && num >= 0 && num <= 3);
   dUASSERT(joint->typenum == dJointTypeAMotor, "joint is not an amotor");
   if (joint->mode == dAMotorEuler) {
@@ -2388,9 +2393,10 @@ extern "C" void dJointSetAMotorNumAxes (dxJointAMotor *joint, int num)
 }
 
 
-extern "C" void dJointSetAMotorAxis (dxJointAMotor *joint, int anum, int rel,
+extern "C" void dJointSetAMotorAxis (dJointID jointId, int anum, int rel,
 				     dReal x, dReal y, dReal z)
 {
+  dxJointAMotor *joint = static_cast<dxJointAMotor *>(jointId);
   dAASSERT(joint && anum >= 0 && anum <= 2 && rel >= 0 && rel <= 2);
   dUASSERT(joint->typenum == dJointTypeAMotor, "joint is not an amotor");
   dUASSERT(!(!joint->node[1].body &&  (joint->flags & dJOINT_REVERSE) && rel == 1),"no first body, can't set axis rel=1");
@@ -2442,9 +2448,10 @@ extern "C" void dJointSetAMotorAngle (dxJointAMotor *joint, int anum,
 }
 
 
-extern "C" void dJointSetAMotorParam (dxJointAMotor *joint, int parameter,
+extern "C" void dJointSetAMotorParam (dJointID jointId, int parameter,
 				      dReal value)
 {
+  dxJointAMotor *joint = static_cast<dxJointAMotor *>(jointId);
   dAASSERT(joint);
   dUASSERT(joint->typenum == dJointTypeAMotor, "joint is not an amotor");
   int anum = parameter >> 8;
@@ -2455,8 +2462,9 @@ extern "C" void dJointSetAMotorParam (dxJointAMotor *joint, int parameter,
 }
 
 
-extern "C" void dJointSetAMotorMode (dxJointAMotor *joint, int mode)
+extern "C" void dJointSetAMotorMode (dJointID jointId, int mode)
 {
+  dxJointAMotor *joint = static_cast<dxJointAMotor *>(jointId);
   dAASSERT(joint);
   dUASSERT(joint->typenum == dJointTypeAMotor, "joint is not an amotor");
   joint->mode = mode;
