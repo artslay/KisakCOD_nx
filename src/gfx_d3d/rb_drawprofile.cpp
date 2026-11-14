@@ -8,7 +8,7 @@
 #include <script/scr_parser.h>
 
 #ifdef __SWITCH__
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
 DrawProfileGlobals drawProfGlob;
