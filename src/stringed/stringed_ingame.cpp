@@ -17,13 +17,12 @@ const char *__cdecl SE_GetString(const char *psPackageAndStringReference)
         const char *fastFileString =
             SE_GetString_FastFile(psPackageAndStringReference);
 #ifdef __SWITCH__
-        // Switch SP packages can provide strings through localizedstrings
-        // .str files inside localized_<language>_iw##.iwd archives. Keep the
-        // fastfile asset as the primary source, then use the original parsed
-        // StringEd package when that asset is not present.
-        if (fastFileString)
-            return fastFileString;
-        return (const char *)SE_GetString_LoadObj(psPackageAndStringReference);
+        // CoD4 SP localization is supplied by localizedstrings .str files.
+        // Prefer that language-specific StringEd value so an English
+        // LocalizeEntry in a base fastfile cannot mask the selected language.
+        const char *stringEdString =
+            (const char *)SE_GetString_LoadObj(psPackageAndStringReference);
+        return stringEdString ? stringEdString : fastFileString;
 #else
         return fastFileString;
 #endif
