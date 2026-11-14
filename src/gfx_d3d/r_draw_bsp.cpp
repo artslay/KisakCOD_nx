@@ -881,6 +881,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
     static thread_local std::vector<VkDrawIndexedIndirectCommand> switchIndirectDraws;
     static thread_local std::vector<uint32_t> switchIndirectVertexCounts;
     static thread_local std::vector<const srfTriangles_t *> switchIndirectSurfaces;
+    SwitchReflectionProbeBindingCache switchReflectionProbeCache{UINT32_MAX, nullptr, nullptr};
 #endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
@@ -1065,7 +1066,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             {
                 reflectionProbeIndex = bspSurf->reflectionProbeIndex;
                 lightmapIndex = bspSurf->lightmapIndex;
-                R_SetReflectionProbe(context, reflectionProbeIndex);
+                R_SetReflectionProbeCached(context, reflectionProbeIndex, &switchReflectionProbeCache);
                 R_SetLightmap(context, lightmapIndex);
             }
 
