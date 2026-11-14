@@ -6508,7 +6508,7 @@ static void Switch_LogShaderProgramOobIfNeeded(
         !g_streamBlocks[streamIndex].data)
         return;
 
-    const XBlock &block = g_streamBlocks[streamIndex];
+    const XZoneBlock &block = g_streamBlocks[streamIndex];
     const uint32_t offset = Switch_GetStreamCursorOffset(streamIndex);
     if (offset == UINT32_MAX || offset > block.size)
         return;
