@@ -7939,6 +7939,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         samplerDeclarations.shaderSerial = activeShaderSerial;
     }
     const auto &activeSamplers = samplerDeclarations.samplers;
+    const uint32_t activeSamplerSlotMask =
+        activeShader ? activeShader->samplerMask : 0u;
 
     auto samplerTypeMatchesTexture = [](
         const KisakVkTexture *texture,
@@ -8075,10 +8077,13 @@ bool IDirect3DDevice9::BindSamplerSet(
         !(setIndex == 2u && g_switchLitSamplerTraceActive);
 #endif
 
-    for (uint32_t slot = 0; slot < 16u; ++slot)
+    uint32_t remainingSamplerSlots = activeSamplerSlotMask;
+    uint32_t slot = 0u;
+    while (remainingSamplerSlots)
     {
-        if (!activeSamplers[slot])
-            continue;
+        while ((remainingSamplerSlots & (1u << slot)) == 0u)
+            ++slot;
+        remainingSamplerSlots &= ~(1u << slot);
 
         fastCacheKey.textures[slot] = textures[slot];
         // Only this active slot's revision affects its descriptor sampler.
@@ -8116,33 +8121,48 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
     }
 
-    const auto sameSamplerBindKey = [](
+    const auto sameSamplerBindKey = [&activeSamplerSlotMask](
         const SamplerBindFastCacheEntry &cached,
         const SamplerBindFastCacheEntry &key) -> bool
     {
-        return cached.valid &&
-            cached.frameSerial == key.frameSerial &&
-            cached.shaderSerial == key.shaderSerial &&
-            cached.samplerStateRevisions == key.samplerStateRevisions &&
-            cached.device == key.device &&
-            cached.descriptorPool == key.descriptorPool &&
-            cached.defaultDummyImageView == key.defaultDummyImageView &&
-            cached.typedDummyImageViews == key.typedDummyImageViews &&
-            cached.dummySampler == key.dummySampler &&
-            cached.parse == key.parse &&
-            cached.textures == key.textures &&
-            cached.images == key.images &&
-            cached.views == key.views &&
-            cached.baseMipViews == key.baseMipViews &&
-            cached.sampledViews == key.sampledViews &&
-            cached.baseMipSampledViews == key.baseMipSampledViews &&
-            cached.formats == key.formats &&
-            cached.viewTypes == key.viewTypes &&
-            cached.layouts == key.layouts &&
-            cached.layoutRevisions == key.layoutRevisions &&
-            cached.mipLevels == key.mipLevels &&
-            cached.arrayLayers == key.arrayLayers &&
-            cached.sourceFormats == key.sourceFormats;
+        if (!cached.valid ||
+            cached.frameSerial != key.frameSerial ||
+            cached.shaderSerial != key.shaderSerial ||
+            cached.device != key.device ||
+            cached.descriptorPool != key.descriptorPool ||
+            cached.defaultDummyImageView != key.defaultDummyImageView ||
+            cached.typedDummyImageViews != key.typedDummyImageViews ||
+            cached.dummySampler != key.dummySampler ||
+            cached.parse != key.parse)
+            return false;
+
+        // Inactive descriptor slots are fixed dummy bindings. Compare only
+        // slots declared by this shader instead of every unused array entry.
+        uint32_t remainingSlots = activeSamplerSlotMask;
+        uint32_t slot = 0u;
+        while (remainingSlots)
+        {
+            while ((remainingSlots & (1u << slot)) == 0u)
+                ++slot;
+            remainingSlots &= ~(1u << slot);
+
+            if (cached.textures[slot] != key.textures[slot] ||
+                cached.samplerStateRevisions[slot] != key.samplerStateRevisions[slot] ||
+                cached.images[slot] != key.images[slot] ||
+                cached.views[slot] != key.views[slot] ||
+                cached.baseMipViews[slot] != key.baseMipViews[slot] ||
+                cached.sampledViews[slot] != key.sampledViews[slot] ||
+                cached.baseMipSampledViews[slot] != key.baseMipSampledViews[slot] ||
+                cached.formats[slot] != key.formats[slot] ||
+                cached.viewTypes[slot] != key.viewTypes[slot] ||
+                cached.layouts[slot] != key.layouts[slot] ||
+                cached.layoutRevisions[slot] != key.layoutRevisions[slot] ||
+                cached.mipLevels[slot] != key.mipLevels[slot] ||
+                cached.arrayLayers[slot] != key.arrayLayers[slot] ||
+                cached.sourceFormats[slot] != key.sourceFormats[slot])
+                return false;
+        }
+        return true;
     };
 
     auto rememberSamplerSet = [&](VkDescriptorSet descriptorSet)
@@ -8168,14 +8188,17 @@ bool IDirect3DDevice9::BindSamplerSet(
     // Vulkan image barriers are forbidden inside dynamic rendering, including
     // when the previous draw left a rendering instance active.
     bool needsSampledLayoutTransition = false;
-    for (uint32_t slot = 0; slot < 16; ++slot)
+    remainingSamplerSlots = activeSamplerSlotMask;
+    slot = 0u;
+    while (remainingSamplerSlots)
     {
+        while ((remainingSamplerSlots & (1u << slot)) == 0u)
+            ++slot;
+        remainingSamplerSlots &= ~(1u << slot);
+
         // Only textures actually sampled by this shader participate in layout
         // tracking. Stale D3D9 bindings in inactive slots may still refer to
         // render targets or depth images and must not force transitions.
-        if (!activeSamplers[slot])
-            continue;
-
         KisakVkTexture *texture = textures[slot];
         if (!texture)
             continue;
