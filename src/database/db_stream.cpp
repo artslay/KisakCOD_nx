@@ -19,7 +19,7 @@ extern const char * volatile g_switchDbStage;
 #endif
 
 uint32_t g_streamDelayIndex;
-XBlock * g_streamBlocks;
+XZoneBlock * g_streamBlocks;
 uint8_t *g_streamPosArray[9];
 StreamDelayInfo g_streamDelayArray[4096];
 uint32_t g_streamPosIndex;
@@ -772,7 +772,7 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
             static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
             return false;
 
-        const XBlock &streamBlock = g_streamBlocks[block];
+        const XZoneBlock &streamBlock = g_streamBlocks[block];
         if (!streamBlock.data ||
             blockOffset > streamBlock.size ||
             streamBlock.size - blockOffset < sizeof(uint32_t))
@@ -929,7 +929,7 @@ static bool Switch_TryResolveMaterialNameAlias(
         static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
         return false;
 
-    const XBlock &streamBlock = g_streamBlocks[block];
+    const XZoneBlock &streamBlock = g_streamBlocks[block];
     if (!streamBlock.data || blockOffset >= streamBlock.size)
         return false;
 
@@ -1027,7 +1027,7 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
         static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
         return false;
 
-    const XBlock &streamBlock = g_streamBlocks[block];
+    const XZoneBlock &streamBlock = g_streamBlocks[block];
     if (!streamBlock.data || blockOffset >= streamBlock.size)
         return false;
 
