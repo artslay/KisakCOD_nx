@@ -10761,16 +10761,44 @@ bool IDirect3DDevice9::BindDescriptorSets()
             return false;
     }
 
-    g_switchFrameStage = "frame/render/vulkan/descriptors/vs_uniform";
-    if (!BindUniformSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 1, m_vertexShader->parseData,
-            m_vsFloat.data(), m_vsInt.data(), m_vsBool.data()))
-        return false;
-    g_switchFrameStage = "frame/render/vulkan/descriptors/ps_uniform";
-    if (!BindUniformSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 3, m_pixelShader->parseData,
-            m_psFloat.data(), m_psInt.data(), m_psBool.data()))
-        return false;
+    // A shader whose packed runtime-uniform layout is empty does not
+    // statically use its uniform descriptor set. Resolve each immutable layout
+    // once here so draws can skip the descriptor lookup and bind entirely.
+    const auto hasRuntimeUniforms = [](KisakVkShader *shader)
+    {
+        if (!shader || !shader->parseData)
+            return true;
+
+        if (!shader->uniformLayoutCached)
+        {
+            shader->uniformLayoutValid =
+                GetUniformLayout(shader->parseData, &shader->uniformLayout);
+            shader->uniformLayoutCached = true;
+        }
+
+        // Keep the original failure path for invalid layouts; only skip a
+        // descriptor set after a successfully parsed empty runtime layout.
+        return !shader->uniformLayoutValid || shader->uniformLayout.size != 0;
+    };
+    const bool vertexHasRuntimeUniforms = hasRuntimeUniforms(m_vertexShader);
+    const bool pixelHasRuntimeUniforms = hasRuntimeUniforms(m_pixelShader);
+
+    if (vertexHasRuntimeUniforms)
+    {
+        g_switchFrameStage = "frame/render/vulkan/descriptors/vs_uniform";
+        if (!BindUniformSet(
+                VK_PIPELINE_BIND_POINT_GRAPHICS, 1, m_vertexShader->parseData,
+                m_vsFloat.data(), m_vsInt.data(), m_vsBool.data()))
+            return false;
+    }
+    if (pixelHasRuntimeUniforms)
+    {
+        g_switchFrameStage = "frame/render/vulkan/descriptors/ps_uniform";
+        if (!BindUniformSet(
+                VK_PIPELINE_BIND_POINT_GRAPHICS, 3, m_pixelShader->parseData,
+                m_psFloat.data(), m_psInt.data(), m_psBool.data()))
+            return false;
+    }
 
     g_switchFrameStage = "frame/render/vulkan/descriptors/return";
     return true;
