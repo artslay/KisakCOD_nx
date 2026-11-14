@@ -316,7 +316,7 @@ extern struct fileData_s *com_fileDataHashTable[1024];
 extern uint32_t volatile g_mainThreadBlocked;
 
 extern uint32_t g_streamDelayIndex;
-extern XBlock *g_streamBlocks;
+extern XZoneBlock *g_streamBlocks;
 extern uint8_t *g_streamPosArray[9];
 extern StreamDelayInfo g_streamDelayArray[4096];
 extern uint32_t g_streamPosIndex;
