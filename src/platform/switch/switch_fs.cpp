@@ -583,6 +583,56 @@ static bool Switch_DirectoryHasFastfile(const std::string &directoryPath)
     return found;
 }
 
+static bool Switch_DirectoryHasLocalizedStringFiles(
+    const std::string &directoryPath,
+    const char *languageName)
+{
+    if (!languageName || !*languageName)
+        return false;
+
+    const std::string normalizedDirectory =
+        SwitchNormalizePath(directoryPath.c_str());
+    const std::string languageSuffix =
+        std::string("/") + SwitchNormalizePath(languageName).c_str();
+    if (normalizedDirectory.size() <= languageSuffix.size() ||
+        normalizedDirectory.compare(
+            normalizedDirectory.size() - languageSuffix.size(),
+            languageSuffix.size(),
+            languageSuffix) != 0)
+        return false;
+
+    const std::string localizedStringsDirectory =
+        directoryPath + "/localizedstrings";
+    DIR *directory = opendir(localizedStringsDirectory.c_str());
+    if (!directory)
+        return false;
+
+    bool found = false;
+    while (dirent *entry = readdir(directory))
+    {
+        if (!entry->d_name || entry->d_name[0] == '.')
+            continue;
+
+        const std::string filename =
+            SwitchNormalizePath(entry->d_name);
+        if (filename.size() < 4 ||
+            filename.compare(filename.size() - 4, 4, ".str") != 0)
+            continue;
+
+        const std::string fullPath =
+            localizedStringsDirectory + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(fullPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            found = true;
+            break;
+        }
+    }
+
+    closedir(directory);
+    return found;
+}
+
 static bool Switch_LanguageHasAssetsOnDisk(
     const char *languageName,
     const char *game)
@@ -639,7 +689,8 @@ static bool Switch_LanguageHasAssetsOnDisk(
 
     for (const std::string &directory : searchDirectories)
     {
-        if (Switch_DirectoryHasLocalizedIwd(directory, languageName))
+        if (Switch_DirectoryHasLocalizedIwd(directory, languageName) ||
+            Switch_DirectoryHasLocalizedStringFiles(directory, languageName))
             return true;
     }
 
