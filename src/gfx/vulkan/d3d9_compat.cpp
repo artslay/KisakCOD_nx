@@ -10440,8 +10440,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         6u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
-    VkResult pipelineResult = vkCreateGraphicsPipelines(
-        m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    VkResult pipelineResult = VK_SUCCESS;
+    {
+        std::shared_lock<std::shared_mutex> pipelineCacheLock(m_backend->PipelineCacheMutex());
+        pipelineResult = vkCreateGraphicsPipelines(
+            m_backend->Device(), m_backend->PipelineCache(), 1, &info, nullptr, &pipeline);
+    }
 #ifdef __SWITCH__
     if (switchFloorVertexProbeModule != VK_NULL_HANDLE)
     {
@@ -10470,8 +10474,11 @@ bool IDirect3DDevice9::EnsurePipeline()
         stages[1] = switchFloorOriginalStages[1];
         pipeline = VK_NULL_HANDLE;
         g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_call";
-        pipelineResult = vkCreateGraphicsPipelines(
-            m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+        {
+            std::shared_lock<std::shared_mutex> pipelineCacheLock(m_backend->PipelineCacheMutex());
+            pipelineResult = vkCreateGraphicsPipelines(
+                m_backend->Device(), m_backend->PipelineCache(), 1, &info, nullptr, &pipeline);
+        }
         g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_return";
         char fallbackResult[224];
         std::snprintf(fallbackResult, sizeof(fallbackResult),
