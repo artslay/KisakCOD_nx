@@ -7,6 +7,25 @@
 TARGET      := kisakcod
 BUILD       := build
 
+# Keep Switch optimization modes explicit and reproducible. PGO training writes
+# its profile to the SD card; copy the resulting .gcda files to ./pgo-data
+# before building with KISAK_SWITCH_PGO=use.
+KISAK_SWITCH_LTO ?= 1
+KISAK_SWITCH_PGO ?= none
+
+ifeq ($(filter $(KISAK_SWITCH_LTO),0 1),)
+$(error KISAK_SWITCH_LTO must be 0 or 1)
+endif
+ifeq ($(filter $(KISAK_SWITCH_PGO),none generate use),)
+$(error KISAK_SWITCH_PGO must be none, generate or use)
+endif
+ifeq ($(KISAK_SWITCH_PGO),use)
+PGO_PROFILE_DIR := $(CURDIR)/pgo-data
+ifeq ($(wildcard $(PGO_PROFILE_DIR)/*.gcda),)
+$(error No PGO profile files found in $(PGO_PROFILE_DIR); copy the .gcda files from sdmc:/switch/KisakCOD/pgo first)
+endif
+endif
+
 # Nintendo Switch application metadata.
 APP_TITLE   := Call of Duty 4
 APP_AUTHOR  := artslay
@@ -26,11 +45,29 @@ CPPFLAGS    := -D__SWITCH__ -DKISAK_SWITCH -DKISAK_SP -DKISAK_OPENAL -DCINEMA -D
                -I$(DEVKITPRO)/libnx/include -I$(MESA_SDK)/include -I$(OPENAL_SDK)/include
 GIT_COMMIT  := $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf "unknown")
 
-CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno-plt -fno-semantic-interposition -std=gnu++20 -MMD -MP \
+CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno-plt -fno-semantic-interposition -std=gnu++20 -MMD -MP \\
                -Wno-int-to-pointer-cast -Wno-volatile -Wno-conversion-null -Wno-multichar -Wno-stringop-overflow
-CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
+CPPFLAGS    += -DGIT_COMMIT=\\\"$(GIT_COMMIT)\\\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
+
+# Compile and link every engine translation unit with the same optimization mode.
+# LTO is enabled by default; set KISAK_SWITCH_LTO=0 for a comparison build.
+ifeq ($(KISAK_SWITCH_LTO),1)
+LTO_FLAGS := -flto
+endif
+
+# PGO must be used for both compilation and final linking. Generate mode writes
+# on the Switch SD card; use mode reads the copied profile from the host build.
+ifeq ($(KISAK_SWITCH_PGO),generate)
+PGO_FLAGS := -fprofile-generate=sdmc:/switch/KisakCOD/pgo -fprofile-update=atomic
+else ifeq ($(KISAK_SWITCH_PGO),use)
+PGO_FLAGS := -fprofile-use=$(PGO_PROFILE_DIR)
+endif
+
+CXXFLAGS += $(LTO_FLAGS) $(PGO_FLAGS)
+CFLAGS   += $(LTO_FLAGS) $(PGO_FLAGS)
+LDFLAGS  += $(LTO_FLAGS) $(PGO_FLAGS)
 # Optional heap-event ring for diagnosing Rust/NVK allocator corruption.
 # Enable only for the diagnostic build: make KISAK_SWITCH_HEAP_TRACE=1
 ifeq ($(KISAK_SWITCH_HEAP_TRACE),1)
@@ -147,7 +184,17 @@ $(ZONELOAD_OBJECTS): CXXFLAGS += -std=gnu++23 -DARCH_x64
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean print-sources progress-init progress-done check-switch-deps ALWAYS
+.PHONY: all clean print-sources progress-init progress-done check-switch-deps ALWAYS FORCE
+
+# Make does not otherwise notice changes to compiler/linker flags. A mode stamp
+# rebuilds objects when switching between normal, PGO-generate and PGO-use,
+# while repeated builds in the same mode remain incremental.
+$(BUILD)/.switch-build-mode: FORCE
+	@mkdir -p $(BUILD)
+	@mode='LTO=$(KISAK_SWITCH_LTO);PGO=$(KISAK_SWITCH_PGO)'; \\
+	if [ ! -f "$@" ] || [ "$(cat "$@")" != "$mode" ]; then \\
+		printf '%s\\n' "$mode" > "$@"; \\
+	fi
 
 # Mesa/NVK's static libvulkan.a references zstd; make the missing portlib explicit
 # instead of letting ld fail later with the vague `cannot find -lzstd` message.
@@ -193,7 +240,7 @@ $(BUILD)/src/buildnumber.o: src/buildnumber.cpp ALWAYS
 
 ALWAYS:
 
-$(BUILD)/%.o: %.cpp
+$(BUILD)/%.o: %.cpp $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
@@ -203,7 +250,7 @@ $(BUILD)/%.o: %.cpp
 	rmdir "$(PROGRESS_LOCK)"; \
 	printf '  CXX [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
-$(BUILD)/%.o: %.c
+$(BUILD)/%.o: %.c $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
@@ -213,7 +260,7 @@ $(BUILD)/%.o: %.c
 	rmdir "$(PROGRESS_LOCK)"; \
 	printf '  CC  [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
-$(BUILD)/%.o: %.S
+$(BUILD)/%.o: %.S $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(ARCH) -MMD -MP -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
