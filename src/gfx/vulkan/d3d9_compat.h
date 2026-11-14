@@ -469,6 +469,10 @@ struct KisakVkShader : IDirect3DResource9 {
     VulkanUniformLayout uniformLayout{};
     bool uniformLayoutCached=false;
     bool uniformLayoutValid=false;
+    // MojoShader sampler declarations are immutable for this shader.
+    // Cache their D3D texture-slot mask instead of walking them on every draw.
+    uint32_t samplerMask=0;
+    bool samplerMaskCached=false;
     std::vector<uint32_t> spirv;
     // The interface-linked fragment module before the optional alpha-test rewrite.
     // Alpha testing is dynamic D3D9 state, so retain this baseline to rebuild the
