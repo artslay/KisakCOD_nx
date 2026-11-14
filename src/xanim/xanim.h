@@ -1083,7 +1083,7 @@ struct XZoneInfo // sizeof=0xC
     int freeFlags;                      // ...
 };
 
-struct XBlock // sizeof=0x8
+struct XZoneBlock // sizeof=0x8
 {                                       // ...
     unsigned __int8 *data;
     uint32_t size;
@@ -1091,7 +1091,7 @@ struct XBlock // sizeof=0x8
 
 struct XZoneMemory // sizeof=0x58
 {                                       // ...
-    XBlock blocks[9];
+    XZoneBlock blocks[9];
     unsigned __int8 *lockedVertexData;
     unsigned __int8 *lockedIndexData;
     void *vertexBuffer;
