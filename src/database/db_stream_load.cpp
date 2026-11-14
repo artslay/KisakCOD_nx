@@ -682,7 +682,7 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
     const uint32_t streamIndex = g_streamPosIndex;
     const bool streamIndexValid =
         g_streamBlocks && streamIndex < ARRAY_COUNT(g_streamPosArray);
-    const XBlock *streamBlock =
+    const XZoneBlock *streamBlock =
         streamIndexValid ? &g_streamBlocks[streamIndex] : nullptr;
     const uintptr_t streamBase = streamBlock
         ? reinterpret_cast<uintptr_t>(streamBlock->data)
