@@ -7,6 +7,8 @@ extern bool R_RecoverLostVulkanDevice();
 #endif
 
 #include <algorithm>
+#include <cstdio>
+#include <cerrno>
 #include <array>
 #include <cstring>
 #include <chrono>
@@ -18,6 +20,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <vector>
 
 #include <switch.h>
+#include <sys/stat.h>
 #include "../../platform/switch/switch_saltynx.h"
 #include "../../platform/switch/switch_perf_diag.h"
 
@@ -1180,6 +1183,8 @@ void VulkanBackend::Shutdown()
     DestroySwapchain();
     DestroyMemoryAllocator();
 
+    SaveAndDestroyPipelineCache();
+
     if (m_surface) vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
     if (m_device) vkDestroyDevice(m_device, nullptr);
     if (m_instance) vkDestroyInstance(m_instance, nullptr);
@@ -1583,7 +1588,226 @@ bool VulkanBackend::CreateDevice()
     Switch_LogWrite(faultMsg);
 #endif
     vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
+    return CreatePipelineCache();
+}
+
+bool VulkanBackend::CreatePipelineCache()
+{
+    if (!m_device)
+        return true;
+
+    m_pipelineCache = VK_NULL_HANDLE;
+    std::vector<uint8_t> initialData;
+#ifdef __SWITCH__
+    static constexpr char kCachePath[] =
+        "sdmc:/switch/KisakCOD/cache/vulkan_pipelines.bin";
+    static constexpr size_t kMaxCacheFileBytes = 64u * 1024u * 1024u;
+
+    VkPhysicalDeviceProperties physicalProperties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &physicalProperties);
+
+    struct PipelineCacheHeader
+    {
+        uint32_t headerSize;
+        uint32_t headerVersion;
+        uint32_t vendorID;
+        uint32_t deviceID;
+        uint8_t pipelineCacheUUID[VK_UUID_SIZE];
+    };
+    static_assert(sizeof(PipelineCacheHeader) == 32,
+        "Vulkan pipeline cache header must be 32 bytes");
+
+    FILE *cacheFile = std::fopen(kCachePath, "rb");
+    if (cacheFile)
+    {
+        bool validFile = false;
+        if (std::fseek(cacheFile, 0, SEEK_END) == 0)
+        {
+            const long fileSize = std::ftell(cacheFile);
+            if (fileSize >= static_cast<long>(sizeof(PipelineCacheHeader)) &&
+                static_cast<unsigned long>(fileSize) <= kMaxCacheFileBytes &&
+                std::fseek(cacheFile, 0, SEEK_SET) == 0)
+            {
+                initialData.resize(static_cast<size_t>(fileSize));
+                validFile =
+                    std::fread(initialData.data(), 1, initialData.size(), cacheFile) ==
+                    initialData.size();
+            }
+        }
+        std::fclose(cacheFile);
+
+        if (validFile)
+        {
+            PipelineCacheHeader header{};
+            std::memcpy(&header, initialData.data(), sizeof(header));
+            validFile =
+                header.headerSize == sizeof(PipelineCacheHeader) &&
+                header.headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+                header.vendorID == physicalProperties.vendorID &&
+                header.deviceID == physicalProperties.deviceID &&
+                std::memcmp(
+                    header.pipelineCacheUUID,
+                    physicalProperties.pipelineCacheUUID,
+                    VK_UUID_SIZE) == 0;
+        }
+
+        if (!validFile)
+        {
+            initialData.clear();
+            Switch_LogWrite(
+                "[KisakCOD][VK PIPELINE CACHE] cache header/device UUID mismatch or truncated file; ignoring saved data\n");
+        }
+    }
+#endif
+
+    VkPipelineCacheCreateInfo cacheInfo{};
+    cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    cacheInfo.initialDataSize = initialData.size();
+    cacheInfo.pInitialData = initialData.empty() ? nullptr : initialData.data();
+
+    const VkResult result = vkCreatePipelineCache(
+        m_device, &cacheInfo, nullptr, &m_pipelineCache);
+    if (result != VK_SUCCESS)
+    {
+        m_pipelineCache = VK_NULL_HANDLE;
+#ifdef __SWITCH__
+        char message[192];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][VK PIPELINE CACHE] creation unavailable result=%d; using uncached pipeline creation\n",
+            static_cast<int>(result));
+        Switch_LogWrite(message);
+#endif
+        return true;
+    }
+
+#ifdef __SWITCH__
+    if (!initialData.empty())
+    {
+        char message[192];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][VK PIPELINE CACHE] loaded %zu bytes from %s\n",
+            initialData.size(), kCachePath);
+        Switch_LogWrite(message);
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE CACHE] starting with an empty cache; driver cache will be populated during pipeline creation\n");
+    }
+#endif
     return true;
+}
+
+void VulkanBackend::SaveAndDestroyPipelineCache()
+{
+    // Pipeline creation takes shared access. Teardown takes exclusive access,
+    // so cache readback/destruction cannot race a pipeline creation call.
+    std::unique_lock<std::shared_mutex> cacheLock(m_pipelineCacheMutex);
+    if (!m_device || !m_pipelineCache)
+    {
+        m_pipelineCache = VK_NULL_HANDLE;
+        return;
+    }
+
+#ifdef __SWITCH__
+    static constexpr char kCacheDirectory[] = "sdmc:/switch/KisakCOD/cache";
+    static constexpr char kCachePath[] =
+        "sdmc:/switch/KisakCOD/cache/vulkan_pipelines.bin";
+    static constexpr char kCacheTempPath[] =
+        "sdmc:/switch/KisakCOD/cache/vulkan_pipelines.bin.tmp";
+
+    size_t cacheSize = 0;
+    VkResult result = vkGetPipelineCacheData(
+        m_device, m_pipelineCache, &cacheSize, nullptr);
+    if (result == VK_SUCCESS && cacheSize > 0 &&
+        cacheSize <= 64u * 1024u * 1024u)
+    {
+        std::vector<uint8_t> cacheData(cacheSize);
+        size_t written = cacheData.size();
+        result = vkGetPipelineCacheData(
+            m_device, m_pipelineCache, &written, cacheData.data());
+        if ((result == VK_SUCCESS || result == VK_INCOMPLETE) &&
+            written >= 32 && written <= cacheData.size())
+        {
+            cacheData.resize(written);
+            if ((::mkdir(kCacheDirectory, 0777) == 0 || errno == EEXIST))
+            {
+                FILE *cacheFile = std::fopen(kCacheTempPath, "wb");
+                if (cacheFile)
+                {
+                    const bool writeOk =
+                        std::fwrite(cacheData.data(), 1, cacheData.size(), cacheFile) ==
+                        cacheData.size();
+                    const bool flushOk = std::fflush(cacheFile) == 0;
+                    const bool closeOk = std::fclose(cacheFile) == 0;
+                    if (writeOk && flushOk && closeOk)
+                    {
+                        bool renamed = std::rename(kCacheTempPath, kCachePath) == 0;
+                        if (!renamed && (errno == EEXIST || errno == ENOTEMPTY) &&
+                            std::remove(kCachePath) == 0)
+                        {
+                            renamed = std::rename(kCacheTempPath, kCachePath) == 0;
+                        }
+                        if (renamed)
+                        {
+                            char message[192];
+                            std::snprintf(
+                                message, sizeof(message),
+                                "[KisakCOD][VK PIPELINE CACHE] saved %zu bytes to %s\n",
+                                cacheData.size(), kCachePath);
+                            Switch_LogWrite(message);
+                        }
+                        else
+                        {
+                            std::remove(kCacheTempPath);
+                            Switch_LogWrite(
+                                "[KisakCOD][VK PIPELINE CACHE] could not replace the cache file; previous cache was kept\n");
+                        }
+                    }
+                    else
+                    {
+                        std::remove(kCacheTempPath);
+                        Switch_LogWrite(
+                            "[KisakCOD][VK PIPELINE CACHE] write/flush failed; previous cache was kept\n");
+                    }
+                }
+                else
+                {
+                    Switch_LogWrite(
+                        "[KisakCOD][VK PIPELINE CACHE] could not open the temporary cache file for writing\n");
+                }
+            }
+            else
+            {
+                Switch_LogWrite(
+                    "[KisakCOD][VK PIPELINE CACHE] could not create the cache directory\n");
+            }
+        }
+        else
+        {
+            char message[192];
+            std::snprintf(
+                message, sizeof(message),
+                "[KisakCOD][VK PIPELINE CACHE] readback failed result=%d; previous cache was kept\n",
+                static_cast<int>(result));
+            Switch_LogWrite(message);
+        }
+    }
+    else if (result != VK_SUCCESS)
+    {
+        char message[192];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][VK PIPELINE CACHE] size query failed result=%d; previous cache was kept\n",
+            static_cast<int>(result));
+        Switch_LogWrite(message);
+    }
+#endif
+
+    vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
+    m_pipelineCache = VK_NULL_HANDLE;
 }
 
 bool VulkanBackend::CreateSwapchain()
