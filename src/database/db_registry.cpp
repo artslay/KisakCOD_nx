@@ -165,7 +165,6 @@ struct DBReorderAssetEntry // sizeof=0x10
 #define POOLSIZE_AITYPE         0
 #define POOLSIZE_MPTYPE         0
 #define POOLSIZE_CHARACTER      0
-#define POOLSIZE_RAWFILE    0
 #define POOLSIZE_RAWFILE        1024
 #define POOLSIZE_STRINGTABLE    50
 
