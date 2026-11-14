@@ -3963,6 +3963,12 @@ static bool Switch_LogIsStaticModelCacheDiagnostic(const char *msg)
     return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
 }
 
+static bool Switch_LogIsSpirvCacheDiagnostic(const char *msg)
+{
+    static constexpr char prefix[] = "[KisakCOD][SPIRV CACHE]";
+    return msg && std::strncmp(msg, prefix, sizeof(prefix) - 1u) == 0;
+}
+
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
     // Keep the generic PERF/PROFILING categories out of the runtime log.
@@ -4120,6 +4126,7 @@ void Switch_LogWrite(const char *msg)
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsStaticModelCacheDiagnostic(msg) &&
+        !Switch_LogIsSpirvCacheDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
         !Switch_LogIsStartupMessage(msg) &&
         !Switch_LogIsLevelLoadMessage(msg))
