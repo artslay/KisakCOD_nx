@@ -281,9 +281,11 @@ static bool Switch_ReadStartupLanguage(
             ? fs_cdpath->current.string : nullptr
     };
     const std::string gameDirectory = game && *game ? game : "main";
+    const std::string gameLocalizationPath =
+        gameDirectory + "/localization.txt";
     const char *relativePaths[] =
     {
-        (gameDirectory + "/localization.txt").c_str(),
+        gameLocalizationPath.c_str(),
         "localization.txt"
     };
 
