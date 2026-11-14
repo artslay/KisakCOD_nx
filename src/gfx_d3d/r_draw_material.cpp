@@ -10,7 +10,7 @@
 #include <cstdio>
 
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 
 // A draw surface stores a sorted-material index, not a native pointer.
 // Validate the index before indexing rgp.sortedMaterials, then validate the
