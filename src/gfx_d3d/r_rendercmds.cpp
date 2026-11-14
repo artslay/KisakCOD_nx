@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <platform/switch/switch_perf_diag.h>
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
 #include "r_rendercmds.h"
