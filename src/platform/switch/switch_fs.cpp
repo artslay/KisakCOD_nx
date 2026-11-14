@@ -555,33 +555,24 @@ static bool Switch_DirectoryHasLocalizedIwd(
 
 static bool Switch_DirectoryHasFastfile(const std::string &directoryPath)
 {
-    DIR *directory = opendir(directoryPath.c_str());
-    if (!directory)
-        return false;
-
-    bool found = false;
-    while (dirent *entry = readdir(directory))
+    // SP renderer bootstrap zones distinguish a usable SP language package
+    // from a directory that only contains unrelated/MP localized fastfiles.
+    static constexpr const char *startupFastfiles[] =
     {
-        if (!entry->d_name || entry->d_name[0] == '.')
-            continue;
+        "code_post_gfx.ff",
+        "ui.ff",
+        "common.ff"
+    };
 
-        const std::string filename =
-            SwitchNormalizePath(entry->d_name);
-        if (filename.size() < 3 ||
-            filename.compare(filename.size() - 3, 3, ".ff") != 0)
-            continue;
-
-        const std::string fullPath = directoryPath + "/" + entry->d_name;
+    for (const char *filename : startupFastfiles)
+    {
+        const std::string fullPath = directoryPath + "/" + filename;
         struct stat st{};
         if (stat(fullPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
-        {
-            found = true;
-            break;
-        }
+            return true;
     }
 
-    closedir(directory);
-    return found;
+    return false;
 }
 
 static bool Switch_DirectoryHasLocalizedStringFiles(
