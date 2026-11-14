@@ -10679,22 +10679,34 @@ bool IDirect3DDevice9::BindDescriptorSets()
     };
     const bool vertexHasSamplers = hasSamplers(m_vertexShader->parseData);
     const bool pixelHasSamplers = hasSamplers(m_pixelShader->parseData);
-    uint32_t activeSamplerMask = 0u;
-    const auto includeShaderSamplers =
-        [&activeSamplerMask](const MOJOSHADER_parseData *parse)
+    const auto getShaderSamplerMask = [](KisakVkShader *shader)
     {
-        const int samplerCount = std::max(0, parse->sampler_count);
-        for (int i = 0; i < samplerCount; ++i)
+        if (!shader || !shader->parseData)
+            return 0u;
+
+        if (!shader->samplerMaskCached)
         {
-            const int samplerIndex = parse->samplers[i].index;
-            if (samplerIndex >= 0 && samplerIndex < 16)
-                activeSamplerMask |= 1u << static_cast<uint32_t>(samplerIndex);
+            uint32_t samplerMask = 0u;
+            const MOJOSHADER_parseData *parse = shader->parseData;
+            if (parse->samplers)
+            {
+                const int samplerCount = std::max(0, parse->sampler_count);
+                for (int i = 0; i < samplerCount; ++i)
+                {
+                    const int samplerIndex = parse->samplers[i].index;
+                    if (samplerIndex >= 0 && samplerIndex < 16)
+                        samplerMask |= 1u << static_cast<uint32_t>(samplerIndex);
+                }
+            }
+            shader->samplerMask = samplerMask;
+            shader->samplerMaskCached = true;
         }
+
+        return shader->samplerMask;
     };
-    if (vertexHasSamplers)
-        includeShaderSamplers(m_vertexShader->parseData);
-    if (pixelHasSamplers)
-        includeShaderSamplers(m_pixelShader->parseData);
+    const uint32_t activeSamplerMask =
+        getShaderSamplerMask(m_vertexShader) |
+        getShaderSamplerMask(m_pixelShader);
 
     // Image reloads can replace GfxImage::texture.basemap while a previous
     // D3D texture reference remains cached in m_textures. Rebind every active
