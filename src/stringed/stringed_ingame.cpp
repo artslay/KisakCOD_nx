@@ -214,7 +214,15 @@ void __cdecl SE_R_ListFiles(
     const char **sysFiles; // [esp+E4h] [ebp-8h]
     const char **dirFiles; // [esp+E8h] [ebp-4h]
 
+#ifdef __SWITCH__
+    // The Switch FS_ListFiles entrypoint is reserved for profile directories.
+    // Use the location-aware enumerator for the original localizedstrings
+    // tree so .str files inside selected-language IWD archives are visible.
+    dirFiles = FS_ListFilesInLocation(
+        psDir, "/", FS_LIST_PURE_ONLY, &numdirs, 63);
+#else
     dirFiles = FS_ListFiles(psDir, "/", FS_LIST_PURE_ONLY, &numdirs);
+#endif
     for (i = 0; i < numdirs; ++i)
     {
         if (*dirFiles[i])
@@ -226,7 +234,12 @@ void __cdecl SE_R_ListFiles(
             }
         }
     }
+#ifdef __SWITCH__
+    sysFiles = FS_ListFilesInLocation(
+        psDir, psExtension, FS_LIST_PURE_ONLY, &numSysFiles, 63);
+#else
     sysFiles = FS_ListFiles(psDir, psExtension, FS_LIST_PURE_ONLY, &numSysFiles);
+#endif
     for (i = 0; i < numSysFiles; ++i)
     {
         snprintf(sFilename, ARRAYSIZE(sFilename), "%s/%s", psDir, sysFiles[i]);
