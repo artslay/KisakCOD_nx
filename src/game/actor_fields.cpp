@@ -1124,8 +1124,7 @@ void __cdecl Cmd_AI_f()
     const actor_fields_s *v4; // r30
     const char *v5; // r29
     char v6[256]; // [sp+50h] [-230h] BYREF
-    char v7; // [sp+150h] [-130h] BYREF
-    char v8; // [sp+151h] [-12Fh] BYREF
+    char v7[256];
 
     v0 = 0;
     nesting = sv_cmd_args.nesting;
@@ -1178,12 +1177,12 @@ void __cdecl Cmd_AI_f()
         }
     }
 LABEL_8:
-    SV_Cmd_ArgvBuffer(1, &v7, 256);
-    v5 = &v7;
-    if (v7 == 33)
+    SV_Cmd_ArgvBuffer(1, v7, sizeof(v7));
+    v5 = v7;
+    if (v7[0] == 33)
     {
         v0 = 1;
-        v5 = &v8;
+        v5 = &v7[1];
     }
     if (isdigit(*v5))
     {
