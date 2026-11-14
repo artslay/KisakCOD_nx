@@ -592,13 +592,18 @@ void __cdecl SEH_UpdateLanguageInfo()
         Com_PrintError(CON_CHANNEL_SYSTEM, "ERROR: No languages available because no localized assets were found\n");
 
 #ifdef __SWITCH__
-    // Switch loads localization from fastfiles. The PC-only localizedstrings
-    // file pass is not applicable here, so select an installed language based
-    // on the available zone/<language> directory.
+    // Fastfile LocalizeEntry assets remain the primary lookup source, but
+    // SP language packages can also contain the original localizedstrings
+    // .str tables in localized_<language>_iw##.iwd archives. Load those
+    // tables through the same StringEd parser used by the PC engine.
     if (loc_language->current.integer >= 0 &&
         loc_language->current.integer < 15 &&
         g_languages[loc_language->current.integer].bPresent)
+    {
+        SEH_StringEd_SetLanguageStrings(
+            static_cast<uint32_t>(loc_language->current.integer));
         return;
+    }
 
     for (ia = 0; ia < 15; ++ia)
     {
@@ -606,7 +611,9 @@ void __cdecl SEH_UpdateLanguageInfo()
         {
             Dvar_SetInt(loc_language, ia);
             SEH_UpdateCurrentLanguage();
-            return;
+            if (SEH_StringEd_SetLanguageStrings(
+                    static_cast<uint32_t>(ia)))
+                return;
         }
     }
 
