@@ -27,6 +27,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cerrno>
+#include <sys/stat.h>
 #include <initializer_list>
 #include <cmath>
 #include <limits>
@@ -6963,6 +6965,522 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
 // Bounded diagnostics for shader bytecode that fails MojoShader translation.
 // This is the point where D3D9 shader-model bytecode becomes SPIR-V on Switch;
 // Vulkan pipeline logs alone cannot tell whether a shader failed before that.
+
+#ifdef __SWITCH__
+namespace
+{
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAGIC = 0x5650534Bu; // "KSPV"
+static constexpr uint32_t KISAK_SPIRV_CACHE_VERSION = 1u;
+static constexpr size_t KISAK_SPIRV_CACHE_MAX_FILE_BYTES = 8u * 1024u * 1024u;
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAX_BYTECODE_BYTES = 1024u * 1024u;
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAX_OUTPUT_BYTES = 4u * 1024u * 1024u;
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAX_UNIFORMS = 4096u;
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAX_INTERFACES = 256u;
+static constexpr uint32_t KISAK_SPIRV_CACHE_MAX_NAME_BYTES = 1024u;
+
+struct KisakSpirvCacheHeader
+{
+    uint32_t magic;
+    uint32_t version;
+    uint32_t headerBytes;
+    uint32_t stage;
+    uint32_t bytecodeBytes;
+    uint32_t outputBytes;
+    uint32_t uniformCount;
+    uint32_t samplerCount;
+    uint32_t attributeCount;
+    uint32_t outputCount;
+    uint32_t mojoShaderVersion;
+    uint32_t reserved;
+    uint64_t bytecodeHash;
+    uint64_t mojoChangesetHash;
+};
+static_assert(sizeof(KisakSpirvCacheHeader) == 64,
+    "Unexpected SPIR-V cache header layout");
+
+struct KisakSpirvUniformRecord
+{
+    int32_t type;
+    int32_t index;
+    int32_t arrayCount;
+    int32_t constant;
+    uint32_t nameBytes;
+};
+struct KisakSpirvSamplerRecord
+{
+    int32_t type;
+    int32_t index;
+    int32_t texbem;
+    uint32_t nameBytes;
+};
+struct KisakSpirvAttributeRecord
+{
+    int32_t usage;
+    int32_t index;
+    uint32_t nameBytes;
+};
+
+static std::mutex g_kisakSpirvCacheWriteMutex;
+static std::atomic<uint32_t> g_kisakSpirvCacheHitLogCount{0};
+
+static void *MOJOSHADERCALL KisakSpirvCacheAlloc(int bytes, void *)
+{
+    if (bytes <= 0)
+        return nullptr;
+    return std::malloc(static_cast<size_t>(bytes));
+}
+
+static void MOJOSHADERCALL KisakSpirvCacheFree(void *ptr, void *)
+{
+    std::free(ptr);
+}
+
+static uint64_t KisakSpirvCacheHashBytes(
+    uint64_t hash, const void *data, size_t bytes)
+{
+    const uint8_t *p = static_cast<const uint8_t *>(data);
+    for (size_t i = 0; i < bytes; ++i)
+    {
+        hash ^= p[i];
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+static uint64_t KisakSpirvCacheChangesetHash()
+{
+    static constexpr char kEmpty[] = "";
+    const char *changeset = MOJOSHADER_changeset();
+    if (!changeset)
+        changeset = kEmpty;
+    return KisakSpirvCacheHashBytes(
+        1469598103934665603ull, changeset, std::strlen(changeset));
+}
+
+static uint64_t KisakSpirvCacheBytecodeHash(
+    uint32_t stage, const void *bytecode, uint32_t bytecodeBytes)
+{
+    uint64_t hash = 1469598103934665603ull;
+    hash = KisakSpirvCacheHashBytes(hash, &stage, sizeof(stage));
+    return KisakSpirvCacheHashBytes(hash, bytecode, bytecodeBytes);
+}
+
+static bool KisakSpirvCachePath(
+    uint32_t stage, const void *bytecode, uint32_t bytecodeBytes,
+    char *path, size_t pathBytes)
+{
+    if (!bytecode || bytecodeBytes == 0 ||
+        bytecodeBytes > KISAK_SPIRV_CACHE_MAX_BYTECODE_BYTES ||
+        !path || pathBytes == 0)
+        return false;
+
+    const uint64_t hash =
+        KisakSpirvCacheBytecodeHash(stage, bytecode, bytecodeBytes);
+    const int written = std::snprintf(
+        path, pathBytes,
+        "sdmc:/switch/KisakCOD/cache/spirv/%s_%016llx.kspv",
+        stage == 1u ? "vs" : "ps",
+        static_cast<unsigned long long>(hash));
+    return written > 0 && static_cast<size_t>(written) < pathBytes;
+}
+
+static bool KisakSpirvCacheReadExact(FILE *file, void *data, size_t bytes)
+{
+    return bytes == 0 || std::fread(data, 1, bytes, file) == bytes;
+}
+
+static bool KisakSpirvCacheWriteExact(
+    FILE *file, const void *data, size_t bytes)
+{
+    return bytes == 0 || std::fwrite(data, 1, bytes, file) == bytes;
+}
+
+static bool KisakSpirvCacheNameBytes(const char *name, uint32_t *nameBytes)
+{
+    if (!nameBytes)
+        return false;
+    *nameBytes = 0;
+    if (!name)
+        return true;
+
+    size_t length = 0;
+    while (length <= KISAK_SPIRV_CACHE_MAX_NAME_BYTES && name[length] != '\0')
+        ++length;
+    if (length > KISAK_SPIRV_CACHE_MAX_NAME_BYTES)
+        return false;
+    *nameBytes = static_cast<uint32_t>(length);
+    return true;
+}
+
+static bool KisakSpirvCacheReadName(
+    FILE *file, uint32_t nameBytes, const char **name)
+{
+    if (!name || nameBytes > KISAK_SPIRV_CACHE_MAX_NAME_BYTES)
+        return false;
+    *name = nullptr;
+    if (nameBytes == 0)
+        return true;
+
+    char *copy = static_cast<char *>(
+        std::malloc(static_cast<size_t>(nameBytes) + 1u));
+    if (!copy)
+        return false;
+    if (!KisakSpirvCacheReadExact(file, copy, nameBytes))
+    {
+        std::free(copy);
+        return false;
+    }
+    copy[nameBytes] = '\0';
+    *name = copy;
+    return true;
+}
+
+static bool KisakSpirvCacheWriteName(
+    FILE *file, const char *name, uint32_t nameBytes)
+{
+    return nameBytes <= KISAK_SPIRV_CACHE_MAX_NAME_BYTES &&
+        KisakSpirvCacheWriteExact(file, name, nameBytes);
+}
+
+static MOJOSHADER_parseData *KisakLoadSpirvShaderCache(
+    uint32_t stage, const void *bytecode, uint32_t bytecodeBytes)
+{
+    char cachePath[192];
+    if (!KisakSpirvCachePath(
+            stage, bytecode, bytecodeBytes, cachePath, sizeof(cachePath)))
+        return nullptr;
+
+    FILE *file = std::fopen(cachePath, "rb");
+    if (!file)
+        return nullptr;
+
+    bool valid = false;
+    MOJOSHADER_parseData *parse = nullptr;
+    KisakSpirvCacheHeader header{};
+    if (std::fseek(file, 0, SEEK_END) == 0)
+    {
+        const long fileSize = std::ftell(file);
+        if (fileSize >= static_cast<long>(sizeof(header)) &&
+            static_cast<unsigned long>(fileSize) <= KISAK_SPIRV_CACHE_MAX_FILE_BYTES &&
+            std::fseek(file, 0, SEEK_SET) == 0 &&
+            KisakSpirvCacheReadExact(file, &header, sizeof(header)))
+        {
+            const uint64_t expectedHash =
+                KisakSpirvCacheBytecodeHash(stage, bytecode, bytecodeBytes);
+            valid =
+                header.magic == KISAK_SPIRV_CACHE_MAGIC &&
+                header.version == KISAK_SPIRV_CACHE_VERSION &&
+                header.headerBytes == sizeof(header) &&
+                header.stage == stage &&
+                header.bytecodeBytes == bytecodeBytes &&
+                header.outputBytes >= sizeof(uint32_t) * 2u &&
+                header.outputBytes <= KISAK_SPIRV_CACHE_MAX_OUTPUT_BYTES &&
+                (header.outputBytes % sizeof(uint32_t)) == 0 &&
+                header.uniformCount <= KISAK_SPIRV_CACHE_MAX_UNIFORMS &&
+                header.samplerCount <= 16u &&
+                header.attributeCount <= KISAK_SPIRV_CACHE_MAX_INTERFACES &&
+                header.outputCount <= KISAK_SPIRV_CACHE_MAX_INTERFACES &&
+                header.mojoShaderVersion == static_cast<uint32_t>(MOJOSHADER_version()) &&
+                header.bytecodeHash == expectedHash &&
+                header.mojoChangesetHash == KisakSpirvCacheChangesetHash();
+        }
+    }
+
+    if (valid)
+    {
+        std::vector<uint8_t> storedBytecode(header.bytecodeBytes);
+        valid = KisakSpirvCacheReadExact(
+                    file, storedBytecode.data(), storedBytecode.size()) &&
+                std::memcmp(storedBytecode.data(), bytecode, bytecodeBytes) == 0;
+    }
+
+    if (valid)
+    {
+        parse = static_cast<MOJOSHADER_parseData *>(
+            KisakSpirvCacheAlloc(
+                static_cast<int>(sizeof(MOJOSHADER_parseData)), nullptr));
+        valid = parse != nullptr;
+        if (valid)
+        {
+            std::memset(parse, 0, sizeof(*parse));
+            parse->malloc = KisakSpirvCacheAlloc;
+            parse->free = KisakSpirvCacheFree;
+            parse->profile = MOJOSHADER_PROFILE_SPIRV;
+            parse->shader_type =
+                stage == 1u ? MOJOSHADER_TYPE_VERTEX : MOJOSHADER_TYPE_PIXEL;
+            parse->mainfn = static_cast<const char *>(
+                KisakSpirvCacheAlloc(5, nullptr));
+            valid = parse->mainfn != nullptr;
+            if (valid)
+                std::memcpy(const_cast<char *>(parse->mainfn), "main", 5);
+        }
+    }
+
+    if (valid)
+    {
+        char *output = static_cast<char *>(
+            KisakSpirvCacheAlloc(static_cast<int>(header.outputBytes), nullptr));
+        valid = output != nullptr &&
+            KisakSpirvCacheReadExact(file, output, header.outputBytes);
+        if (valid)
+        {
+            uint32_t spirvMagic = 0;
+            std::memcpy(&spirvMagic, output, sizeof(spirvMagic));
+            valid = spirvMagic == 0x07230203u;
+        }
+        if (valid)
+        {
+            parse->output = output;
+            parse->output_len = static_cast<int>(header.outputBytes);
+        }
+        else
+            std::free(output);
+    }
+
+    if (valid && header.uniformCount)
+    {
+        parse->uniforms = static_cast<MOJOSHADER_uniform *>(
+            std::calloc(header.uniformCount, sizeof(MOJOSHADER_uniform)));
+        valid = parse->uniforms != nullptr;
+        if (valid)
+        {
+            parse->uniform_count = static_cast<int>(header.uniformCount);
+            for (uint32_t i = 0; valid && i < header.uniformCount; ++i)
+            {
+                KisakSpirvUniformRecord record{};
+                valid = KisakSpirvCacheReadExact(file, &record, sizeof(record)) &&
+                    record.type >= MOJOSHADER_UNIFORM_FLOAT &&
+                    record.type <= MOJOSHADER_UNIFORM_BOOL &&
+                    record.index >= 0 && record.arrayCount >= 0 &&
+                    record.constant >= 0 && record.constant <= 1 &&
+                    record.nameBytes <= KISAK_SPIRV_CACHE_MAX_NAME_BYTES;
+                if (valid)
+                {
+                    parse->uniforms[i].type =
+                        static_cast<MOJOSHADER_uniformType>(record.type);
+                    parse->uniforms[i].index = record.index;
+                    parse->uniforms[i].array_count = record.arrayCount;
+                    parse->uniforms[i].constant = record.constant;
+                    valid = KisakSpirvCacheReadName(
+                        file, record.nameBytes, &parse->uniforms[i].name);
+                }
+            }
+        }
+    }
+
+    if (valid && header.samplerCount)
+    {
+        parse->samplers = static_cast<MOJOSHADER_sampler *>(
+            std::calloc(header.samplerCount, sizeof(MOJOSHADER_sampler)));
+        valid = parse->samplers != nullptr;
+        if (valid)
+        {
+            parse->sampler_count = static_cast<int>(header.samplerCount);
+            for (uint32_t i = 0; valid && i < header.samplerCount; ++i)
+            {
+                KisakSpirvSamplerRecord record{};
+                valid = KisakSpirvCacheReadExact(file, &record, sizeof(record)) &&
+                    record.type >= MOJOSHADER_SAMPLER_UNKNOWN &&
+                    record.type <= MOJOSHADER_SAMPLER_VOLUME &&
+                    record.index >= 0 &&
+                    record.nameBytes <= KISAK_SPIRV_CACHE_MAX_NAME_BYTES;
+                if (valid)
+                {
+                    parse->samplers[i].type =
+                        static_cast<MOJOSHADER_samplerType>(record.type);
+                    parse->samplers[i].index = record.index;
+                    parse->samplers[i].texbem = record.texbem;
+                    valid = KisakSpirvCacheReadName(
+                        file, record.nameBytes, &parse->samplers[i].name);
+                }
+            }
+        }
+    }
+
+    auto readAttributes = [&](MOJOSHADER_attribute **attributes, int *count,
+                              uint32_t recordCount) -> bool
+    {
+        if (recordCount == 0)
+            return true;
+        *attributes = static_cast<MOJOSHADER_attribute *>(
+            std::calloc(recordCount, sizeof(MOJOSHADER_attribute)));
+        if (!*attributes)
+            return false;
+        *count = static_cast<int>(recordCount);
+        for (uint32_t i = 0; i < recordCount; ++i)
+        {
+            KisakSpirvAttributeRecord record{};
+            if (!KisakSpirvCacheReadExact(file, &record, sizeof(record)) ||
+                record.usage < MOJOSHADER_USAGE_UNKNOWN ||
+                record.usage >= MOJOSHADER_USAGE_TOTAL ||
+                record.index < 0 ||
+                record.nameBytes > KISAK_SPIRV_CACHE_MAX_NAME_BYTES)
+                return false;
+            (*attributes)[i].usage =
+                static_cast<MOJOSHADER_usage>(record.usage);
+            (*attributes)[i].index = record.index;
+            if (!KisakSpirvCacheReadName(
+                    file, record.nameBytes, &(*attributes)[i].name))
+                return false;
+        }
+        return true;
+    };
+
+    if (valid)
+        valid = readAttributes(
+            &parse->attributes, &parse->attribute_count, header.attributeCount);
+    if (valid)
+        valid = readAttributes(
+            &parse->outputs, &parse->output_count, header.outputCount);
+    if (valid)
+        valid = std::fgetc(file) == EOF && !std::ferror(file);
+
+    std::fclose(file);
+    if (!valid)
+    {
+        if (parse)
+            MOJOSHADER_freeParseData(parse);
+        std::remove(cachePath);
+        return nullptr;
+    }
+
+    const uint32_t logIndex =
+        g_kisakSpirvCacheHitLogCount.fetch_add(1, std::memory_order_relaxed);
+    if (logIndex < 8u)
+    {
+        char message[192];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][SPIRV CACHE] hit stage=%s bytes=%u uniforms=%u samplers=%u\n",
+            stage == 1u ? "VS" : "PS",
+            header.outputBytes, header.uniformCount, header.samplerCount);
+        Switch_LogWrite(message);
+    }
+    return parse;
+}
+
+static void KisakSaveSpirvShaderCache(
+    uint32_t stage, const void *bytecode, uint32_t bytecodeBytes,
+    const MOJOSHADER_parseData *parse)
+{
+    if (!parse || !parse->output || parse->output_len <= 0 ||
+        (parse->output_len % static_cast<int>(sizeof(uint32_t))) != 0 ||
+        static_cast<uint32_t>(parse->output_len) > KISAK_SPIRV_CACHE_MAX_OUTPUT_BYTES ||
+        bytecodeBytes > KISAK_SPIRV_CACHE_MAX_BYTECODE_BYTES ||
+        parse->uniform_count < 0 ||
+        static_cast<uint32_t>(parse->uniform_count) > KISAK_SPIRV_CACHE_MAX_UNIFORMS ||
+        parse->sampler_count < 0 || parse->sampler_count > 16 ||
+        parse->attribute_count < 0 ||
+        static_cast<uint32_t>(parse->attribute_count) > KISAK_SPIRV_CACHE_MAX_INTERFACES ||
+        parse->output_count < 0 ||
+        static_cast<uint32_t>(parse->output_count) > KISAK_SPIRV_CACHE_MAX_INTERFACES ||
+        (parse->uniform_count && !parse->uniforms) ||
+        (parse->sampler_count && !parse->samplers) ||
+        (parse->attribute_count && !parse->attributes) ||
+        (parse->output_count && !parse->outputs))
+        return;
+
+    KisakSpirvCacheHeader header{};
+    header.magic = KISAK_SPIRV_CACHE_MAGIC;
+    header.version = KISAK_SPIRV_CACHE_VERSION;
+    header.headerBytes = sizeof(header);
+    header.stage = stage;
+    header.bytecodeBytes = bytecodeBytes;
+    header.outputBytes = static_cast<uint32_t>(parse->output_len);
+    header.uniformCount = static_cast<uint32_t>(parse->uniform_count);
+    header.samplerCount = static_cast<uint32_t>(parse->sampler_count);
+    header.attributeCount = static_cast<uint32_t>(parse->attribute_count);
+    header.outputCount = static_cast<uint32_t>(parse->output_count);
+    header.mojoShaderVersion = static_cast<uint32_t>(MOJOSHADER_version());
+    header.bytecodeHash =
+        KisakSpirvCacheBytecodeHash(stage, bytecode, bytecodeBytes);
+    header.mojoChangesetHash = KisakSpirvCacheChangesetHash();
+
+    char cachePath[192];
+    if (!KisakSpirvCachePath(
+            stage, bytecode, bytecodeBytes, cachePath, sizeof(cachePath)))
+        return;
+    char tempPath[208];
+    const int tempPathLength = std::snprintf(
+        tempPath, sizeof(tempPath), "%s.tmp", cachePath);
+    if (tempPathLength <= 0 ||
+        static_cast<size_t>(tempPathLength) >= sizeof(tempPath))
+        return;
+
+    std::lock_guard<std::mutex> lock(g_kisakSpirvCacheWriteMutex);
+    FILE *existing = std::fopen(cachePath, "rb");
+    if (existing)
+    {
+        std::fclose(existing);
+        return;
+    }
+
+    if (::mkdir("sdmc:/switch/KisakCOD/cache", 0777) != 0 && errno != EEXIST)
+        return;
+    if (::mkdir("sdmc:/switch/KisakCOD/cache/spirv", 0777) != 0 && errno != EEXIST)
+        return;
+
+    FILE *file = std::fopen(tempPath, "wb");
+    if (!file)
+        return;
+
+    bool ok = KisakSpirvCacheWriteExact(file, &header, sizeof(header)) &&
+        KisakSpirvCacheWriteExact(file, bytecode, bytecodeBytes) &&
+        KisakSpirvCacheWriteExact(
+            file, parse->output, static_cast<size_t>(parse->output_len));
+
+    for (int i = 0; ok && i < parse->uniform_count; ++i)
+    {
+        KisakSpirvUniformRecord record{};
+        record.type = static_cast<int32_t>(parse->uniforms[i].type);
+        record.index = parse->uniforms[i].index;
+        record.arrayCount = parse->uniforms[i].array_count;
+        record.constant = parse->uniforms[i].constant;
+        ok = KisakSpirvCacheNameBytes(parse->uniforms[i].name, &record.nameBytes) &&
+            KisakSpirvCacheWriteExact(file, &record, sizeof(record)) &&
+            KisakSpirvCacheWriteName(file, parse->uniforms[i].name, record.nameBytes);
+    }
+
+    for (int i = 0; ok && i < parse->sampler_count; ++i)
+    {
+        KisakSpirvSamplerRecord record{};
+        record.type = static_cast<int32_t>(parse->samplers[i].type);
+        record.index = parse->samplers[i].index;
+        record.texbem = parse->samplers[i].texbem;
+        ok = KisakSpirvCacheNameBytes(parse->samplers[i].name, &record.nameBytes) &&
+            KisakSpirvCacheWriteExact(file, &record, sizeof(record)) &&
+            KisakSpirvCacheWriteName(file, parse->samplers[i].name, record.nameBytes);
+    }
+
+    auto writeAttributes = [&](const MOJOSHADER_attribute *attributes,
+                               int count) -> bool
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            KisakSpirvAttributeRecord record{};
+            record.usage = static_cast<int32_t>(attributes[i].usage);
+            record.index = attributes[i].index;
+            if (!KisakSpirvCacheNameBytes(attributes[i].name, &record.nameBytes) ||
+                !KisakSpirvCacheWriteExact(file, &record, sizeof(record)) ||
+                !KisakSpirvCacheWriteName(file, attributes[i].name, record.nameBytes))
+                return false;
+        }
+        return true;
+    };
+
+    if (ok)
+        ok = writeAttributes(parse->attributes, parse->attribute_count);
+    if (ok)
+        ok = writeAttributes(parse->outputs, parse->output_count);
+
+    const bool flushOk = ok && std::fflush(file) == 0;
+    const bool closeOk = std::fclose(file) == 0;
+    if (!flushOk || !closeOk || std::rename(tempPath, cachePath) != 0)
+        std::remove(tempPath);
+}
+} // namespace
+#endif
+
 static void SwitchLogShaderTranslationFailure(
     const char *stage, const MOJOSHADER_parseData *parse, uint32_t bytecodeSize)
 {
@@ -7028,12 +7546,21 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     if (!out || !bytecode || !bytecodeSize)
         return E_FAIL;
 
-    const MOJOSHADER_parseData *parse = MOJOSHADER_parse(
-        MOJOSHADER_PROFILE_SPIRV,
-        "main",
-        static_cast<const unsigned char *>(bytecode),
-        bytecodeSize,
-        nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
+    const MOJOSHADER_parseData *parse = nullptr;
+#ifdef __SWITCH__
+    bool shaderCacheHit = false;
+    parse = KisakLoadSpirvShaderCache(1u, bytecode, bytecodeSize);
+    shaderCacheHit = parse != nullptr;
+#endif
+    if (!parse)
+    {
+        parse = MOJOSHADER_parse(
+            MOJOSHADER_PROFILE_SPIRV,
+            "main",
+            static_cast<const unsigned char *>(bytecode),
+            bytecodeSize,
+            nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
+    }
 
     if (!parse || parse->error_count || parse->shader_type != MOJOSHADER_TYPE_VERTEX ||
         parse->output_len <= 0)
@@ -7044,6 +7571,10 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
         return E_FAIL;
     }
 
+#ifdef __SWITCH__
+    if (!shaderCacheHit)
+        KisakSaveSpirvShaderCache(1u, bytecode, bytecodeSize, parse);
+#endif
     auto *shader = new IDirect3DVertexShader9;
     shader->serial = g_nextSwitchResourceSerial.fetch_add(1, std::memory_order_relaxed);
     shader->stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -7061,12 +7592,21 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     if (!out || !bytecode || !bytecodeSize)
         return E_FAIL;
 
-    const MOJOSHADER_parseData *parse = MOJOSHADER_parse(
-        MOJOSHADER_PROFILE_SPIRV,
-        "main",
-        static_cast<const unsigned char *>(bytecode),
-        bytecodeSize,
-        nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
+    const MOJOSHADER_parseData *parse = nullptr;
+#ifdef __SWITCH__
+    bool shaderCacheHit = false;
+    parse = KisakLoadSpirvShaderCache(2u, bytecode, bytecodeSize);
+    shaderCacheHit = parse != nullptr;
+#endif
+    if (!parse)
+    {
+        parse = MOJOSHADER_parse(
+            MOJOSHADER_PROFILE_SPIRV,
+            "main",
+            static_cast<const unsigned char *>(bytecode),
+            bytecodeSize,
+            nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
+    }
 
     if (!parse || parse->error_count || parse->shader_type != MOJOSHADER_TYPE_PIXEL ||
         parse->output_len <= 0)
@@ -7077,6 +7617,10 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
         return E_FAIL;
     }
 
+#ifdef __SWITCH__
+    if (!shaderCacheHit)
+        KisakSaveSpirvShaderCache(2u, bytecode, bytecodeSize, parse);
+#endif
     auto *shader = new IDirect3DPixelShader9;
     shader->serial = g_nextSwitchResourceSerial.fetch_add(1, std::memory_order_relaxed);
     shader->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
