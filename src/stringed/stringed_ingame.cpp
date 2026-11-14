@@ -13,9 +13,23 @@ char sTemp[64];
 const char *__cdecl SE_GetString(const char *psPackageAndStringReference)
 {
     if (IsFastFileLoad())
-        return SE_GetString_FastFile(psPackageAndStringReference);
-    else
+    {
+        const char *fastFileString =
+            SE_GetString_FastFile(psPackageAndStringReference);
+#ifdef __SWITCH__
+        // Switch SP packages can provide strings through localizedstrings
+        // .str files inside localized_<language>_iw##.iwd archives. Keep the
+        // fastfile asset as the primary source, then use the original parsed
+        // StringEd package when that asset is not present.
+        if (fastFileString)
+            return fastFileString;
         return (const char *)SE_GetString_LoadObj(psPackageAndStringReference);
+#else
+        return fastFileString;
+#endif
+    }
+
+    return (const char *)SE_GetString_LoadObj(psPackageAndStringReference);
 }
 
 const char *__cdecl SE_GetString_FastFile(const char *psPackageAndStringReference)
