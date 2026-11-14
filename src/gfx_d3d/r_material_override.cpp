@@ -14,7 +14,7 @@
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
 $4ABF24606230B73E4E420CE33A1F14B1 mtlOverrideGlob;
