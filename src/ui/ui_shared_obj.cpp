@@ -1744,11 +1744,15 @@ int __cdecl PC_Directive_define(source_s *source)
 
 script_s *__cdecl LoadScriptMemory(char *ptr, int length, const char *name)
 {
-    char v4; // [esp+3h] [ebp-15h]
-    script_s *v5; // [esp+8h] [ebp-10h]
-    script_s *buffer; // [esp+10h] [ebp-8h]
+    char v4;
+    script_s *v5;
+    uint8_t *allocation;
+    script_s *buffer;
+    char *scriptData;
 
-    buffer = (script_s *)GetClearedMemory(length + 1201);
+    allocation = GetClearedMemory(static_cast<uint32_t>(sizeof(script_s)) +
+                                  static_cast<uint32_t>(length) + 1u);
+    buffer = reinterpret_cast<script_s *>(allocation);
     v5 = buffer;
     do
     {
@@ -1756,17 +1760,22 @@ script_s *__cdecl LoadScriptMemory(char *ptr, int length, const char *name)
         v5->filename[0] = *name++;
         v5 = (script_s *)((char *)v5 + 1);
     } while (v4);
-    buffer->buffer = buffer[1].filename;
-    buffer->buffer[length] = 0;
+
+    // Script text lives immediately after script_s in the same allocation.
+    // Address it as trailing allocation storage, not as buffer[1].filename:
+    // the latter makes the compiler treat the text as an overrun of filename.
+    scriptData = reinterpret_cast<char *>(allocation + sizeof(script_s));
+    buffer->buffer = scriptData;
+    scriptData[length] = 0;
     buffer->length = length;
-    buffer->script_p = buffer->buffer;
-    buffer->lastscript_p = buffer->buffer;
-    buffer->end_p = &buffer->buffer[length];
+    buffer->script_p = scriptData;
+    buffer->lastscript_p = scriptData;
+    buffer->end_p = scriptData + length;
     buffer->tokenavailable = 0;
     buffer->line = 1;
     buffer->lastline = 1;
     SetScriptPunctuations(buffer);
-    memcpy((uint8_t *)buffer->buffer, (uint8_t *)ptr, length);
+    memcpy(scriptData, ptr, static_cast<size_t>(length));
     return buffer;
 }
 
