@@ -10671,15 +10671,18 @@ bool IDirect3DDevice9::BindDescriptorSets()
         descriptorPoolLock = std::unique_lock<std::mutex>(m_backend->DescriptorPoolMutex());
 
     // Only refresh resources sampled by the currently selected shaders.
-    // BindSamplerSet uses the same parsed sampler declarations; an inactive
-    // slot is refreshed before the first draw whose shader actually samples it.
+    // Shaders with no sampler declarations do not statically use their
+    // sampler descriptor set, so avoid both the resource scan and the bind.
+    const auto hasSamplers = [](const MOJOSHADER_parseData *parse)
+    {
+        return parse && parse->samplers && parse->sampler_count > 0;
+    };
+    const bool vertexHasSamplers = hasSamplers(m_vertexShader->parseData);
+    const bool pixelHasSamplers = hasSamplers(m_pixelShader->parseData);
     uint32_t activeSamplerMask = 0u;
     const auto includeShaderSamplers =
         [&activeSamplerMask](const MOJOSHADER_parseData *parse)
     {
-        if (!parse || !parse->samplers)
-            return;
-
         const int samplerCount = std::max(0, parse->sampler_count);
         for (int i = 0; i < samplerCount; ++i)
         {
@@ -10688,8 +10691,10 @@ bool IDirect3DDevice9::BindDescriptorSets()
                 activeSamplerMask |= 1u << static_cast<uint32_t>(samplerIndex);
         }
     };
-    includeShaderSamplers(m_vertexShader->parseData);
-    includeShaderSamplers(m_pixelShader->parseData);
+    if (vertexHasSamplers)
+        includeShaderSamplers(m_vertexShader->parseData);
+    if (pixelHasSamplers)
+        includeShaderSamplers(m_pixelShader->parseData);
 
     // Image reloads can replace GfxImage::texture.basemap while a previous
     // D3D texture reference remains cached in m_textures. Rebind every active
@@ -10741,14 +10746,20 @@ bool IDirect3DDevice9::BindDescriptorSets()
             Switch_LogWrite(trace);
         }
     }
-    g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
-    if (!BindSamplerSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_textures))
-        return false;
-    g_switchFrameStage = "frame/render/vulkan/descriptors/ps_sampler";
-    if (!BindSamplerSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 2, m_textures))
-        return false;
+    if (vertexHasSamplers)
+    {
+        g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
+        if (!BindSamplerSet(
+                VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_textures))
+            return false;
+    }
+    if (pixelHasSamplers)
+    {
+        g_switchFrameStage = "frame/render/vulkan/descriptors/ps_sampler";
+        if (!BindSamplerSet(
+                VK_PIPELINE_BIND_POINT_GRAPHICS, 2, m_textures))
+            return false;
+    }
 
     g_switchFrameStage = "frame/render/vulkan/descriptors/vs_uniform";
     if (!BindUniformSet(
