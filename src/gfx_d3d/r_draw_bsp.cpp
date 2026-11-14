@@ -708,7 +708,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                 command.indexCount = static_cast<uint32_t>(batchTriCount * 3u);
                 command.instanceCount = 1u;
                 command.firstIndex = batchBaseIndex;
-                command.vertexOffset = static_cast<int32_t>(batchTris->firstVertex);
+                command.vertexOffset = 0;
                 command.firstInstance = 0u;
                 switchIndirectCommands.emplace_back(command);
                 switchIndirectVertexCounts.emplace_back(batchTris->vertexCount);
@@ -780,8 +780,6 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
                     &rgp.world->dpvs.surfaces[list[0].baseSurfIndex];
                 R_SetStreamsForBspSurface(
                     &context.state->prim, &firstIndirectSurface->tris);
-                R_SetStreamSource(
-                    &context.state->prim, rgp.world->vd.worldVb, 0u, 44u);
 
                 if (context.state->prim.device->DrawIndexedPrimitiveIndirect(
                         switchIndirectCommands.data(),
@@ -874,10 +872,6 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         !r_drawPrimCap->current.integer &&
         !r_skipDrawTris->current.enabled &&
         !(r_logFile && r_logFile->current.integer);
-    const bool switchIndirectUseAbsoluteVertexOffset =
-        switchUseIndirectDraw &&
-        g_layerDataStride[context.state->prim.vertDeclType] == 0;
-
     static thread_local std::vector<VkDrawIndexedIndirectCommand> switchIndirectDraws;
     static thread_local std::vector<uint32_t> switchIndirectVertexCounts;
     static thread_local std::vector<const srfTriangles_t *> switchIndirectSurfaces;
@@ -939,14 +933,6 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             if (switchUseIndirectDraw && switchIndirectDraws.size() > 1u)
             {
                 R_SetStreamsForBspSurface(&context.state->prim, batchTris);
-                if (switchIndirectUseAbsoluteVertexOffset)
-                {
-                    // Non-layered BSP geometry can share a zero-based world
-                    // vertex binding; each indirect command supplies its
-                    // absolute firstVertex as vertexOffset.
-                    R_SetStreamSource(
-                        &context.state->prim, rgp.world->vd.worldVb, 0u, 44u);
-                }
                 const HRESULT drawResult =
                     context.state->prim.device->DrawIndexedPrimitiveIndirect(
                         switchIndirectDraws.data(),
@@ -1022,39 +1008,11 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 reflectionProbeIndex == bspSurf->reflectionProbeIndex &&
                 lightmapIndex == bspSurf->lightmapIndex;
 
-            bool compatibleIndirectVertexOffset = false;
-            if (switchUseIndirectDraw && batchTris && sameLighting)
-            {
-                if (switchIndirectUseAbsoluteVertexOffset)
-                {
-                    // With no layer stream, bind the world vertex buffer at
-                    // zero and use each surface's absolute firstVertex.
-                    compatibleIndirectVertexOffset =
-                        tris->firstVertex <= static_cast<uint32_t>(INT32_MAX);
-                }
-                else if (tris->firstVertex >= batchTris->firstVertex)
-                {
-                    const uint64_t vertexDelta =
-                        static_cast<uint64_t>(tris->firstVertex) -
-                        static_cast<uint64_t>(batchTris->firstVertex);
-                    if (vertexDelta <= static_cast<uint64_t>(INT32_MAX))
-                    {
-                        const uint32_t layerStride =
-                            static_cast<uint32_t>(g_layerDataStride[context.state->prim.vertDeclType]);
-                        const int64_t expectedLayerOffset =
-                            static_cast<int64_t>(batchTris->vertexLayerData) +
-                            static_cast<int64_t>(vertexDelta) *
-                                static_cast<int64_t>(layerStride);
-                        compatibleIndirectVertexOffset =
-                            expectedLayerOffset ==
-                            static_cast<int64_t>(tris->vertexLayerData);
-                    }
-                }
-            }
-
-            // Layered declarations keep the original relative-offset rule so
-            // stream 1 remains aligned; non-layered declarations use the
-            // common zero-based world vertex binding above.
+            // Indirect commands share one bound vertex-stream base. Keep a
+            // batch only when every surface has the exact same stream range;
+            // the per-command vertexOffset then remains zero, as in D3D9.
+            const bool compatibleIndirectVertexOffset =
+                switchUseIndirectDraw && sameVertexStream;
             if (batchTris &&
                 (!sameLighting ||
                  (switchUseIndirectDraw
@@ -1090,11 +1048,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 draw.indexCount = 3u * list[index].totalTriCount;
                 draw.instanceCount = 1u;
                 draw.firstIndex = baseIndex;
-                draw.vertexOffset = switchIndirectUseAbsoluteVertexOffset
-                    ? static_cast<int32_t>(tris->firstVertex)
-                    : static_cast<int32_t>(
-                        static_cast<int64_t>(tris->firstVertex) -
-                        static_cast<int64_t>(batchTris->firstVertex));
+                draw.vertexOffset = 0;
                 draw.firstInstance = 0u;
 
                 if (!switchIndirectDraws.empty())
