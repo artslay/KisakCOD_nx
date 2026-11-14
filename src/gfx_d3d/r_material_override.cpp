@@ -303,7 +303,7 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
 
     for (uint32_t i = 0; i < 9u; ++i)
     {
-        const XBlock &block = g_streamBlocks[i];
+        const XZoneBlock &block = g_streamBlocks[i];
         if (!block.data || !block.size)
             continue;
 
@@ -437,7 +437,7 @@ static bool Switch_IsStreamDataRange(uintptr_t address, size_t byteCount)
 
     for (uint32_t i = 0; i < 9u; ++i)
     {
-        const XBlock &block = g_streamBlocks[i];
+        const XZoneBlock &block = g_streamBlocks[i];
         if (!block.data || !block.size)
             continue;
 
@@ -519,7 +519,7 @@ static bool Switch_IsValidTechniqueSetName(const char *name)
     // NUL-terminated string inside the containing stream block.
     for (uint32_t i = 0; i < 9u; ++i)
     {
-        const XBlock &block = g_streamBlocks[i];
+        const XZoneBlock &block = g_streamBlocks[i];
         if (!block.data || !block.size)
             continue;
 
