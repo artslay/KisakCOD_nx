@@ -34,7 +34,7 @@ extern void Switch_LogWrite(const char *msg);
 extern int __cdecl Dvar_GetInt(const char *dvarName);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_UI_ResetStatementValidationCache(void);
 #endif
 
