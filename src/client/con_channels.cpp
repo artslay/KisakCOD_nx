@@ -50,7 +50,7 @@ char __cdecl Con_OpenChannel(char *name, bool allowScript)
     if (!alreadyExists)
     {
         I_strncpyz(pcGlob.openChannels[index].name, name, 32);
-        *((_BYTE *)pcGlob.filters[-263] + 33 * index) = allowScript;
+        pcGlob.openChannels[index].allowScript = allowScript;
     }
     return 1;
 }
@@ -60,7 +60,7 @@ bool __cdecl Con_ScriptHasPermission(uint32_t channel)
     if (channel >= 0x100)
         return 0;
     if (pcGlob.openChannels[channel].name[0])
-        return *((_BYTE *)pcGlob.filters[-263] + 33 * channel);
+        return pcGlob.openChannels[channel].allowScript;
     return 0;
 }
 
