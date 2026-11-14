@@ -80,7 +80,10 @@ static std::vector<SwitchIwdEntry> g_iwdEntryRecords;
 static std::unordered_map<std::string, uint32_t> g_iwdEntries;
 static std::string g_switchSelectedLanguage = "english";
 static std::string g_switchPrimaryGame = "main";
+static bool g_switchLanguageResolved = false;
 static SwitchZipHandle g_zipHandles[65] = {};
+
+const char *FS_SwitchGetStartupLanguage();
 
 static int AllocHandle();
 
@@ -257,58 +260,123 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         Switch_LogWrite(trace);
 }
 
-static std::string Switch_GetStartupLanguage(const char *game)
+static bool Switch_ReadStartupLanguage(
+    const char *game,
+    char *languageName,
+    size_t languageNameSize)
 {
+    if (!languageName || languageNameSize == 0)
+        return false;
+
     const char *base = fs_basepath && fs_basepath->current.string[0]
         ? fs_basepath->current.string
         : kSwitchRoot;
-
-    char path[256];
-    std::snprintf(
-        path,
-        sizeof(path),
-        "%s/localization.txt",
-        base);
-
-    FILE *file = FS_FileOpenReadBinary(path);
-    if (file)
+    const char *roots[] =
     {
-        char requested[64] = {};
-        const size_t count = std::fread(
-            requested,
-            1,
-            sizeof(requested) - 1,
-            file);
-        std::fclose(file);
+        base,
+        kSwitchRoot,
+        fs_homepath && fs_homepath->current.string[0]
+            ? fs_homepath->current.string : nullptr,
+        fs_cdpath && fs_cdpath->current.string[0]
+            ? fs_cdpath->current.string : nullptr
+    };
+    const std::string gameDirectory = game && *game ? game : "main";
+    const char *relativePaths[] =
+    {
+        (gameDirectory + "/localization.txt").c_str(),
+        "localization.txt"
+    };
 
-        size_t begin = 0;
-        while (begin < count &&
-            (requested[begin] == ' ' ||
-             requested[begin] == '\t'))
-            ++begin;
+    for (size_t rootIndex = 0; rootIndex < ARRAY_COUNT(roots); ++rootIndex)
+    {
+        const char *root = roots[rootIndex];
+        if (!root || !*root)
+            continue;
 
-        size_t end = begin;
-        while (end < count &&
-            requested[end] != '\r' &&
-            requested[end] != '\n' &&
-            requested[end] != ' ' &&
-            requested[end] != '\t')
-            ++end;
-
-        requested[end] = 0;
-
-        int languageIndex = 0;
-        if (requested[begin] &&
-            SEH_GetLanguageIndexForName(requested + begin, &languageIndex))
+        bool duplicateRoot = false;
+        for (size_t previous = 0; previous < rootIndex; ++previous)
         {
-            const char *languageName = SEH_GetLanguageName(languageIndex);
-            if (loc_language)
-                Dvar_SetInt((dvar_s *)loc_language, languageIndex);
-            return languageName ? languageName : "english";
+            if (roots[previous] && !I_stricmp(roots[previous], root))
+            {
+                duplicateRoot = true;
+                break;
+            }
+        }
+        if (duplicateRoot)
+            continue;
+
+        for (const char *relativePath : relativePaths)
+        {
+            char path[512];
+            const int pathLength = std::snprintf(
+                path,
+                sizeof(path),
+                "%s/%s",
+                root,
+                relativePath);
+            if (pathLength < 0 ||
+                static_cast<size_t>(pathLength) >= sizeof(path))
+                continue;
+
+            FILE *file = FS_FileOpenReadBinary(path);
+            if (!file)
+                continue;
+
+            char requested[64] = {};
+            const size_t count = std::fread(
+                requested,
+                1,
+                sizeof(requested) - 1,
+                file);
+            std::fclose(file);
+
+            size_t begin = 0;
+            if (count >= 3 &&
+                static_cast<unsigned char>(requested[0]) == 0xEF &&
+                static_cast<unsigned char>(requested[1]) == 0xBB &&
+                static_cast<unsigned char>(requested[2]) == 0xBF)
+                begin = 3;
+
+            while (begin < count &&
+                (requested[begin] == ' ' ||
+                 requested[begin] == '\t' ||
+                 requested[begin] == '\r' ||
+                 requested[begin] == '\n'))
+                ++begin;
+
+            size_t end = begin;
+            while (end < count &&
+                requested[end] != '\r' &&
+                requested[end] != '\n' &&
+                requested[end] != ' ' &&
+                requested[end] != '\t')
+                ++end;
+
+            if (end == begin || end - begin >= languageNameSize)
+                continue;
+
+            char requestedLanguage[64] = {};
+            std::memcpy(
+                requestedLanguage,
+                requested + begin,
+                end - begin);
+
+            int languageIndex = 0;
+            if (!SEH_GetLanguageIndexForName(
+                    requestedLanguage,
+                    &languageIndex))
+                continue;
+
+            const char *resolvedName = SEH_GetLanguageName(languageIndex);
+            if (!resolvedName || !*resolvedName)
+                continue;
+
+            I_strncpyz(languageName, resolvedName, languageNameSize);
+            return true;
         }
     }
 
-    return "english";
+    return false;
 }
 
 static bool Switch_GetLocalizedIwdLanguage(
@@ -440,6 +508,184 @@ static std::vector<std::string> Switch_GetGameSearchDirectories(
     return directories;
 }
 
+static bool Switch_DirectoryHasLocalizedIwd(
+    const std::string &directoryPath,
+    const char *languageName)
+{
+    if (!languageName || !*languageName)
+        return false;
+
+    DIR *directory = opendir(directoryPath.c_str());
+    if (!directory)
+        return false;
+
+    bool found = false;
+    while (dirent *entry = readdir(directory))
+    {
+        if (!entry->d_name || entry->d_name[0] == '.')
+            continue;
+
+        const std::string normalizedName =
+            SwitchNormalizePath(entry->d_name);
+        if (normalizedName.size() < 4 ||
+            normalizedName.compare(
+                normalizedName.size() - 4,
+                4,
+                ".iwd") != 0)
+            continue;
+
+        char archiveLanguage[64] = {};
+        if (Switch_GetLocalizedIwdLanguage(
+                normalizedName.c_str(),
+                archiveLanguage,
+                sizeof(archiveLanguage)) &&
+            !I_stricmp(archiveLanguage, languageName))
+        {
+            found = true;
+            break;
+        }
+    }
+
+    closedir(directory);
+    return found;
+}
+
+static bool Switch_DirectoryHasFastfile(const std::string &directoryPath)
+{
+    DIR *directory = opendir(directoryPath.c_str());
+    if (!directory)
+        return false;
+
+    bool found = false;
+    while (dirent *entry = readdir(directory))
+    {
+        if (!entry->d_name || entry->d_name[0] == '.')
+            continue;
+
+        const std::string filename =
+            SwitchNormalizePath(entry->d_name);
+        if (filename.size() < 3 ||
+            filename.compare(filename.size() - 3, 3, ".ff") != 0)
+            continue;
+
+        const std::string fullPath = directoryPath + "/" + entry->d_name;
+        struct stat st{};
+        if (stat(fullPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            found = true;
+            break;
+        }
+    }
+
+    closedir(directory);
+    return found;
+}
+
+static bool Switch_LanguageHasAssetsOnDisk(
+    const char *languageName,
+    const char *game)
+{
+    if (!languageName || !*languageName)
+        return false;
+
+    const char *base = fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string
+        : kSwitchRoot;
+
+    std::vector<std::string> roots;
+    const char *rootCandidates[] =
+    {
+        base,
+        kSwitchRoot,
+        fs_homepath && fs_homepath->current.string[0]
+            ? fs_homepath->current.string : nullptr,
+        fs_cdpath && fs_cdpath->current.string[0]
+            ? fs_cdpath->current.string : nullptr
+    };
+
+    for (const char *root : rootCandidates)
+    {
+        if (!root || !*root)
+            continue;
+
+        bool duplicate = false;
+        for (const std::string &existing : roots)
+        {
+            if (!I_stricmp(existing.c_str(), root))
+            {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate)
+            roots.emplace_back(root);
+    }
+
+    for (const std::string &root : roots)
+    {
+        const std::string zoneDirectory =
+            root + "/zone/" + languageName;
+        if (Switch_DirectoryHasFastfile(zoneDirectory))
+            return true;
+    }
+
+    const std::vector<std::string> searchDirectories =
+        Switch_GetGameSearchDirectories(
+            base,
+            game && *game ? game : "main",
+            languageName);
+
+    for (const std::string &directory : searchDirectories)
+    {
+        if (Switch_DirectoryHasLocalizedIwd(directory, languageName))
+            return true;
+    }
+
+    return false;
+}
+
+static std::string Switch_GetStartupLanguage(const char *game)
+{
+    char requestedLanguage[64] = {};
+    if (Switch_ReadStartupLanguage(
+            game,
+            requestedLanguage,
+            sizeof(requestedLanguage)) &&
+        Switch_LanguageHasAssetsOnDisk(requestedLanguage, game))
+        return requestedLanguage;
+
+    // Honor a non-default loc_language selection when its matching package
+    // is installed. The default value is English, so probe installed
+    // non-English packages before treating that default as an explicit choice.
+    if (loc_language &&
+        loc_language->current.integer > 0 &&
+        loc_language->current.integer < 15)
+    {
+        const char *languageName =
+            SEH_GetLanguageName(loc_language->current.integer);
+        if (languageName &&
+            Switch_LanguageHasAssetsOnDisk(languageName, game))
+            return languageName;
+    }
+
+    // A SP installation may carry its translation only in
+    // localized_<language>_iw##.iwd archives under main/, without a matching
+    // zone/<language>/ directory or MP localized fastfiles.
+    for (int i = 1; i < 15; ++i)
+    {
+        const char *languageName = SEH_GetLanguageName(i);
+        if (languageName &&
+            Switch_LanguageHasAssetsOnDisk(languageName, game))
+            return languageName;
+    }
+
+    const char *english = SEH_GetLanguageName(0);
+    if (english && Switch_LanguageHasAssetsOnDisk(english, game))
+        return english;
+
+    return "english";
+}
+
 static void Switch_IndexIwdDirectory(
     const std::string &directoryPath,
     const std::string &selectedLanguage)
@@ -534,7 +780,7 @@ static void Switch_IndexIwdArchives(const char *game)
         : kSwitchRoot;
     const char *gameName = game && *game ? game : "main";
     g_switchPrimaryGame = gameName;
-    g_switchSelectedLanguage = Switch_GetStartupLanguage(gameName);
+    g_switchSelectedLanguage = FS_SwitchGetStartupLanguage();
 
     const std::vector<std::string> searchDirectories =
         Switch_GetGameSearchDirectories(
@@ -868,6 +1114,29 @@ int __cdecl FS_SwitchOpenRootFd(const char *path)
     return ::open(resolved, O_RDONLY);
 }
 
+const char *FS_SwitchGetStartupLanguage()
+{
+    if (!g_switchLanguageResolved)
+    {
+        const char *gameName =
+            g_switchPrimaryGame.empty()
+                ? "main"
+                : g_switchPrimaryGame.c_str();
+        g_switchSelectedLanguage =
+            Switch_GetStartupLanguage(gameName);
+        g_switchLanguageResolved = true;
+    }
+
+    int languageIndex = 0;
+    if (loc_language &&
+        SEH_GetLanguageIndexForName(
+            g_switchSelectedLanguage.c_str(),
+            &languageIndex))
+        Dvar_SetInt((dvar_s *)loc_language, languageIndex);
+
+    return g_switchSelectedLanguage.c_str();
+}
+
 bool __cdecl FS_SwitchLanguageHasAssets(int iLanguage)
 {
     if (iLanguage < 0 || iLanguage >= 15)
@@ -877,11 +1146,7 @@ bool __cdecl FS_SwitchLanguageHasAssets(int iLanguage)
     if (!languageName || !*languageName)
         return false;
 
-    char path[256];
-    std::snprintf(path, sizeof(path), "%s/zone/%s", kSwitchRoot, languageName);
-
-    struct stat st{};
-    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+    return Switch_LanguageHasAssetsOnDisk(languageName, "main");
 }
 #endif
 
