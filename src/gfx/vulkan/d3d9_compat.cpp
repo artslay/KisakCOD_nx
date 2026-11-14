@@ -12425,18 +12425,20 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
         maximumVertexIndex = std::max(maximumVertexIndex, lastVertex);
     }
 
-    // Every indirect draw shares the currently bound stream bases. Validate
-    // the largest effective vertex against each active declaration element.
+    // Validate the declaration layout once per active stream. A world vertex
+    // declaration commonly has several attributes in stream 0; checking the
+    // same buffer range separately for every attribute repeats identical work.
+    std::array<uint32_t, 16> streamMaxElementEnd{};
+    uint16_t declarationStreamMask = 0u;
     for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
     {
         if (element.Stream >= 16u)
             continue;
-        const StreamBinding &stream = m_streams[element.Stream];
-        if (!stream.buffer || !stream.stride)
-            return E_FAIL;
 
-        auto *vertexBuffer = static_cast<KisakVkBuffer *>(stream.buffer);
-        if (!vertexBuffer || vertexBuffer->buffer == VK_NULL_HANDLE)
+        const uint32_t streamIndex = element.Stream;
+        declarationStreamMask |= static_cast<uint16_t>(1u << streamIndex);
+        const StreamBinding &stream = m_streams[streamIndex];
+        if (!stream.stride)
             return E_FAIL;
 
         const uint32_t elementType =
@@ -12447,19 +12449,42 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
 
         const uint32_t elementOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element, stream.stride);
+        if (elementOffset > stream.stride ||
+            elementSize > stream.stride - elementOffset)
+            return E_FAIL;
+
+        streamMaxElementEnd[streamIndex] = std::max(
+            streamMaxElementEnd[streamIndex], elementOffset + elementSize);
+    }
+
+    for (uint32_t streamIndex = 0; streamIndex < 16u; ++streamIndex)
+    {
+        if (!(declarationStreamMask & (1u << streamIndex)))
+            continue;
+
+        const StreamBinding &stream = m_streams[streamIndex];
+        if (!stream.buffer || !stream.stride)
+            return E_FAIL;
+
+        auto *vertexBuffer = static_cast<KisakVkBuffer *>(stream.buffer);
+        if (!vertexBuffer || vertexBuffer->buffer == VK_NULL_HANDLE)
+            return E_FAIL;
+
+        const uint32_t elementEnd = streamMaxElementEnd[streamIndex];
+        if (!elementEnd)
+            continue;
+
         const uint64_t bufferSize = vertexBuffer->size;
         const uint64_t streamOffset = stream.offset;
         const uint64_t stride = stream.stride;
-        if (streamOffset > bufferSize || elementOffset > stride ||
-            elementSize > stride - elementOffset ||
+        if (streamOffset > bufferSize ||
             maximumVertexIndex > (bufferSize - streamOffset) / stride)
             return E_FAIL;
 
         const uint64_t vertexStart =
             streamOffset + maximumVertexIndex * stride;
         if (vertexStart > bufferSize ||
-            elementOffset > bufferSize - vertexStart ||
-            elementSize > bufferSize - vertexStart - elementOffset)
+            elementEnd > bufferSize - vertexStart)
             return E_FAIL;
     }
 
