@@ -7473,7 +7473,11 @@ static void KisakSaveSpirvShaderCache(
     if (ok)
         ok = writeAttributes(parse->outputs, parse->output_count);
 
-    const bool flushOk = ok && std::fflush(file) == 0;
+    const long cacheFileBytes = std::ftell(file);
+    const bool sizeOk = cacheFileBytes >= 0 &&
+        static_cast<unsigned long>(cacheFileBytes) <=
+            KISAK_SPIRV_CACHE_MAX_FILE_BYTES;
+    const bool flushOk = ok && sizeOk && std::fflush(file) == 0;
     const bool closeOk = std::fclose(file) == 0;
     if (!flushOk || !closeOk || std::rename(tempPath, cachePath) != 0)
         std::remove(tempPath);
@@ -7581,7 +7585,11 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
     std::memcpy(shader->spirv.data(), parse->output, parse->output_len);
-    SwitchLogShaderTranslationSuccess("VS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
+#ifdef __SWITCH__
+    if (!shaderCacheHit)
+#endif
+        SwitchLogShaderTranslationSuccess(
+            "VS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
     *out = shader;
     return S_OK;
 }
@@ -7627,7 +7635,11 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
     std::memcpy(shader->spirv.data(), parse->output, parse->output_len);
-    SwitchLogShaderTranslationSuccess("PS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
+#ifdef __SWITCH__
+    if (!shaderCacheHit)
+#endif
+        SwitchLogShaderTranslationSuccess(
+            "PS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
     *out = shader;
     return S_OK;
 }
