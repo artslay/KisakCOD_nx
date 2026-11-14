@@ -195,8 +195,8 @@ $(BUILD)/.switch-build-mode: FORCE
 	stamp='$(BUILD)/.switch-build-mode'; \
 	if [ ! -f "$$stamp" ] || [ "$$(cat "$$stamp")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$$stamp"; \
+		rm -f $(OBJECTS); \
 	fi
-
 # Mesa/NVK's static libvulkan.a references zstd; make the missing portlib explicit
 # instead of letting ld fail later with the vague `cannot find -lzstd` message.
 check-switch-deps:
@@ -241,7 +241,7 @@ $(BUILD)/src/buildnumber.o: src/buildnumber.cpp ALWAYS
 
 ALWAYS:
 
-$(BUILD)/%.o: %.cpp $(BUILD)/.switch-build-mode
+$(BUILD)/%.o: %.cpp | $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
@@ -251,7 +251,7 @@ $(BUILD)/%.o: %.cpp $(BUILD)/.switch-build-mode
 	rmdir "$(PROGRESS_LOCK)"; \
 	printf '  CXX [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
-$(BUILD)/%.o: %.c $(BUILD)/.switch-build-mode
+$(BUILD)/%.o: %.c | $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
@@ -261,7 +261,7 @@ $(BUILD)/%.o: %.c $(BUILD)/.switch-build-mode
 	rmdir "$(PROGRESS_LOCK)"; \
 	printf '  CC  [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
-$(BUILD)/%.o: %.S $(BUILD)/.switch-build-mode
+$(BUILD)/%.o: %.S | $(BUILD)/.switch-build-mode
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(ARCH) -MMD -MP -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
