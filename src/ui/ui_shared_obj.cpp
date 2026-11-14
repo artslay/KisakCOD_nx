@@ -3060,7 +3060,7 @@ source_s *__cdecl LoadSourceFile(char *filename)
     if (!script)
         return 0;
     script->next = 0;
-    source = (source_s *)GetMemory(0x4D0u);
+    source = (source_s *)GetMemory(sizeof(source_s));
     memset(source, 0, sizeof(source_s));
     strncpy(source->filename, filename, 0x40u);
     source->scriptstack = script;
