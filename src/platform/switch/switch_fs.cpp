@@ -592,8 +592,9 @@ static bool Switch_DirectoryHasLocalizedStringFiles(
 
     const std::string normalizedDirectory =
         SwitchNormalizePath(directoryPath.c_str());
-    const std::string languageSuffix =
-        std::string("/") + SwitchNormalizePath(languageName).c_str();
+    const std::string normalizedLanguage =
+        SwitchNormalizePath(languageName);
+    const std::string languageSuffix = "/" + normalizedLanguage;
     if (normalizedDirectory.size() <= languageSuffix.size() ||
         normalizedDirectory.compare(
             normalizedDirectory.size() - languageSuffix.size(),
