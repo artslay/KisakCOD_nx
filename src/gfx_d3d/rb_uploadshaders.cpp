@@ -7,7 +7,7 @@
 #include <cstdio>
 extern MaterialTechnique *Switch_ResolveTechniqueForRender(MaterialTechniqueSet *techSet, uint32_t techType);
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
 #include "r_dvars.h"
