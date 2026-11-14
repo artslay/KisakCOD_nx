@@ -53,7 +53,7 @@ LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libn
 # Compile and link every engine translation unit with the same optimization mode.
 # LTO is enabled by default; set KISAK_SWITCH_LTO=0 for a comparison build.
 ifeq ($(KISAK_SWITCH_LTO),1)
-LTO_FLAGS := -flto
+LTO_FLAGS := -flto=4
 endif
 
 # PGO must be used for both compilation and final linking. Generate mode writes
