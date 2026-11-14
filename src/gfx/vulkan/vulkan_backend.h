@@ -152,6 +152,8 @@ public:
             m_swapchainLayouts[m_swapchainIndex] = layout;
     }
     VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
+    VkPipelineCache PipelineCache() const { return m_pipelineCache; }
+    std::mutex &PipelineCacheMutex() { return m_pipelineCacheMutex; }
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
     std::mutex &DescriptorPoolMutex() { return m_descriptorPoolMutex; }
     uint64_t FrameSerial() const { return m_frameSerial.load(std::memory_order_relaxed); }
@@ -401,6 +403,8 @@ private:
     bool CreateSurface();
     bool SelectPhysicalDevice();
     bool CreateDevice();
+    bool CreatePipelineCache();
+    void SaveAndDestroyPipelineCache();
     bool CreateSwapchain();
     bool RecreateSwapchain();
     bool CreateDefaultDepth();
@@ -495,6 +499,8 @@ private:
     VkInstance m_instance = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
     VkDevice m_device = VK_NULL_HANDLE;
+    VkPipelineCache m_pipelineCache = VK_NULL_HANDLE;
+    std::mutex m_pipelineCacheMutex;
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     uint32_t m_graphicsQueueFamily = UINT32_MAX;
 #ifdef __SWITCH__
