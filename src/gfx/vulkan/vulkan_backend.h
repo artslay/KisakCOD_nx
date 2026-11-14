@@ -9,6 +9,7 @@
 #include <vector>
 #include <functional>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vulkan/vulkan.h>
@@ -121,6 +122,8 @@ public:
     void Flush() override;
 
     VkDevice Device() const { return m_device; }
+    VkPipelineCache PipelineCache() const { return m_pipelineCache; }
+    std::shared_mutex &PipelineCacheMutex() { return m_pipelineCacheMutex; }
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
     bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
     bool SupportsSamplerAnisotropy() const { return m_samplerAnisotropy; }
@@ -401,6 +404,8 @@ private:
     bool CreateSurface();
     bool SelectPhysicalDevice();
     bool CreateDevice();
+    bool CreatePipelineCache();
+    void SaveAndDestroyPipelineCache();
     bool CreateSwapchain();
     bool RecreateSwapchain();
     bool CreateDefaultDepth();
@@ -495,6 +500,8 @@ private:
     VkInstance m_instance = VK_NULL_HANDLE;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
     VkDevice m_device = VK_NULL_HANDLE;
+    VkPipelineCache m_pipelineCache = VK_NULL_HANDLE;
+    std::shared_mutex m_pipelineCacheMutex;
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     uint32_t m_graphicsQueueFamily = UINT32_MAX;
 #ifdef __SWITCH__
