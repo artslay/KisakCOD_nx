@@ -47,7 +47,7 @@ GIT_COMMIT  := $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf "unkn
 
 CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno-plt -fno-semantic-interposition -std=gnu++20 -MMD -MP \
                -Wno-int-to-pointer-cast -Wno-volatile -Wno-conversion-null -Wno-multichar -Wno-stringop-overflow
-CPPFLAGS    += -DGIT_COMMIT=\\\"$(GIT_COMMIT)\\\"
+CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
 
@@ -191,10 +191,10 @@ $(ZONELOAD_OBJECTS): CXXFLAGS += -std=gnu++23 -DARCH_x64
 # while repeated builds in the same mode remain incremental.
 $(BUILD)/.switch-build-mode: FORCE
 	@mkdir -p $(BUILD)
-	@mode='LTO=$(KISAK_SWITCH_LTO);PGO=$(KISAK_SWITCH_PGO)'; \\
-	stamp='$(BUILD)/.switch-build-mode'; \\
-	if [ ! -f "$$stamp" ] || [ "$$(cat "$$stamp")" != "$$mode" ]; then \\
-		printf '%s\\n' "$$mode" > "$$stamp"; \\
+	@mode='LTO=$(KISAK_SWITCH_LTO);PGO=$(KISAK_SWITCH_PGO)'; \
+	stamp='$(BUILD)/.switch-build-mode'; \
+	if [ ! -f "$$stamp" ] || [ "$$(cat "$$stamp")" != "$$mode" ]; then \
+		printf '%s\n' "$$mode" > "$$stamp"; \
 	fi
 
 # Mesa/NVK's static libvulkan.a references zstd; make the missing portlib explicit
