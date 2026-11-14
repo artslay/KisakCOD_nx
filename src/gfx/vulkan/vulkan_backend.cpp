@@ -1665,8 +1665,25 @@ bool VulkanBackend::CreatePipelineCache()
     cacheInfo.initialDataSize = initialData.size();
     cacheInfo.pInitialData = initialData.empty() ? nullptr : initialData.data();
 
-    const VkResult result = vkCreatePipelineCache(
+    VkResult result = vkCreatePipelineCache(
         m_device, &cacheInfo, nullptr, &m_pipelineCache);
+#ifdef __SWITCH__
+    if (result != VK_SUCCESS && !initialData.empty() &&
+        result != VK_ERROR_DEVICE_LOST)
+    {
+        // Keep the game usable if the driver rejects an otherwise matching
+        // cache blob. Recreate an empty cache and discard the rejected file.
+        std::remove(kCachePath);
+        initialData.clear();
+        cacheInfo.initialDataSize = 0;
+        cacheInfo.pInitialData = nullptr;
+        m_pipelineCache = VK_NULL_HANDLE;
+        result = vkCreatePipelineCache(
+            m_device, &cacheInfo, nullptr, &m_pipelineCache);
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE CACHE] saved data rejected; retried with an empty cache\n");
+    }
+#endif
     if (result != VK_SUCCESS)
     {
         m_pipelineCache = VK_NULL_HANDLE;
