@@ -42,7 +42,7 @@ void I_strncpyz(char* dest, const char* src, int destsize)
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
 int I_stricmp(const char* s0, const char* s1)
