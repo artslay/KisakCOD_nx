@@ -19,7 +19,7 @@
 #include <cstring>
 #include <cstdlib>
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
 extern bool Switch_IsSafeMaterialShaderArgumentRange(
     const MaterialShaderArgument *arg, uint32_t argCount, const char *path);
