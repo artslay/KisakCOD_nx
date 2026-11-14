@@ -13,7 +13,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern const Material *Switch_ValidateMaterialPointerForRender(
     const Material *material,
     const char *source);
