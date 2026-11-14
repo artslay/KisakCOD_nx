@@ -10704,7 +10704,7 @@ bool IDirect3DDevice9::BindDescriptorSets()
 
         return shader->samplerMask;
     };
-    const uint32_t activeSamplerMask =
+    uint32_t remainingSamplerMask =
         getShaderSamplerMask(m_vertexShader) |
         getShaderSamplerMask(m_pixelShader);
 
@@ -10712,11 +10712,11 @@ bool IDirect3DDevice9::BindDescriptorSets()
     // D3D texture reference remains cached in m_textures. Rebind every active
     // slot to its owner's current resource before building shader descriptors.
     uint32_t slot = 0u;
-    while (activeSamplerMask)
+    while (remainingSamplerMask)
     {
-        while ((activeSamplerMask & (1u << slot)) == 0u)
+        while ((remainingSamplerMask & (1u << slot)) == 0u)
             ++slot;
-        activeSamplerMask &= ~(1u << slot);
+        remainingSamplerMask &= ~(1u << slot);
 
         auto *boundTexture = static_cast<KisakVkTexture *>(m_textures[slot]);
         if (!boundTexture || !boundTexture->sourceImage)
