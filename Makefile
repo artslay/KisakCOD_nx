@@ -192,8 +192,9 @@ $(ZONELOAD_OBJECTS): CXXFLAGS += -std=gnu++23 -DARCH_x64
 $(BUILD)/.switch-build-mode: FORCE
 	@mkdir -p $(BUILD)
 	@mode='LTO=$(KISAK_SWITCH_LTO);PGO=$(KISAK_SWITCH_PGO)'; \\
-	if [ ! -f "$@" ] || [ "$(cat "$@")" != "$mode" ]; then \\
-		printf '%s\\n' "$mode" > "$@"; \\
+	stamp='$(BUILD)/.switch-build-mode'; \\
+	if [ ! -f "$$stamp" ] || [ "$$(cat "$$stamp")" != "$$mode" ]; then \\
+		printf '%s\\n' "$$mode" > "$$stamp"; \\
 	fi
 
 # Mesa/NVK's static libvulkan.a references zstd; make the missing portlib explicit
