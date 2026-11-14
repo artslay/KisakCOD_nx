@@ -66,7 +66,7 @@ static bool Switch_TakeOneShotTraceIndex(
 #include <gfx/vulkan/vulkan_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern int __cdecl Dvar_GetInt(const char *dvarName);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 
 extern void Switch_BeginDescriptorPoolBatch();
 extern void Switch_EndDescriptorPoolBatch();
