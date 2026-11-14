@@ -7282,7 +7282,7 @@ static MOJOSHADER_parseData *KisakLoadSpirvShaderCache(
                 valid = KisakSpirvCacheReadExact(file, &record, sizeof(record)) &&
                     record.type >= MOJOSHADER_SAMPLER_UNKNOWN &&
                     record.type <= MOJOSHADER_SAMPLER_VOLUME &&
-                    record.index >= 0 &&
+                    record.index >= 0 && record.index < 16 &&
                     record.nameBytes <= KISAK_SPIRV_CACHE_MAX_NAME_BYTES;
                 if (valid)
                 {
@@ -7313,7 +7313,7 @@ static MOJOSHADER_parseData *KisakLoadSpirvShaderCache(
             if (!KisakSpirvCacheReadExact(file, &record, sizeof(record)) ||
                 record.usage < MOJOSHADER_USAGE_UNKNOWN ||
                 record.usage >= MOJOSHADER_USAGE_TOTAL ||
-                record.index < 0 ||
+                record.index < 0 || record.index >= 16 ||
                 record.nameBytes > KISAK_SPIRV_CACHE_MAX_NAME_BYTES)
                 return false;
             (*attributes)[i].usage =
