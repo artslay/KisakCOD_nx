@@ -25,6 +25,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogRaw(const char *msg);
+extern void Switch_LogWriteError(const char *msg);
 extern uint64_t DB_GetSwitchInflatedOutputBytes();
 extern bool Switch_IsStreamAsciiImageName(uintptr_t address, uint32_t *blockOut, uint32_t *offsetOut);
 extern int32_t g_switchCurrentAssetIndex;
@@ -3627,7 +3628,7 @@ void __cdecl Load_MssSound(bool atStreamStart)
                 (unsigned)serialized.data_len, (unsigned)serialized.rate,
                 serialized.bits, serialized.channels,
                 (unsigned)serialized.samples, (unsigned)serialized.block_size);
-            Switch_LogWrite(trace);
+            Switch_LogWriteError(trace);
         }
 #endif
     }
@@ -3788,7 +3789,7 @@ void __cdecl Load_LoadedSound(bool atStreamStart)
                 serialized.sound.channels,
                 (unsigned)serialized.sound.samples,
                 (unsigned)serialized.sound.block_size);
-            Switch_LogWrite(trace);
+            Switch_LogWriteError(trace);
         }
 #endif
     }

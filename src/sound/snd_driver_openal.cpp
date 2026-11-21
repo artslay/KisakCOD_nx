@@ -26,6 +26,7 @@
 #include <cstdlib>
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern void Switch_LogWriteError(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 
@@ -2548,7 +2549,8 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
             mssSound->info.format,
             (unsigned)mssSound->info.channels,
             (unsigned)mssSound->info.samples);
-        Switch_LogWrite(trace);
+        // Bypass the normal SNDDATA filter for this bounded header record.
+        Switch_LogWriteError(trace);
     }
 #endif
 
