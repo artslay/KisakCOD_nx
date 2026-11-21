@@ -617,11 +617,21 @@ void __cdecl SV_LoadGame_f()
         SV_CheckLoadGame();
 }
 
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
+static bool SV_HasContinueSave()
+{
 #ifdef KISAK_XBOX
+    return SaveExists(CONSOLE_DEFAULT_SAVE_NAME);
+#else
+    const char *saveName =
+        sv_lastSaveGame ? sv_lastSaveGame->current.string : "";
+    return saveName && saveName[0] && SaveExists(saveName);
+#endif
+}
+
 void __cdecl SV_ForceSelectSaveDevice_f()
 {
-    bool exists = SaveExists(CONSOLE_DEFAULT_SAVE_NAME);
-    Dvar_SetBool(sv_saveGameAvailable, exists);
+    Dvar_SetBool(sv_saveGameAvailable, SV_HasContinueSave());
 }
 
 void __cdecl SV_SelectSaveDevice_f()
@@ -633,8 +643,7 @@ void __cdecl SV_SelectSaveDevice_f()
             "select_save_device is not available while a game is running - use force_select_save_device instead\n");
         return;
     }
-    bool exists = SaveExists(CONSOLE_DEFAULT_SAVE_NAME);
-    Dvar_SetBool(sv_saveGameAvailable, exists);
+    Dvar_SetBool(sv_saveGameAvailable, SV_HasContinueSave());
 }
 #endif
 
@@ -1157,7 +1166,7 @@ void __cdecl SV_AddOperatorCommands()
         Cmd_SetAutoComplete("loadgame", "save", "svg");
         Cmd_AddCommandInternal("nextlevel", Cbuf_AddServerText_f, &SV_NextLevel_f_VAR);
         Cmd_AddServerCommandInternal("nextlevel", SV_NextLevel_f, &SV_NextLevel_f_VAR_SERVER);
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
         Cmd_AddCommandInternal("select_save_device", Cbuf_AddServerText_f, &SV_SelectSaveDevice_f_VAR);
         Cmd_AddServerCommandInternal("select_save_device", SV_SelectSaveDevice_f, &SV_SelectSaveDevice_f_VAR_SERVER);
         Cmd_AddCommandInternal("force_select_save_device", Cbuf_AddServerText_f, &SV_ForceSelectSaveDevice_f_VAR);
