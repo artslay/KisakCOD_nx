@@ -2428,56 +2428,103 @@ static void AL_ResamplePcmWindowedSinc(
             : static_cast<double>(src16[sampleIndex]);
     };
 
-    // A 16-tap Hann-windowed sinc low-pass suppresses energy above the new Nyquist
-    // frequency before decimation. Normalize each edge kernel to avoid attenuating
-    // the beginning/end of short sound effects.
+    // The source/output rates used by the engine are often exact power-of-two
+    // reductions (for example 44.1 kHz -> 22.05 kHz). The source position then
+    // repeats the same fractional phase for every frame. Even for other ratios,
+    // there are only a finite number of useful fractional phases. Build a
+    // polyphase table once per sound instead of evaluating sin()/cos() for every
+    // tap of every output sample.
     constexpr int kRadius = 8;
+    constexpr int kTapCount = kRadius * 2;
+    constexpr int kPhaseCount = 128;
     constexpr double kPi = 3.14159265358979323846;
     const double cutoff = 0.5 * static_cast<double>(dstRate) / srcRate;
     const double sourceStep = static_cast<double>(srcRate) / dstRate;
 
+    double *phaseWeights = static_cast<double *>(
+        std::malloc(static_cast<size_t>(kPhaseCount * kTapCount) * sizeof(double)));
+    if (!phaseWeights)
+    {
+        Com_Error(ERR_DROP, "Could not allocate sound resampler coefficients");
+        return;
+    }
+
+    for (int phase = 0; phase < kPhaseCount; ++phase)
+    {
+        double *weights = phaseWeights + phase * kTapCount;
+        const double fraction = static_cast<double>(phase) / kPhaseCount;
+        double weightSum = 0.0;
+
+        for (int tapIndex = 0; tapIndex < kTapCount; ++tapIndex)
+        {
+            const int tap = tapIndex - kRadius + 1;
+            const double distance = static_cast<double>(tap) - fraction;
+            if (std::fabs(distance) >= kRadius)
+            {
+                weights[tapIndex] = 0.0;
+                continue;
+            }
+
+            const double window = 0.5 + 0.5 * std::cos(kPi * distance / kRadius);
+            const double scaledDistance = 2.0 * cutoff * distance;
+            const double sinc = std::fabs(scaledDistance) < 1.0e-12
+                ? 1.0
+                : std::sin(kPi * scaledDistance) / (kPi * scaledDistance);
+            const double weight = 2.0 * cutoff * sinc * window;
+            weights[tapIndex] = weight;
+            weightSum += weight;
+        }
+
+        if (std::fabs(weightSum) > 1.0e-12)
+        {
+            const double inverseWeightSum = 1.0 / weightSum;
+            for (int tapIndex = 0; tapIndex < kTapCount; ++tapIndex)
+                weights[tapIndex] *= inverseWeightSum;
+        }
+        else
+        {
+            for (int tapIndex = 0; tapIndex < kTapCount; ++tapIndex)
+                weights[tapIndex] = 0.0;
+            weights[kRadius - 1] = 1.0;
+        }
+    }
+
     for (uint32_t outFrame = 0; outFrame < dstFrames; ++outFrame)
     {
-        // Preserve the sample timeline origin: output frame n represents time n/dstRate.
+        // Nearest phase selection keeps the source timeline aligned while
+        // limiting coefficient quantization to less than 1/256 of a sample.
         const double sourcePosition = static_cast<double>(outFrame) * sourceStep;
-        const int64_t center = static_cast<int64_t>(std::floor(sourcePosition));
+        int64_t center = static_cast<int64_t>(std::floor(sourcePosition));
+        const double fraction = sourcePosition - static_cast<double>(center);
+        int phase = static_cast<int>(fraction * kPhaseCount + 0.5);
+        if (phase == kPhaseCount)
+        {
+            phase = 0;
+            ++center;
+        }
+        const double *weights = phaseWeights + phase * kTapCount;
 
         for (uint32_t channel = 0; channel < channels; ++channel)
         {
             double weightedSum = 0.0;
-            double weightSum = 0.0;
-
-            for (int tap = -kRadius + 1; tap <= kRadius; ++tap)
+            for (int tapIndex = 0; tapIndex < kTapCount; ++tapIndex)
             {
-                const int64_t requestedFrame = center + tap;
-                const double distance = static_cast<double>(requestedFrame) - sourcePosition;
-                if (std::fabs(distance) >= kRadius)
-                    continue;
-
-                const double window = 0.5 + 0.5 * std::cos(kPi * distance / kRadius);
-                const double scaledDistance = 2.0 * cutoff * distance;
-                const double sinc = std::fabs(scaledDistance) < 1.0e-12
-                    ? 1.0
-                    : std::sin(kPi * scaledDistance) / (kPi * scaledDistance);
-                const double weight = 2.0 * cutoff * sinc * window;
-
+                const int64_t requestedFrame = center + tapIndex - kRadius + 1;
                 const uint32_t sourceFrame = static_cast<uint32_t>(
-                    std::clamp<int64_t>(requestedFrame, 0, static_cast<int64_t>(srcFrames) - 1));
+                    std::clamp<int64_t>(
+                        requestedFrame, 0, static_cast<int64_t>(srcFrames) - 1));
                 weightedSum += readSample(
-                    static_cast<size_t>(sourceFrame) * channels + channel) * weight;
-                weightSum += weight;
+                    static_cast<size_t>(sourceFrame) * channels + channel) *
+                    weights[tapIndex];
             }
 
-            const double value = std::fabs(weightSum) > 1.0e-12
-                ? weightedSum / weightSum
-                : readSample(static_cast<size_t>(
-                    std::clamp<int64_t>(center, 0, static_cast<int64_t>(srcFrames) - 1))
-                    * channels + channel);
-            const double clipped = std::clamp(value, -32768.0, 32767.0);
+            const double clipped = std::clamp(weightedSum, -32768.0, 32767.0);
             dst[static_cast<size_t>(outFrame) * channels + channel] =
                 static_cast<int16_t>(clipped);
         }
     }
+
+    std::free(phaseWeights);
 }
 
 void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
