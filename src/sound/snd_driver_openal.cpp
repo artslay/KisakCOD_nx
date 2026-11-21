@@ -2404,7 +2404,8 @@ void __cdecl SND_SetHWND(HWND hwnd)
 }
 
 static void AL_ResamplePcmWindowedSinc(
-    const int16_t *src,
+    const void *src,
+    uint32_t srcBits,
     uint32_t srcFrames,
     uint32_t srcRate,
     int16_t *dst,
@@ -2413,8 +2414,19 @@ static void AL_ResamplePcmWindowedSinc(
     uint32_t channels)
 {
     if (!src || !dst || srcFrames == 0 || dstFrames == 0 ||
-        srcRate == 0 || dstRate == 0 || (channels != 1 && channels != 2))
+        srcRate == 0 || dstRate == 0 || (channels != 1 && channels != 2) ||
+        (srcBits != 8 && srcBits != 16))
         return;
+
+    const uint8_t *src8 = static_cast<const uint8_t *>(src);
+    const int16_t *src16 = static_cast<const int16_t *>(src);
+    const auto readSample = [src8, src16, srcBits](size_t sampleIndex) -> double
+    {
+        // WAV 8-bit PCM is unsigned; convert its midpoint to signed 16-bit range.
+        return srcBits == 8
+            ? static_cast<double>((static_cast<int>(src8[sampleIndex]) - 128) * 256)
+            : static_cast<double>(src16[sampleIndex]);
+    };
 
     // A 16-tap Hann-windowed sinc low-pass suppresses energy above the new Nyquist
     // frequency before decimation. Normalize each edge kernel to avoid attenuating
@@ -2451,16 +2463,16 @@ static void AL_ResamplePcmWindowedSinc(
 
                 const uint32_t sourceFrame = static_cast<uint32_t>(
                     std::clamp<int64_t>(requestedFrame, 0, static_cast<int64_t>(srcFrames) - 1));
-                weightedSum += static_cast<double>(
-                    src[static_cast<size_t>(sourceFrame) * channels + channel]) * weight;
+                weightedSum += readSample(
+                    static_cast<size_t>(sourceFrame) * channels + channel) * weight;
                 weightSum += weight;
             }
 
             const double value = std::fabs(weightSum) > 1.0e-12
                 ? weightedSum / weightSum
-                : static_cast<double>(src[static_cast<size_t>(
+                : readSample(static_cast<size_t>(
                     std::clamp<int64_t>(center, 0, static_cast<int64_t>(srcFrames) - 1))
-                    * channels + channel]);
+                    * channels + channel);
             const double clipped = std::clamp(value, -32768.0, 32767.0);
             dst[static_cast<size_t>(outFrame) * channels + channel] =
                 static_cast<int16_t>(clipped);
@@ -2502,6 +2514,8 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         const uint32_t srcFrameCount = mssSound->info.samples;
         const uint32_t channels = mssSound->info.channels;
         const uint32_t srcRate = mssSound->info.rate;
+        const uint32_t sourceBits = static_cast<uint32_t>(mssSound->info.bits);
+        const uint32_t sourceBytesPerSample = sourceBits == 8 ? 1u : sizeof(int16_t);
         uint32_t rate = srcRate;
 
         while (rate > g_snd.playback_rate && rate > 1)
@@ -2511,16 +2525,23 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
             (static_cast<uint64_t>(srcFrameCount) * rate + srcRate / 2) / srcRate;
         if (srcFrameCount != 0 && frameCount64 == 0)
             frameCount64 = 1;
-        if (frameCount64 > UINT32_MAX ||
+        const uint64_t sourceDataBytes =
+            static_cast<uint64_t>(srcFrameCount) * channels * sourceBytesPerSample;
+        if (!srcData || srcRate == 0 || srcFrameCount == 0 ||
+            frameCount64 > UINT32_MAX ||
             (channels != 1 && channels != 2) ||
-            static_cast<uint64_t>(srcFrameCount) * channels * sizeof(int16_t) > mssSound->info.data_len)
+            (sourceBits != 8 && sourceBits != 16) ||
+            (sourceBits == 8 && mssSound->info.format != 1) ||
+            sourceDataBytes > mssSound->info.data_len)
         {
             Com_Error(
                 ERR_DROP,
-                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)",
+                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bits=%u format=%d bytes=%u)",
                 static_cast<unsigned>(srcFrameCount),
                 static_cast<unsigned>(channels),
                 static_cast<unsigned>(srcRate),
+                static_cast<unsigned>(sourceBits),
+                mssSound->info.format,
                 static_cast<unsigned>(mssSound->info.data_len));
             return;
         }
@@ -2550,10 +2571,9 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         }
 #endif
 
-        const int16_t *src16 = static_cast<const int16_t *>(srcData);
         int16_t *dst16 = reinterpret_cast<int16_t *>(mssSound->data);
         AL_ResamplePcmWindowedSinc(
-            src16, srcFrameCount, srcRate, dst16, frameCount, rate, channels);
+            srcData, sourceBits, srcFrameCount, srcRate, dst16, frameCount, rate, channels);
 #ifdef __SWITCH__
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] resample copy done\n");
@@ -2561,6 +2581,8 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 
         mssSound->info.rate = rate;
         mssSound->info.samples = frameCount;
+        mssSound->info.bits = 16;
+        mssSound->info.block_size = channels * sizeof(int16_t);
         mssSound->info.data_len = newDataLen;
     }
     else
@@ -2569,19 +2591,52 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] direct branch\n");
 #endif
-        mssSound->data = MSS_Alloc(mssSound->info.data_len, mssSound->info.rate);
-#ifdef __SWITCH__
-        if (switchSoundTrace)
+        if (mssSound->info.bits == 8 && mssSound->info.format == 1)
         {
-            char trace[128];
-            std::snprintf(trace, sizeof(trace),
-                "[SWITCH SNDDATA] alloc done dst=%p size=%u\n",
-                (void *)mssSound->data,
-                (unsigned)mssSound->info.data_len);
-            Switch_LogWrite(trace);
+            const uint32_t channels = static_cast<uint32_t>(mssSound->info.channels);
+            const uint64_t sampleCount =
+                static_cast<uint64_t>(mssSound->info.samples) * channels;
+            const uint64_t convertedBytes = sampleCount * sizeof(int16_t);
+            if (!srcData || (channels != 1 && channels != 2) ||
+                sampleCount > UINT32_MAX / sizeof(int16_t) ||
+                sampleCount > mssSound->info.data_len)
+            {
+                Com_Error(
+                    ERR_DROP,
+                    "Cannot convert invalid 8-bit sound data (frames=%u channels=%u bytes=%u)",
+                    static_cast<unsigned>(mssSound->info.samples),
+                    static_cast<unsigned>(channels),
+                    static_cast<unsigned>(mssSound->info.data_len));
+                return;
+            }
+
+            mssSound->data = MSS_Alloc(static_cast<uint32_t>(convertedBytes), mssSound->info.rate);
+            const uint8_t *src8 = static_cast<const uint8_t *>(srcData);
+            int16_t *dst16 = reinterpret_cast<int16_t *>(mssSound->data);
+            for (uint64_t sample = 0; sample < sampleCount; ++sample)
+                dst16[sample] = static_cast<int16_t>(
+                    (static_cast<int>(src8[sample]) - 128) * 256);
+
+            mssSound->info.bits = 16;
+            mssSound->info.block_size = channels * sizeof(int16_t);
+            mssSound->info.data_len = static_cast<uint32_t>(convertedBytes);
         }
+        else
+        {
+            mssSound->data = MSS_Alloc(mssSound->info.data_len, mssSound->info.rate);
+#ifdef __SWITCH__
+            if (switchSoundTrace)
+            {
+                char trace[128];
+                std::snprintf(trace, sizeof(trace),
+                    "[SWITCH SNDDATA] alloc done dst=%p size=%u\n",
+                    (void *)mssSound->data,
+                    (unsigned)mssSound->info.data_len);
+                Switch_LogWrite(trace);
+            }
 #endif
-        Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
+            Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
+        }
 #ifdef __SWITCH__
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] memcpy done\n");

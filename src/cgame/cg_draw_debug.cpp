@@ -250,7 +250,8 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
         farRight - textWidth * graphFontScale, drawY + 2.0f * lineAdvance,
         1, 1, graphFontScale, graphFontScale, colorWhite, 0);
 
-    return y + 3.0f * lineAdvance;
+    // Leave a full line between the graph and the first Statmon row.
+    return y + 4.0f * lineAdvance;
 #else
     if (cg_drawFPS->current.integer == 1)
     {
@@ -541,6 +542,8 @@ double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_
 
     const float availableWidth = farRight - minimumX;
     static bool overBudget[ARRAY_COUNT(meminfoData)] = {};
+    static uint32_t belowBudgetSince[ARRAY_COUNT(meminfoData)] = {};
+    const uint32_t now = static_cast<uint32_t>(Sys_Milliseconds());
 
     for (int32_t i = 0; i < ARRAY_COUNT(meminfoData); ++i)
     {
@@ -553,28 +556,40 @@ double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_
         const int hysteresisBytes =
             budgetBytes / 20 > 64 * 1024 ? budgetBytes / 20 : 64 * 1024;
 
-        // Latch an over-budget warning until usage falls at least 5% (or
-        // 64 KiB) below the limit. This prevents rapid show/hide flicker when
-        // allocations hover around a budget boundary.
+        // Keep every budgeted category visible. Only its warning color changes,
+        // so rows no longer appear/disappear as usage crosses the budget.
+        // Hold a warning for 1.5 seconds below the hysteresis threshold to avoid
+        // rapid red/white transitions while allocations are being freed/reused.
         if (overBudget[i])
         {
             if (usageBytes <= budgetBytes - hysteresisBytes)
-                overBudget[i] = false;
+            {
+                if (belowBudgetSince[i] == 0)
+                    belowBudgetSince[i] = now ? now : 1u;
+                else if (static_cast<uint32_t>(now - belowBudgetSince[i]) >= 1500u)
+                {
+                    overBudget[i] = false;
+                    belowBudgetSince[i] = 0;
+                }
+            }
+            else
+            {
+                belowBudgetSince[i] = 0;
+            }
         }
         else if (usageBytes > budgetBytes)
         {
             overBudget[i] = true;
+            belowBudgetSince[i] = 0;
         }
 
-        if (!overBudget[i])
-            continue;
-
-        const int usageMB = usageBytes / 0x100000;
+        const float usageMB =
+            static_cast<float>(usageBytes > 0 ? usageBytes : 0) / 1048576.0f;
         const float budgetMB = static_cast<float>(budgetKB) / 1024.0f;
         char *line = va(
-            "%s  %d / %.1f MB",
+            "%s  %.1f / %.1f MB",
             meminfoData[i].name,
-            usageMB,
+            static_cast<double>(usageMB),
             static_cast<double>(budgetMB));
 
         const float textWidth =
@@ -600,7 +615,7 @@ double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_
             1,
             drawScale,
             drawScale,
-            colorRedFaded,
+            overBudget[i] ? colorRedFaded : colorWhite,
             0);
         y += lineAdvance;
     }

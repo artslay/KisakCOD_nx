@@ -5755,6 +5755,13 @@ int __cdecl Item_Slider_HandleKey(UiContext *dc, itemDef_s *item, int key, int d
         if (editDef)
         {
             step = (editDef->maxVal - editDef->minVal) * 0.05000000074505806;
+            const dvar_s *sliderDvar = Dvar_FindVar(item->dvar);
+            // A 5% step can be fractional for integer sliders (for example,
+            // 0.75 for anisotropy 1..16). Dvar_SetFromStringByName then
+            // truncates that value back to the current integer, making the
+            // slider appear stuck. Use a rounded, whole-number step instead.
+            if (sliderDvar && sliderDvar->type == DVAR_TYPE_INT)
+                step = std::max(1.0f, static_cast<float>(static_cast<int>(step + 0.5f)));
             VariantString = Dvar_GetVariantString(item->dvar);
             value = atof(VariantString);
             if (key == K_LEFTARROW || key == K_PGUP)
