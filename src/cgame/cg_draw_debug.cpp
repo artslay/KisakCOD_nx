@@ -518,6 +518,94 @@ float __cdecl CG_DrawSnapshot(int32_t localClientNum, float posY)
 
 double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_t *meminfo)
 {
+#ifdef __SWITCH__
+    // Statmon reports memory categories that have exceeded their configured
+    // budgets. Keep this block aligned with the Switch FPS HUD instead of the
+    // stock PC coordinate formula, which pushes the right edge off-screen.
+    const float configuredFontScale = cg_small_dev_string_fontscale->current.value;
+    const float baseFontScale =
+        configuredFontScale > 0.0f && configuredFontScale < 4.0f
+            ? configuredFontScale * 0.75f
+            : 0.75f;
+    const float fontHeight = static_cast<float>(R_TextHeight(cgMedia.smallDevFont));
+    const float minimumX = scrPlace->virtualViewableMin[0] + 4.0f;
+    const float maximumX = scrPlace->virtualViewableMax[0] - 4.0f;
+    const float bottomY = scrPlace->virtualViewableMax[1] - 4.0f;
+    float farRight =
+        scrPlace->virtualViewableMax[0] - cg_debugInfoCornerOffset->current.value;
+
+    if (farRight > maximumX)
+        farRight = maximumX;
+    if (farRight < minimumX)
+        farRight = minimumX;
+
+    const float availableWidth = farRight - minimumX;
+    static bool overBudget[ARRAY_COUNT(meminfoData)] = {};
+
+    for (int32_t i = 0; i < ARRAY_COUNT(meminfoData); ++i)
+    {
+        const int budgetKB = meminfoData[i].budgetKB;
+        if (budgetKB <= 0)
+            continue;
+
+        const int budgetBytes = budgetKB << 10;
+        const int usageBytes = meminfo->typeTotal[i];
+        const int hysteresisBytes =
+            budgetBytes / 20 > 64 * 1024 ? budgetBytes / 20 : 64 * 1024;
+
+        // Latch an over-budget warning until usage falls at least 5% (or
+        // 64 KiB) below the limit. This prevents rapid show/hide flicker when
+        // allocations hover around a budget boundary.
+        if (overBudget[i])
+        {
+            if (usageBytes <= budgetBytes - hysteresisBytes)
+                overBudget[i] = false;
+        }
+        else if (usageBytes > budgetBytes)
+        {
+            overBudget[i] = true;
+        }
+
+        if (!overBudget[i])
+            continue;
+
+        const int usageMB = usageBytes / 0x100000;
+        const float budgetMB = static_cast<float>(budgetKB) / 1024.0f;
+        char *line = va(
+            "%s  %d / %.1f MB",
+            meminfoData[i].name,
+            usageMB,
+            static_cast<double>(budgetMB));
+
+        const float textWidth =
+            static_cast<float>(R_TextWidth(line, 0, cgMedia.smallDevFont));
+        float drawScale = baseFontScale;
+        if (textWidth > 0.0f && textWidth * drawScale > availableWidth)
+            drawScale = availableWidth / textWidth;
+
+        const float lineHeight =
+            (fontHeight > 0.0f ? fontHeight : 16.0f) * drawScale;
+        const float lineAdvance = lineHeight + 2.0f;
+        if (y + lineHeight > bottomY)
+            break;
+
+        CL_DrawText(
+            scrPlace,
+            line,
+            0x7FFFFFFF,
+            cgMedia.smallDevFont,
+            farRight - textWidth * drawScale,
+            y,
+            1,
+            1,
+            drawScale,
+            drawScale,
+            colorRedFaded,
+            0);
+        y += lineAdvance;
+    }
+    return y;
+#else
     char *v3; // eax
     float farRight; // [esp+18h] [ebp-Ch]
     char *s; // [esp+1Ch] [ebp-8h]
@@ -538,6 +626,7 @@ double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_
         }
     }
     return y;
+#endif
 }
 
 void __cdecl CG_DrawPerformanceWarnings()
