@@ -38,6 +38,7 @@
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 extern int g_switchPlayerInputTraceFrames;
+extern bool SCR_IsCurrentCinematicFadeTransition();
 
 // SF_ANIMSCRIPT serializes indices across the adjacent human and dog tables.
 // These checks prevent another ABI change from silently invalidating that map.
@@ -3363,7 +3364,14 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
 
     Com_Printf(CON_CHANNEL_FILES, "=== G_LoadGame ===\n");
     //Profile_Begin(244);
+#ifdef __SWITCH__
+    // Preserve an authored *_fade already queued for the loading-to-game
+    // handoff. Other queued cinematics still belong to the previous scene.
+    if (!SCR_IsCurrentCinematicFadeTransition())
+        R_Cinematic_UnsetNextPlayback();
+#else
     R_Cinematic_UnsetNextPlayback();
+#endif
     iassert(save);
     header = SaveMemory_GetHeader(save);
     iassert(header);
