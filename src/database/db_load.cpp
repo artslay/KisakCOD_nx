@@ -2942,7 +2942,8 @@ static XAnimPartTrans *Switch_LoadXAnimPartTrans()
         }
         else
         {
-            uint8_t *frames = DB_AllocStreamPos(3);
+            // Match the original AllocLoad_XBlendInfo() stream alignment (2 bytes).
+            uint8_t *frames = DB_AllocStreamPos(1);
             native->u.frames.frames._2 =
                 reinterpret_cast<uint16_t (*)[3]>(frames);
 
