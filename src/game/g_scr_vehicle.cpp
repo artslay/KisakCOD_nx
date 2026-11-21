@@ -4949,8 +4949,46 @@ void CMD_VEH_SetJitterParams(scr_entref_t entref)
 void G_FreeVehicle(gentity_s *ent)
 {
 #ifdef __SWITCH__
-    if (!Switch_VehicleEntityPointerValid(ent) || !Switch_VehicleRecordPointerValid(ent->scr_vehicle))
+    const bool entityValid = Switch_VehicleEntityPointerValid(ent);
+    const scr_vehicle_s *vehicle = entityValid ? ent->scr_vehicle : nullptr;
+    const bool vehicleRecordValid = Switch_VehicleRecordPointerValid(vehicle);
+    if (!entityValid || !vehicleRecordValid)
     {
+        const uintptr_t entityAddress = reinterpret_cast<uintptr_t>(ent);
+        const uintptr_t entityBase = reinterpret_cast<uintptr_t>(&g_entities[0]);
+        const uintptr_t vehicleAddress = reinterpret_cast<uintptr_t>(vehicle);
+        const uintptr_t vehicleBase = reinterpret_cast<uintptr_t>(&s_vehicles[0]);
+        const int entityIndex = entityValid
+            ? static_cast<int>((entityAddress - entityBase) / sizeof(gentity_s))
+            : -1;
+        const int vehicleIndex = vehicleRecordValid
+            ? static_cast<int>((vehicleAddress - vehicleBase) / sizeof(scr_vehicle_s))
+            : -1;
+        const int entityNumber = entityValid ? ent->s.number : -1;
+        const int entityType = entityValid ? ent->s.eType : -1;
+        const int entityInUse = entityValid ? static_cast<int>(ent->r.inuse) : -1;
+        const int vehicleEntityNumber = vehicleRecordValid ? vehicle->entNum : -1;
+
+        Com_PrintError(CON_CHANNEL_SYSTEM,
+            "G_FreeVehicle validation: ent=%p entityValid=%d entityIndex=%d entityNumber=%d entityType=%d inuse=%d entityPool=%p entityPoolBytes=%llu vehicle=%p vehicleValid=%d vehicleIndex=%d vehicleEntNum=%d vehiclePool=%p vehiclePoolBytes=%llu levelVehicles=%p poolAlias=%d recordMatchesEntity=%d\n",
+            static_cast<void *>(ent),
+            entityValid,
+            entityIndex,
+            entityNumber,
+            entityType,
+            entityInUse,
+            static_cast<void *>(&g_entities[0]),
+            static_cast<unsigned long long>(sizeof(gentity_s) * MAX_GENTITIES),
+            static_cast<void *>(const_cast<scr_vehicle_s *>(vehicle)),
+            vehicleRecordValid,
+            vehicleIndex,
+            vehicleEntityNumber,
+            static_cast<void *>(&s_vehicles[0]),
+            static_cast<unsigned long long>(sizeof(s_vehicles)),
+            static_cast<void *>(level.vehicles),
+            level.vehicles == s_vehicles,
+            entityValid && vehicleRecordValid && vehicleEntityNumber == entityNumber);
+
         Com_Error(ERR_DROP, "G_FreeVehicle: invalid entity or vehicle record");
         return;
     }
