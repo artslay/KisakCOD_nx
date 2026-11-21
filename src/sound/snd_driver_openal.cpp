@@ -2491,20 +2491,23 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
     {
         char trace[256];
         std::snprintf(trace, sizeof(trace),
-            "[SWITCH SNDDATA] begin sound=%p src=%p len=%u rate=%u playback=%u channels=%u samples=%u\n",
+            "[SWITCH SNDDATA] begin sound=%p src=%p len=%u rate=%u playback=%u bits=%d format=%d channels=%u samples=%u\n",
             (void *)mssSound,
             srcData,
             (unsigned)mssSound->info.data_len,
             (unsigned)mssSound->info.rate,
             (unsigned)g_snd.playback_rate,
+            mssSound->info.bits,
+            mssSound->info.format,
             (unsigned)mssSound->info.channels,
             (unsigned)mssSound->info.samples);
         Switch_LogWrite(trace);
     }
 #endif
 
-    // dr_wav (see SND_LoadFromBuffer, snd_driver_load_obj.cpp) always decoded to 16-bit PCM
-    // for us, so unlike the Miles branch above there is no ADPCM format to worry about here.
+    // Loose-file WAVs are decoded to 16-bit PCM by dr_wav. Fastfile assets retain
+    // their packed PCM bit depth, so handle both unsigned 8-bit and signed 16-bit
+    // samples here before the data is passed to OpenAL.
     if (mssSound->info.rate > g_snd.playback_rate)
     {
 #ifdef __SWITCH__
