@@ -9,11 +9,13 @@
 #include "r_rendertarget.h"
 #include "r_utils.h"
 #include "r_reflection_probe.h"
+#include <qcommon/qcommon.h>
 
 #ifdef __SWITCH__
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <gfx/vulkan/vulkan_backend.h>
 #include <platform/switch/switch_perf_diag.h>
 extern void Switch_LogWrite(const char *msg);
@@ -1829,6 +1831,44 @@ void __cdecl R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIn
 }
 #endif
 
+#ifdef __SWITCH__
+static bool R_SwitchTextureFilterDvarsModified()
+{
+    return (r_texFilterAnisoMax && r_texFilterAnisoMax->modified) ||
+        (r_texFilterAnisoMin && r_texFilterAnisoMin->modified) ||
+        (r_texFilterDisable && r_texFilterDisable->modified) ||
+        (r_texFilterMipMode && r_texFilterMipMode->modified) ||
+        (r_texFilterMipBias && r_texFilterMipBias->modified);
+}
+
+static void R_SwitchUpdateTextureFilterIfModified()
+{
+    if (!R_SwitchTextureFilterDvarsModified())
+        return;
+
+    static std::mutex updateMutex;
+    std::lock_guard<std::mutex> lock(updateMutex);
+    if (!R_SwitchTextureFilterDvarsModified())
+        return;
+
+    // Rebuild the D3D9 compatibility filter table from the current archived
+    // dvars. Existing sampler states are re-decoded below by comparing both
+    // the source byte and the previously applied decoded state.
+    R_SetTexFilter();
+
+    if (r_texFilterAnisoMax)
+        Dvar_ClearModified((dvar_s *)r_texFilterAnisoMax);
+    if (r_texFilterAnisoMin)
+        Dvar_ClearModified((dvar_s *)r_texFilterAnisoMin);
+    if (r_texFilterDisable)
+        Dvar_ClearModified((dvar_s *)r_texFilterDisable);
+    if (r_texFilterMipMode)
+        Dvar_ClearModified((dvar_s *)r_texFilterMipMode);
+    if (r_texFilterMipBias)
+        Dvar_ClearModified((dvar_s *)r_texFilterMipBias);
+}
+#endif
+
 void __cdecl R_SetSampler(
     GfxCmdBufContext context,
     uint32_t samplerIndex,
@@ -1903,6 +1943,18 @@ void __cdecl R_SetSampler(
         R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
 #endif
     iassert((samplerState & (SAMPLER_FILTER_MASK | SAMPLER_MIPMAP_MASK)) != 0);
+#ifdef __SWITCH__
+    R_SwitchUpdateTextureFilterIfModified();
+    decodedSamplerState = R_DecodeSamplerState(samplerState);
+    if (context.state->refSamplerState[samplerIndex] != samplerState)
+        context.state->refSamplerState[samplerIndex] = samplerState;
+    if (context.state->samplerState[samplerIndex] != decodedSamplerState)
+        context.state->samplerState[samplerIndex] = R_HW_SetSamplerState(
+            context.state->prim.device,
+            samplerIndex,
+            decodedSamplerState,
+            context.state->samplerState[samplerIndex]);
+#else
     if (context.state->refSamplerState[samplerIndex] != samplerState)
     {
         context.state->refSamplerState[samplerIndex] = samplerState;
@@ -1914,6 +1966,7 @@ void __cdecl R_SetSampler(
                 decodedSamplerState,
                 context.state->samplerState[samplerIndex]);
     }
+#endif
 }
 
 uint32_t __cdecl R_HW_SetSamplerState(
@@ -2149,6 +2202,18 @@ void __cdecl R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uin
             "%s\n\t(samplerState) = %i",
             "((samplerState & (SAMPLER_FILTER_MASK | SAMPLER_MIPMAP_MASK)) != 0)",
             samplerState);
+#ifdef __SWITCH__
+    R_SwitchUpdateTextureFilterIfModified();
+    decodedSamplerState = R_DecodeSamplerState(samplerState);
+    if (state->refSamplerState[samplerIndex] != samplerState)
+        state->refSamplerState[samplerIndex] = samplerState;
+    if (state->samplerState[samplerIndex] != decodedSamplerState)
+        state->samplerState[samplerIndex] = R_HW_SetSamplerState(
+            state->prim.device,
+            samplerIndex,
+            decodedSamplerState,
+            state->samplerState[samplerIndex]);
+#else
     if (state->refSamplerState[samplerIndex] != samplerState)
     {
         state->refSamplerState[samplerIndex] = samplerState;
@@ -2160,6 +2225,7 @@ void __cdecl R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uin
                 decodedSamplerState,
                 state->samplerState[samplerIndex]);
     }
+#endif
 }
 
 void __cdecl R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0)
