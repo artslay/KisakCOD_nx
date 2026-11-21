@@ -2572,7 +2572,7 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
     // Loose-file WAVs are decoded to 16-bit PCM by dr_wav. Fastfile assets retain
     // their packed PCM bit depth, so handle both unsigned 8-bit and signed 16-bit
     // samples here before the data is passed to OpenAL.
-    if (mssSound->info.rate > g_snd.playback_rate)
+    if (mssSound->info.rate > g_snd.playback_rate && mssSound->info.format != 17)
     {
 #ifdef __SWITCH__
         if (switchSoundTrace)
