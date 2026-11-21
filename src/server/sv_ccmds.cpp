@@ -618,6 +618,75 @@ void __cdecl SV_LoadGame_f()
 }
 
 #if defined(KISAK_XBOX) || defined(__SWITCH__)
+#ifdef __SWITCH__
+static bool SV_IsNewerContinueSaveTime(const qtime_s &candidate, const qtime_s &current)
+{
+    if (candidate.tm_year != current.tm_year)
+        return candidate.tm_year > current.tm_year;
+    if (candidate.tm_yday != current.tm_yday)
+        return candidate.tm_yday > current.tm_yday;
+    if (candidate.tm_hour != current.tm_hour)
+        return candidate.tm_hour > current.tm_hour;
+    if (candidate.tm_min != current.tm_min)
+        return candidate.tm_min > current.tm_min;
+    return candidate.tm_sec > current.tm_sec;
+}
+
+static bool SV_FindProfileContinueSave()
+{
+    char saveDirectory[64];
+    if (Com_BuildPlayerProfilePath(saveDirectory, sizeof(saveDirectory), "save") >= (int)sizeof(saveDirectory))
+        return false;
+
+    int saveCount = 0;
+    const char **saveFiles = FS_ListFiles(saveDirectory, "svg", FS_LIST_ALL, &saveCount);
+    if (!saveFiles)
+        return false;
+
+    char latestSave[256] = {};
+    qtime_s latestTime = {};
+    bool foundSave = false;
+
+    for (int i = 0; i < saveCount; ++i)
+    {
+        if (!saveFiles[i] || !saveFiles[i][0])
+            continue;
+
+        char savePath[256];
+        const int pathLength = Com_sprintf(
+            savePath,
+            sizeof(savePath),
+            "%s/%s",
+            saveDirectory,
+            saveFiles[i]);
+        if (pathLength < 0 || pathLength >= (int)sizeof(savePath))
+            continue;
+
+        if (SV_IsInternalSave(savePath))
+            continue;
+
+        SaveHeader header = {};
+        if (!ReadSaveHeader(savePath, &header))
+            continue;
+
+        if (!foundSave || SV_IsNewerContinueSaveTime(header.time, latestTime))
+        {
+            I_strncpyz(latestSave, savePath, sizeof(latestSave));
+            latestTime = header.time;
+            foundSave = true;
+        }
+    }
+
+    FS_FreeFileList(saveFiles);
+
+    if (!foundSave)
+        return false;
+
+    Dvar_SetString(sv_lastSaveGame, latestSave);
+    return true;
+}
+#endif
+
 static bool SV_HasContinueSave()
 {
 #ifdef KISAK_XBOX
@@ -625,7 +694,10 @@ static bool SV_HasContinueSave()
 #else
     const char *saveName =
         sv_lastSaveGame ? sv_lastSaveGame->current.string : "";
-    return saveName && saveName[0] && SaveExists(saveName);
+    if (saveName && saveName[0] && SaveExists(saveName))
+        return true;
+
+    return SV_FindProfileContinueSave();
 #endif
 }
 
