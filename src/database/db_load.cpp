@@ -2942,8 +2942,9 @@ static XAnimPartTrans *Switch_LoadXAnimPartTrans()
         }
         else
         {
-            // Match the original AllocLoad_XBlendInfo() stream alignment (2 bytes).
-            uint8_t *frames = DB_AllocStreamPos(1);
+            // Match the original Load_XAnimDynamicFrames() path:
+            // AllocLoad_FxElemVisStateSample() preserves 4-byte fastfile alignment.
+            uint8_t *frames = DB_AllocStreamPos(3);
             native->u.frames.frames._2 =
                 reinterpret_cast<uint16_t (*)[3]>(frames);
 
