@@ -331,13 +331,13 @@ void __cdecl G_UpdateActorCorpses()
 #endif
     integer = ai_corpseCount->current.integer;
 #ifdef __SWITCH__
-    if (integer < 1 || integer > ARRAY_COUNT(g_scr_data.actorCorpseInfo))
+    if (integer < 0 || integer > ARRAY_COUNT(g_scr_data.actorCorpseInfo))
     {
         Com_Error(ERR_DROP, "G_UpdateActorCorpses: configured corpse count out of range");
         return;
     }
 #else
-    if (integer < 1 || integer > 16)
+    if (integer < 0 || integer > 16)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
             197,
