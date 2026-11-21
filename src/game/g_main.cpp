@@ -1254,7 +1254,7 @@ void __cdecl G_InitGame(
             1527,
             1,
             "%s",
-            "level.actorCorpseCount >= 1 && level.actorCorpseCount <= MAX_ACTOR_CORPSES");
+            "level.actorCorpseCount >= 0 && level.actorCorpseCount <= MAX_ACTOR_CORPSES");
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/scripts_anims";
     Switch_SetProgressStage("frame/game_init/scripts_anims", UINT32_MAX);
