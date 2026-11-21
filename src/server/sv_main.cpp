@@ -297,7 +297,12 @@ void __cdecl SV_SetLastSaveName(const char *filename)
     if (!filename)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 374, 0, "%s", "filename");
     if (!(unsigned __int8)SV_IsInternalSave(filename))
+    {
         Dvar_SetString(sv_lastSaveGame, filename);
+#ifdef __SWITCH__
+        Dvar_SetBool(sv_saveGameAvailable, true);
+#endif
+    }
 }
 
 void __cdecl SV_AddServerCommand(client_t *client, const char *cmd)
