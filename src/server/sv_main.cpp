@@ -40,7 +40,7 @@ const dvar_t *sv_player_maxhealth;
 const dvar_t *sv_saveOnStartMap;
 const dvar_t *sv_gameskill;
 const dvar_t *sv_mapname;
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
 const dvar_t *sv_saveDeviceAvailable;
 #endif
 const dvar_t *sv_cheats;
@@ -49,7 +49,7 @@ const dvar_t *player_healthHard;
 const dvar_t *sv_player_deathInvulnerableTime;
 const dvar_t *runForTime;
 const dvar_t *sv_saveGameSuccess;
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
 const dvar_t *sv_saveGameAvailable;
 const dvar_t *sv_saveGameNotReadable;
 #endif
