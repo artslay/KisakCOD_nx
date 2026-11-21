@@ -343,7 +343,7 @@ void __cdecl G_UpdateActorCorpses()
             197,
             0,
             "%s\n\t(actorCorpseCount) = %i",
-            "(actorCorpseCount >= 1 && actorCorpseCount <= 16)",
+            "(actorCorpseCount >= 0 && actorCorpseCount <= 16)",
             ai_corpseCount->current.integer);
 #endif
     if (level.actorCorpseCount != integer)
