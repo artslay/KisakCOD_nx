@@ -242,10 +242,7 @@ void __cdecl SV_Init()
         "True if the save device is currently available");
 #endif
 #ifdef __SWITCH__
-    const char *lastSaveName = sv_lastSaveGame->current.string;
-    Dvar_SetBool(
-        sv_saveGameAvailable,
-        lastSaveName && lastSaveName[0] && SaveExists(lastSaveName));
+    SV_ForceSelectSaveDevice_f();
 #endif
     sv_cheats = Dvar_RegisterBool("sv_cheats", 1, 0x48u, "Enable server cheats");
     replay_autosave = Dvar_RegisterInt(
