@@ -620,17 +620,21 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
 
     MssSoundCOD4 *sound = &alias->soundFile->u.loadSnd->sound;
     const uint32_t sourceChannels = sound->info.channels;
-    const uint64_t frameCount = sound->info.samples;
+    const uint64_t totalSamples = sound->info.samples;
+    if (!sound->data || (sourceChannels != 1 && sourceChannels != 2) ||
+        sound->info.rate == 0 || totalSamples == 0 ||
+        (totalSamples % sourceChannels) != 0)
+        return false;
+
+    const uint64_t frameCount = totalSamples / sourceChannels;
     const uint32_t capacityChannels =
         (alGlob.outputChannels == 4 || alGlob.outputChannels == 6)
             ? alGlob.outputChannels : 2u;
-    if (!sound->data || (sourceChannels != 1 && sourceChannels != 2) ||
-        sound->info.rate == 0 || frameCount == 0 ||
-        frameCount > static_cast<uint64_t>(0x7fffffff) /
-            (capacityChannels * sizeof(int16_t)))
+    if (frameCount > static_cast<uint64_t>(0x7fffffff) /
+        (capacityChannels * sizeof(int16_t)))
         return false;
 
-    const uint64_t sourceBytes = frameCount * sourceChannels * sizeof(int16_t);
+    const uint64_t sourceBytes = totalSamples * sizeof(int16_t);
     if (sound->info.data_len < sourceBytes)
         return false;
 
@@ -1027,7 +1031,11 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
 
     // ALsizei is signed. Allocate room for the widest supported output layout even when
     // the input file is mono, so a speaker map can safely expand it to quad/5.1.
-    const uint64_t frameCount = sound->info.samples;
+    const uint64_t totalSamples = sound->info.samples;
+    if ((totalSamples % static_cast<uint32_t>(srcChannelCount)) != 0)
+        return;
+    const uint64_t frameCount =
+        totalSamples / static_cast<uint32_t>(srcChannelCount);
     const uint32_t capacityChannels =
         (alGlob.outputChannels == 4 || alGlob.outputChannels == 6)
             ? alGlob.outputChannels : 2u;
@@ -1046,7 +1054,7 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
     }
 
     const size_t sourceBytes =
-        static_cast<size_t>(frameCount) * srcChannelCount * sizeof(int16_t);
+        static_cast<size_t>(totalSamples) * sizeof(int16_t);
     if (sound->info.data_len < sourceBytes)
     {
         std::free(mapped);
@@ -1140,7 +1148,9 @@ int __cdecl SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChan
     // behavior above, which queries AIL_sample_ms_position() *after* setting the pitched
     // playback rate, so a pitched-up sound reports a proportionally shorter duration.
     float effectiveRate = sound->info.rate * pitch;
-    int total_msec = effectiveRate > 0.0f ? (int)((int64_t)sound->info.samples * 1000 / effectiveRate) : 0;
+    int total_msec = effectiveRate > 0.0f
+        ? (int)((int64_t)(sound->info.samples / sound->info.channels) * 1000 / effectiveRate)
+        : 0;
 
     if (startAliasInfo->timeshift >= total_msec)
         return SND_SetPlaybackIdNotPlayed(index);
@@ -1203,9 +1213,12 @@ void __cdecl SND_Apply3DSpatializationTweaks(ALuint handle, const snd_alias_t *a
 
     // OpenAL's standard positional rendering is defined for mono buffers. Convert stereo
     // loaded assets to mono before attaching them to a 3D source so they are actually panned.
-    const uint64_t frameCount = sound->info.samples;
+    const uint64_t totalSamples = sound->info.samples;
+    if ((totalSamples & 1u) != 0)
+        return;
+    const uint64_t frameCount = totalSamples / 2u;
     if (frameCount > static_cast<uint64_t>(0x7fffffff) / sizeof(int16_t) ||
-        frameCount > static_cast<uint64_t>(sound->info.data_len) / (2 * sizeof(int16_t)))
+        totalSamples * sizeof(int16_t) > sound->info.data_len)
         return;
 
     const size_t monoBytes = static_cast<size_t>(frameCount) * sizeof(int16_t);
@@ -1304,7 +1317,9 @@ int __cdecl SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChan
     // Duration at the pitch-adjusted rate - see the matching comment in
     // SND_StartAlias2DSample above.
     float effectiveRate = sound->info.rate * pitch;
-    int total_msec = effectiveRate > 0.0f ? (int)((int64_t)sound->info.samples * 1000 / effectiveRate) : 0;
+    int total_msec = effectiveRate > 0.0f
+        ? (int)((int64_t)(sound->info.samples / sound->info.channels) * 1000 / effectiveRate)
+        : 0;
 
     if (startAliasInfo->timeshift >= total_msec)
         return SND_SetPlaybackIdNotPlayed(index);
@@ -2563,43 +2578,56 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] resample branch\n");
 #endif
-        const uint32_t srcFrameCount = mssSound->info.samples;
-        const uint32_t channels = mssSound->info.channels;
+        const uint32_t totalSamples = mssSound->info.samples;
+        const uint32_t channels = static_cast<uint32_t>(mssSound->info.channels);
         const uint32_t srcRate = mssSound->info.rate;
         const uint32_t sourceBits = static_cast<uint32_t>(mssSound->info.bits);
         const uint32_t sourceBytesPerSample = sourceBits == 8 ? 1u : sizeof(int16_t);
-        uint32_t rate = srcRate;
-
-        while (rate > g_snd.playback_rate && rate > 1)
-            rate /= 2;
-
-        uint64_t frameCount64 =
-            (static_cast<uint64_t>(srcFrameCount) * rate + srcRate / 2) / srcRate;
-        if (srcFrameCount != 0 && frameCount64 == 0)
-            frameCount64 = 1;
         const uint64_t sourceDataBytes =
-            static_cast<uint64_t>(srcFrameCount) * channels * sourceBytesPerSample;
-        if (!srcData || srcRate == 0 || srcFrameCount == 0 ||
-            frameCount64 > UINT32_MAX ||
+            static_cast<uint64_t>(totalSamples) * sourceBytesPerSample;
+        uint32_t rateTarget = srcRate;
+
+        if (!srcData || srcRate == 0 || totalSamples == 0 ||
             (channels != 1 && channels != 2) ||
+            (totalSamples % channels) != 0 ||
             (sourceBits != 8 && sourceBits != 16) ||
-            (sourceBits == 8 && mssSound->info.format != 1) ||
+            mssSound->info.format != 1 ||
             sourceDataBytes > mssSound->info.data_len)
         {
             Com_Error(
                 ERR_DROP,
-                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bits=%u format=%d bytes=%u)",
-                static_cast<unsigned>(srcFrameCount),
+                "Cannot resample invalid sound data (samples=%u channels=%u rate=%u bits=%u format=%d block=%u bytes=%u expected=%llu)",
+                static_cast<unsigned>(totalSamples),
                 static_cast<unsigned>(channels),
                 static_cast<unsigned>(srcRate),
                 static_cast<unsigned>(sourceBits),
                 mssSound->info.format,
-                static_cast<unsigned>(mssSound->info.data_len));
+                static_cast<unsigned>(mssSound->info.block_size),
+                static_cast<unsigned>(mssSound->info.data_len),
+                static_cast<unsigned long long>(sourceDataBytes));
             return;
         }
+
+        // AILSOUNDINFO.samples counts interleaved values across all channels.
+        // The sinc resampler operates on frames, so divide by channel count.
+        const uint32_t srcFrameCount = totalSamples / channels;
+        while (rateTarget > g_snd.playback_rate && rateTarget > 1)
+            rateTarget /= 2;
+
+        uint64_t frameCount64 =
+            (static_cast<uint64_t>(srcFrameCount) * rateTarget + srcRate / 2) / srcRate;
+        if (frameCount64 == 0)
+            frameCount64 = 1;
+        if (frameCount64 > UINT32_MAX / channels)
+        {
+            Com_Error(ERR_DROP, "Resampled sound sample count is too large");
+            return;
+        }
+
         const uint32_t frameCount = static_cast<uint32_t>(frameCount64);
+        const uint32_t outputSampleCount = frameCount * channels;
         const uint64_t newDataLen64 =
-            static_cast<uint64_t>(frameCount) * channels * sizeof(int16_t);
+            static_cast<uint64_t>(outputSampleCount) * sizeof(int16_t);
         if (newDataLen64 > UINT32_MAX)
         {
             Com_Error(ERR_DROP, "Resampled sound is too large (%llu bytes)",
@@ -2611,7 +2639,7 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] alloc begin\n");
 #endif
-        mssSound->data = MSS_Alloc(newDataLen, rate);
+        mssSound->data = MSS_Alloc(newDataLen, rateTarget);
 #ifdef __SWITCH__
         if (switchSoundTrace)
         {
@@ -2625,14 +2653,14 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 
         int16_t *dst16 = reinterpret_cast<int16_t *>(mssSound->data);
         AL_ResamplePcmWindowedSinc(
-            srcData, sourceBits, srcFrameCount, srcRate, dst16, frameCount, rate, channels);
+            srcData, sourceBits, srcFrameCount, srcRate, dst16, frameCount, rateTarget, channels);
 #ifdef __SWITCH__
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] resample copy done\n");
 #endif
 
-        mssSound->info.rate = rate;
-        mssSound->info.samples = frameCount;
+        mssSound->info.rate = rateTarget;
+        mssSound->info.samples = outputSampleCount;
         mssSound->info.bits = 16;
         mssSound->info.block_size = channels * sizeof(int16_t);
         mssSound->info.data_len = newDataLen;
@@ -2646,10 +2674,10 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         if (mssSound->info.bits == 8 && mssSound->info.format == 1)
         {
             const uint32_t channels = static_cast<uint32_t>(mssSound->info.channels);
-            const uint64_t sampleCount =
-                static_cast<uint64_t>(mssSound->info.samples) * channels;
+            const uint64_t sampleCount = mssSound->info.samples;
             const uint64_t convertedBytes = sampleCount * sizeof(int16_t);
             if (!srcData || (channels != 1 && channels != 2) ||
+                (sampleCount % channels) != 0 ||
                 sampleCount > UINT32_MAX / sizeof(int16_t) ||
                 sampleCount > mssSound->info.data_len)
             {
