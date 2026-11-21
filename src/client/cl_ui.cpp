@@ -5,6 +5,7 @@
 #include <universal/q_shared.h>
 #include "cl_ui.h"
 #include <qcommon/cmd.h>
+#include <qcommon/qcommon.h>
 #include "client.h"
 #include <ui/ui.h>
 #include <universal/com_sndalias.h>
@@ -36,6 +37,17 @@ int __cdecl CL_ShutdownUI()
 void __cdecl CL_InitUI()
 {
     int remoteScreenUpdateNesting; // r3
+
+    // The graphics/options menus are initialized before the first game VM.
+    // Register the corpse-count dvar here so the frontend can read and change
+    // the same archived setting that G_RegisterServerDemoDvars reuses later.
+    Dvar_RegisterInt(
+        "ai_corpseCount",
+        16,
+        0,
+        16,
+        DVAR_ARCHIVE | DVAR_USERINFO,
+        "Maximum number of AI corpses");
 
     UI_Init();
     // LWSS ADD from MP ( UI_Component::InitAssets() needs to run so that UI_Component::g members are set. 
