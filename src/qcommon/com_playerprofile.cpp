@@ -9,6 +9,9 @@
 #include <win32/win_storage.h>
 #include <win32/win_local.h>
 #include <win32/win_localize.h>
+#if defined(__SWITCH__) && defined(KISAK_SP)
+#include <game/savedevice.h>
+#endif
 
 const dvar_t *ui_playerProfileAlreadyChosen;
 const dvar_t *com_playerProfile;
@@ -138,6 +141,13 @@ void __cdecl Com_SetPlayerProfile(int localClientNum, char *profileName)
     if (!name || !*name)
         Dvar_SetStringByName("name", profileName);
     LiveStorage_NewUser();
+#ifdef __SWITCH__
+#ifdef KISAK_SP
+    // SV_Init runs before the active profile config is read. Refresh the
+    // Continue availability only after sv_lastSaveGame has been restored.
+    SV_ForceSelectSaveDevice_f();
+#endif
+#endif
 }
 
 char __cdecl Com_SetInitialPlayerProfile(int localClientNum)
