@@ -320,7 +320,7 @@ const dvar_s *G_RegisterServerDemoDvars()
     bullet_penetrationEnabled = Dvar_RegisterBool("bullet_penetrationEnabled", 1, DVAR_CHEAT | DVAR_USERINFO, "Enable/Disable bullet penetration.");
     g_ai = Dvar_RegisterBool("g_ai", 1, 0x82u, "Enable AI");
     g_spawnai = Dvar_RegisterBool("g_spawnai", 1, 0xA2u, "Enable AI spawning");
-    ai_corpseCount = Dvar_RegisterInt("ai_corpseCount", 16, 0, 16, 3u, "Maximum number of AI corpses");
+    ai_corpseCount = Dvar_RegisterInt("ai_corpseCount", 16, 0, 16, DVAR_ARCHIVE | DVAR_USERINFO, "Maximum number of AI corpses");
     ai_noDodge = Dvar_RegisterBool("ai_noDodge", 0, 0x82u, "AI won't dodge to the side");
     ai_pathMomentum = Dvar_RegisterFloat("ai_pathMomentum", 0.77999997, 0.0, 0.89999998, 0x82u, "Momentum factor for continuing motion in previous direction. 0 for no momentum carry over");
     ai_pathNegotiationOverlapCost = Dvar_RegisterFloat("ai_pathNegotiationOverlapCost", 300.0, 0.0, 1000.0, 0x82u, "The distance AI would travel around to avoid going to a negotiation being used. Multiplied by number of users of the negotiation");
@@ -1248,7 +1248,7 @@ void __cdecl G_InitGame(
     else
         G_ParseScrVehicleInfo();
     level.actorCorpseCount = ai_corpseCount->current.integer;
-    if (level.actorCorpseCount < 1 || level.actorCorpseCount > 16)
+    if (level.actorCorpseCount < 0 || level.actorCorpseCount > 16)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\g_main.cpp",
             1527,
