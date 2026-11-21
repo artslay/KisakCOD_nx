@@ -1572,6 +1572,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
         if ((dvar->flags & 0x20) != 0)
         {
             Dvar_SetLatchedValue(dvar, value);
+            dvar_modifiedFlags |= dvar->flags;
             if (!Dvar_ValuesEqual(dvar->type, dvar->latched, dvar->current))
                 Com_Printf(CON_CHANNEL_SYSTEM, "%s will be changed upon restarting.\n", dvar->name);
             return;
@@ -1580,6 +1581,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     else if (source == DVAR_SOURCE_DEVGUI && (dvar->flags & 0x800) != 0)
     {
         Dvar_SetLatchedValue(dvar, value);
+        dvar_modifiedFlags |= dvar->flags;
         return;
     }
     if (Dvar_ValuesEqual(dvar->type, dvar->current, value))

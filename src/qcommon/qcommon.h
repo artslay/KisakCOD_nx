@@ -266,7 +266,7 @@ void __cdecl Com_StartupConfigs(int localClientNum);
 void Com_InitXAssets();
 void __cdecl Com_WriteDefaultsToFile(char* filename);
 void __cdecl Com_WriteConfig_f();
-void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename);
+bool __cdecl Com_WriteConfigToFile(int localClientNum, char* filename);
 void __cdecl Com_WriteDefaults_f();
 double __cdecl Com_GetTimescaleForSnd();
 void __cdecl Com_AdjustMaxFPS(int* maxFPS);

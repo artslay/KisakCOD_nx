@@ -1739,7 +1739,7 @@ void __cdecl Com_WriteConfig_f()
     }
 }
 
-void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
+bool __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
 {
     int file = FS_FOpenFileWriteToDir(filename, (char*)"players");
     if (file)
@@ -1750,10 +1750,12 @@ void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
         Dvar_WriteVariables(file);
         Con_WriteFilterConfigString(file);
         FS_FCloseFile(file);
+        return true;
     }
     else
     {
         Com_Printf(CON_CHANNEL_SYSTEM, "Couldn't write %s.\n", filename);
+        return false;
     }
 }
 
@@ -2298,18 +2300,15 @@ void __cdecl Com_WriteConfiguration(int localClientNum)
 {
     char configFile[68]; // [esp+0h] [ebp-48h] BYREF
 
-    if (com_fullyInitialized && (dvar_modifiedFlags & 1) != 0)
+    if (com_fullyInitialized && (dvar_modifiedFlags & 1) != 0 && Com_HasPlayerProfile())
     {
-        dvar_modifiedFlags &= ~1u;
-        if (Com_HasPlayerProfile())
-        {
 #ifdef KISAK_MP
-            Com_BuildPlayerProfilePath(configFile, 64, "config_mp.cfg");
+        Com_BuildPlayerProfilePath(configFile, 64, "config_mp.cfg");
 #elif KISAK_SP
-            Com_BuildPlayerProfilePath(configFile, 64, "config.cfg");
+        Com_BuildPlayerProfilePath(configFile, 64, "config.cfg");
 #endif
-            Com_WriteConfigToFile(localClientNum, configFile);
-        }
+        if (Com_WriteConfigToFile(localClientNum, configFile))
+            dvar_modifiedFlags &= ~1u;
     }
 }
 
