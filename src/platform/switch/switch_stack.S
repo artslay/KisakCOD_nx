@@ -18,3 +18,13 @@ Switch_RunOnStack:
     ret
 
 .size Switch_RunOnStack, .-Switch_RunOnStack
+
+.section .bss.__nx_exception_stack,"aw",%nobits
+.balign 16
+.global __nx_exception_stack
+.type __nx_exception_stack, %object
+__nx_exception_stack:
+    .space 0x4000
+// Match libnx's 0x400-byte weak symbol size while reserving the full 16 KiB
+// region consumed through __nx_exception_stack_size.
+.size __nx_exception_stack, 0x400
