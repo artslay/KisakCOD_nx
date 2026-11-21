@@ -220,7 +220,7 @@ void __cdecl SV_Init()
     sv_mapname = Dvar_RegisterString("mapname", "", 0x44u, "current map name");
     sv_lastSaveGame = Dvar_RegisterString("sv_lastSaveGame", "", 1u, "Last save game file name");
     sv_saveOnStartMap = Dvar_RegisterBool("sv_saveOnStartMap", 0, 0x1004u, "Save at the start of a level");
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
     sv_saveGameAvailable = Dvar_RegisterBool(
         "sv_saveGameAvailable",
         0,
@@ -233,9 +233,19 @@ void __cdecl SV_Init()
         "True if the save game is not readable");
     sv_saveDeviceAvailable = Dvar_RegisterBool(
         "sv_saveDeviceAvailable",
+#ifdef __SWITCH__
+        1,
+#else
         0,
+#endif
         0x44u,
         "True if the save device is currently available");
+#endif
+#ifdef __SWITCH__
+    const char *lastSaveName = sv_lastSaveGame->current.string;
+    Dvar_SetBool(
+        sv_saveGameAvailable,
+        lastSaveName && lastSaveName[0] && SaveExists(lastSaveName));
 #endif
     sv_cheats = Dvar_RegisterBool("sv_cheats", 1, 0x48u, "Enable server cheats");
     replay_autosave = Dvar_RegisterInt(
