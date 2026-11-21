@@ -112,8 +112,10 @@ extern char __code_start[];
 }
 
 extern "C" {
-alignas(16) uint8_t __nx_exception_stack[0x4000];
-uint64_t __nx_exception_stack_size = sizeof(__nx_exception_stack);
+extern uint8_t __nx_exception_stack[0x400];
+// The assembly definition reserves 16 KiB but exports the stock 1 KiB
+// symbol size expected by libnx's weak default definition.
+uint64_t __nx_exception_stack_size = 0x4000;
 // Keep libnx's exception callback enabled even while a debugger is attached.
 uint32_t __nx_exception_ignoredebug = 1;
 }
