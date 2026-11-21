@@ -491,7 +491,7 @@ extern const dvar_t *sv_player_maxhealth;
 extern const dvar_t *sv_saveOnStartMap;
 extern const dvar_t *sv_gameskill;
 extern const dvar_t *sv_mapname;
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
 extern const dvar_t *sv_saveDeviceAvailable;
 #endif
 extern const dvar_t *sv_cheats;
@@ -500,7 +500,7 @@ extern const dvar_t *player_healthHard;
 extern const dvar_t *sv_player_deathInvulnerableTime;
 extern const dvar_t *runForTime;
 extern const dvar_t *sv_saveGameSuccess;
-#ifdef KISAK_XBOX
+#if defined(KISAK_XBOX) || defined(__SWITCH__)
 extern const dvar_t *sv_saveGameAvailable;
 extern const dvar_t *sv_saveGameNotReadable;
 #endif
