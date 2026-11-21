@@ -54,6 +54,31 @@ GfxConfiguration gfxCfg{};
 GfxGlobals r_glob{};
 int g_disableRendering = 0;
 
+static void R_UpdateSwitchTextureFilterCapabilities()
+{
+    VulkanBackend *backend = GetVulkanBackend();
+    const bool supportsAnisotropy =
+        backend && backend->SupportsSamplerAnisotropy();
+    int maximumAnisotropy = supportsAnisotropy
+        ? static_cast<int>(backend->MaxSamplerAnisotropy())
+        : 1;
+
+    if (maximumAnisotropy < 1)
+        maximumAnisotropy = 1;
+    if (maximumAnisotropy > 16)
+        maximumAnisotropy = 16;
+
+    // Feed Vulkan's real sampler feature/limit into the legacy D3D9 filter
+    // decoder. Leaving these GfxMetrics at zero forces R_SetTexFilter() to
+    // collapse every anisotropic mode to 1x.
+    gfxMetrics.maxAnisotropy = maximumAnisotropy;
+    gfxMetrics.hasAnisotropicMinFilter =
+        supportsAnisotropy && maximumAnisotropy > 1;
+    gfxMetrics.hasAnisotropicMagFilter =
+        supportsAnisotropy && maximumAnisotropy > 1;
+    R_SetTexFilter();
+}
+
 const dvar_t *r_mode = nullptr;
 const dvar_t *r_displayRefresh = nullptr;
 const dvar_t *r_noborder = nullptr;
@@ -466,6 +491,9 @@ void R_InitGraphicsApi() {
     if (g_gfxBackend && dx.device)
     {
         gfxCmdBufState.prim.device = dx.device;
+        // R_InitGlobalStructs() clears gfxMetrics even on a preserved-backend
+        // restart, so restore hardware anisotropy and rebuild the filter table.
+        R_UpdateSwitchTextureFilterCapabilities();
         return;
     }
 
@@ -491,6 +519,10 @@ void R_InitGraphicsApi() {
             return;
         }
     }
+
+    // The Vulkan backend has queried samplerAnisotropy and maxSamplerAnisotropy.
+    // Populate the legacy renderer metrics before it builds its sampler states.
+    R_UpdateSwitchTextureFilterCapabilities();
 
     // The fastfile loader allocates static vertex/index buffers immediately.
     // Therefore the D3D9 compatibility device must exist before any zone is
