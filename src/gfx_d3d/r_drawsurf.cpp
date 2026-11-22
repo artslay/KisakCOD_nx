@@ -558,7 +558,7 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface n=%u material=%.96s technique=%s cloud=%u count=%u\\n",
+            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface n=%u material=%.96s technique=%s cloud=%u count=%u\n",
             switchFxCloudSurfaceTrace,
             material && material->info.name ? material->info.name : "<null>",
             cloudTechnique ? "present" : "missing",
@@ -598,7 +598,7 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
         {
 #ifdef __SWITCH__
             if (traceFxCloudSurface)
-                Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=drawsurf_capacity\\n");
+                Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=drawsurf_capacity\n");
 #endif
             return 0;
         }
@@ -607,7 +607,7 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
     {
 #ifdef __SWITCH__
         if (traceFxCloudSurface)
-            Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=emissive_technique\\n");
+            Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=emissive_technique\n");
 #endif
         R_WarnOncePerFrame(R_WARN_NONEMISSIVE_FX_MATERIAL, material->info.name);
         return 0;
