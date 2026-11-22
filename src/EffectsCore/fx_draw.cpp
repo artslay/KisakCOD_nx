@@ -613,7 +613,7 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX SPRITE ACTIVE] stage=draw n=%u effect=%.80s elem=%u type=%u culled=%u cullEnabled=%u visualCount=%u radius=%.3f size=(%.3f,%.3f) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u elapsed=%.1f life=%.1f\n",
+                "[KisakCOD][FX PARTICLE DIAG] stage=sprite-cull n=%u effect=%.80s elem=%u type=%u culled=%u cullEnabled=%u visualCount=%u radius=%.3f size=(%.3f,%.3f) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) frustum=%u elapsed=%.1f life=%.1f\n",
                 traceIndex,
                 draw->effect && draw->effect->def && draw->effect->def->name
                     ? draw->effect->def->name : "<null>",
