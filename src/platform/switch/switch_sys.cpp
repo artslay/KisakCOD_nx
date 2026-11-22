@@ -4063,6 +4063,9 @@ static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
         return false;
+    static constexpr char kFxParticleDiagPrefix[] = "[KisakCOD][FX PARTICLE DIAG]";
+    if (std::strncmp(msg, kFxParticleDiagPrefix, sizeof(kFxParticleDiagPrefix) - 1u) == 0)
+        return true;
 
     // Keep genuine asset lookup misses. Without this exception, the central
     // Kisak diagnostic filter would drop "found=0" because it is not phrased as
