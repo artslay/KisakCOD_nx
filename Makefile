@@ -88,7 +88,7 @@ endif
 # supplies the minimal SDL2 audio ABI locally through switch_sdl2_audio.cpp,
 # so libSDL2/libEGL are not linked into the game and Vulkan remains the only
 # graphics backend.
-LIBS        := -lvulkan -lzstd -lexpat -lopenal -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lm -lnx
+LIBS        := -lvulkan -lelf -lzstd -lexpat -lopenal -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lm -lnx
 
 include $(DEVKITPRO)/libnx/switch_rules
 
