@@ -567,6 +567,37 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
             (uint16_t)drawSurf.fields.objectId,
             data->cloudCount);
     cloud = &data->clouds[drawSurf.fields.objectId];
+#ifdef __SWITCH__
+    static volatile uint32_t switchFxCloudVkTraceCount = 0;
+    const uint32_t switchFxCloudVkTrace =
+        __sync_fetch_and_add(&switchFxCloudVkTraceCount, 1u);
+    const bool traceFxCloudVk = switchFxCloudVkTrace < 8u;
+    if (traceFxCloudVk)
+    {
+        const MaterialPass *pass = context.state->pass;
+        char trace[640];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk n=%u material=%.80s vs=%.72s ps=%.72s cloud=%u/%u radius=(%.4g,%.4g) origin=(%.2f,%.2f,%.2f) end=(%.2f,%.2f,%.2f) vb=%p ib=%p stride=%u\\n",
+            switchFxCloudVkTrace,
+            context.state->material && context.state->material->info.name
+                ? context.state->material->info.name : "<null>",
+            pass && pass->vertexShader && pass->vertexShader->name
+                ? pass->vertexShader->name : "<null>",
+            pass && pass->pixelShader && pass->pixelShader->name
+                ? pass->pixelShader->name : "<null>",
+            static_cast<unsigned>(drawSurf.fields.objectId),
+            static_cast<unsigned>(data->cloudCount),
+            cloud->radius[0], cloud->radius[1],
+            cloud->placement.base.origin[0],
+            cloud->placement.base.origin[1],
+            cloud->placement.base.origin[2],
+            cloud->endpos[0], cloud->endpos[1], cloud->endpos[2],
+            static_cast<void *>(gfxBuf.particleCloudVertexBuffer),
+            static_cast<void *>(gfxBuf.particleCloudIndexBuffer), 20u);
+        Switch_LogWrite(trace);
+    }
+#endif
 
     {
         PROF_SCOPED("RB_SetParticleCloudConstants");
@@ -598,6 +629,10 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
         context.state->prim.device->SetParticleCloudPassActive(true);
 #endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
+#ifdef __SWITCH__
+    if (traceFxCloudVk)
+        Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk missing=0 draw-issued=1\\n");
+#endif
 #ifdef __SWITCH__
     if (context.state->prim.device)
         context.state->prim.device->SetParticleCloudPassActive(false);
