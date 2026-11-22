@@ -1322,7 +1322,7 @@ FxEffect *__cdecl CG_StartFx(int localClientNum, centity_s *cent, int startAtTim
         char trace[448];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX EFFECT INVENTORY] stage=start id=%d name=%.96s oneShot=%u looping=%u emission=%u startTime=%d origin=(%.2f,%.2f,%.2f)\n",
+            "[KisakCOD][FX PARTICLE DIAG] stage=start id=%d name=%.96s oneShot=%u looping=%u emission=%u startTime=%d origin=(%.2f,%.2f,%.2f)\n",
             scale,
             v7->name ? v7->name : "<null>",
             static_cast<unsigned>(v7->elemDefCountOneShot),
@@ -1386,7 +1386,7 @@ void __cdecl CG_LoopFx(int localClientNum, centity_s *cent)
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX EFFECT INVENTORY] stage=loop id=%d name=%.96s inRange=%u cullDist=%.2f distance=%.2f period=%d ent=%u origin=(%.2f,%.2f,%.2f) player=(%.2f,%.2f,%.2f)\n",
+                "[KisakCOD][FX PARTICLE DIAG] stage=loop id=%d name=%.96s inRange=%u cullDist=%.2f distance=%.2f period=%d ent=%u origin=(%.2f,%.2f,%.2f) player=(%.2f,%.2f,%.2f)\n",
                 fxId,
                 fxDef && fxDef->name ? fxDef->name : "<null>",
                 inRange ? 1u : 0u,
