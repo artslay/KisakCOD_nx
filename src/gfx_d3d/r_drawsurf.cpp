@@ -1,4 +1,8 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include <qcommon/qcommon.h>
 #ifdef __SWITCH__
 #include <atomic>
@@ -525,6 +529,12 @@ void __cdecl R_SortWorldSurfaces()
 
 char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 {
+#ifdef __SWITCH__
+    static volatile uint32_t switchFxCloudSurfaceTraceCount = 0;
+    const uint32_t switchFxCloudSurfaceTrace =
+        __sync_fetch_and_add(&switchFxCloudSurfaceTraceCount, 1u);
+    const bool traceFxCloudSurface = switchFxCloudSurfaceTrace < 8u;
+#endif
     int MaterialSortKey; // [esp+20h] [ebp-18h]
     GfxDrawSurf *drawSurf; // [esp+2Ch] [ebp-Ch]
     int region; // [esp+30h] [ebp-8h]
@@ -542,6 +552,21 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 
     const MaterialTechnique *cloudTechnique =
         Material_GetTechnique(material, gfxDrawMethod.emissiveTechType);
+#ifdef __SWITCH__
+    if (traceFxCloudSurface)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface n=%u material=%.96s technique=%s cloud=%u count=%u\\n",
+            switchFxCloudSurfaceTrace,
+            material && material->info.name ? material->info.name : "<null>",
+            cloudTechnique ? "present" : "missing",
+            cloudIndex,
+            static_cast<unsigned>(frontEndDataOut->cloudCount));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     if (cloudTechnique)
     {
@@ -571,13 +596,19 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
         }
         else
         {
-
+#ifdef __SWITCH__
+            if (traceFxCloudSurface)
+                Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=drawsurf_capacity\\n");
+#endif
             return 0;
         }
     }
     else
     {
-
+#ifdef __SWITCH__
+        if (traceFxCloudSurface)
+            Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-surface missing=emissive_technique\\n");
+#endif
         R_WarnOncePerFrame(R_WARN_NONEMISSIVE_FX_MATERIAL, material->info.name);
         return 0;
     }
