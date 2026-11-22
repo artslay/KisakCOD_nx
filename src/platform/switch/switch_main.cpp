@@ -570,7 +570,7 @@ static void SwitchProgressWatchdogMain()
             std::snprintf(
                 stallLine,
                 sizeof(stallLine),
-                "[KisakCOD][DB STALL] unchanged=%us loadingAssets=%u pendingZones=%u stage=%s asset=%d rawType=%u header=0x%08x serverStage=%s progressStage=%s phase=%s detail=%u script=%s\\n",
+                "[KisakCOD][DB STALL] unchanged=%us loadingAssets=%u pendingZones=%u stage=%s asset=%d rawType=%u header=0x%08x serverStage=%s progressStage=%s phase=%s detail=%u script=%s\n",
                 tick * 5u,
                 loadingAssets,
                 pendingZones,
