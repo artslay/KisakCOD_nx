@@ -821,7 +821,7 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
         char trace[384];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-enter n=%u enabled=%u effect=%.80s elem=%u drawTime=%d\\n",
+            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-enter n=%u enabled=%u effect=%.80s elem=%u drawTime=%d\n",
             switchFxCloudEntryTrace,
             fx_drawClouds->current.enabled ? 1u : 0u,
             draw->effect && draw->effect->def && draw->effect->def->name
@@ -861,7 +861,7 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX PARTICLE DIAG] stage=cloud-element n=%u effect=%.80s elem=%u visible=%u culled=%u scale=%.4g size=(%.4g,%.4g) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\\n",
+                "[KisakCOD][FX PARTICLE DIAG] stage=cloud-element n=%u effect=%.80s elem=%u visible=%u culled=%u scale=%.4g size=(%.4g,%.4g) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\n",
                 switchFxCloudElemTrace,
                 draw->effect && draw->effect->def && draw->effect->def->name
                     ? draw->effect->def->name : "<null>",
@@ -892,7 +892,7 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
                 char trace[320];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][FX PARTICLE DIAG] stage=cloud-add n=%u effect=%.72s material=%.80s result=%s\\n",
+                    "[KisakCOD][FX PARTICLE DIAG] stage=cloud-add n=%u effect=%.72s material=%.80s result=%s\n",
                     switchFxCloudAddTrace,
                     draw->effect && draw->effect->def && draw->effect->def->name
                         ? draw->effect->def->name : "<null>",
@@ -1326,7 +1326,7 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX PARTICLE DIAG] stage=active-frame n=%u first=%u new=%u draws=%u clouds=%u drawClouds=%u\\n",
+            "[KisakCOD][FX PARTICLE DIAG] stage=active-frame n=%u first=%u new=%u draws=%u clouds=%u drawClouds=%u\n",
             switchFxActiveFrameTrace,
             static_cast<unsigned>(system->firstActiveEffect),
             static_cast<unsigned>(system->firstNewEffect),
@@ -1407,7 +1407,7 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
                     char trace[640];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][FX PARTICLE DIAG] stage=effect-inventory n=%u name=%.112s defs=%u(one=%u loop=%u emit=%u) cloudDefs=%u spriteDefs=%u defTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) drawClouds=%u\\n",
+                        "[KisakCOD][FX PARTICLE DIAG] stage=effect-inventory n=%u name=%.112s defs=%u(one=%u loop=%u emit=%u) cloudDefs=%u spriteDefs=%u defTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) drawClouds=%u\n",
                         inventoryIndex,
                         effect->def->name ? effect->def->name : "<null>",
                         defElemCount,
