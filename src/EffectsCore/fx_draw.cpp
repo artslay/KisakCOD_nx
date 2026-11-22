@@ -1096,7 +1096,16 @@ void __cdecl FX_DrawNonSpriteElems(FxSystem *system)
     for (activeIndex = system->firstActiveEffect; activeIndex != system->firstNewEffect; ++activeIndex)
     {
         effect = FX_EffectFromHandle(system, system->allEffectHandles[activeIndex & 0x3FF]);
-        FX_DrawNonSpriteEffect(system, effect, 1u, system->msecDraw);
+        if (!(uint16_t)effect->status)
+            continue;
+
+        // FX_Update mutates the same per-effect element lists on worker
+        // threads. Hold the existing effect lock while walking class 1.
+        while (InterlockedExchangeAdd(&effect->status, 0x20000000) >= 0x20000000)
+            InterlockedExchangeAdd(&effect->status, -536870912);
+        if ((uint16_t)effect->status)
+            FX_DrawNonSpriteEffect(system, effect, 1u, system->msecDraw);
+        InterlockedExchangeAdd(&effect->status, -536870912);
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
         FX_RunGarbageCollection(system);
@@ -1317,26 +1326,6 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     if (!system->camera.isValid)
         MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 1511, 0, "%s", "system->camera.isValid");
     system->gfxCloudCount = 0;
-#ifdef __SWITCH__
-    static volatile uint32_t switchFxActiveFrameTraceCount = 0;
-    const uint32_t switchFxActiveFrameTrace =
-        __sync_fetch_and_add(&switchFxActiveFrameTraceCount, 1u);
-    if (switchFxActiveFrameTrace < 8u)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX PARTICLE DIAG] stage=active-frame n=%u first=%u new=%u draws=%u clouds=%u drawClouds=%u\n",
-            switchFxActiveFrameTrace,
-            static_cast<unsigned>(system->firstActiveEffect),
-            static_cast<unsigned>(system->firstNewEffect),
-            static_cast<unsigned>(
-                system->firstNewEffect - system->firstActiveEffect),
-            static_cast<unsigned>(system->gfxCloudCount),
-            fx_drawClouds->current.enabled ? 1u : 0u);
-        Switch_LogWrite(trace);
-    }
-#endif
     sprite = &system->sprite;
     system->sprite.indices = 0;
     system->sprite.indexCount = 0;
@@ -1348,101 +1337,36 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     {
         effectHandle = system->allEffectHandles[activeIndex & 0x3FF];
         effect = FX_EffectFromHandle(system, effectHandle);
-#ifdef __SWITCH__
-        if (effect && effect->def)
+        if (!(uint16_t)effect->status)
+            continue;
+
+        // The FX update workers append, remove, and relink these lists
+        // concurrently. The cooperative iterator keeps the effect allocation
+        // alive, but only the per-effect lock protects its mutable element
+        // chains. Use the same lock protocol as FX_Update.
+        while (InterlockedExchangeAdd(&effect->status, 0x20000000) >= 0x20000000)
+            InterlockedExchangeAdd(&effect->status, -536870912);
+        if ((uint16_t)effect->status)
         {
-            static const FxEffectDef *switchLoggedFxDefs[256] = {};
-            static volatile uint32_t switchLoggedFxDefCount = 0;
-            bool fxDefAlreadyLogged = false;
-            for (uint32_t defIndex = 0; defIndex < switchLoggedFxDefCount; ++defIndex)
-            {
-                if (switchLoggedFxDefs[defIndex] == effect->def)
-                {
-                    fxDefAlreadyLogged = true;
-                    break;
-                }
-            }
-            if (!fxDefAlreadyLogged && switchLoggedFxDefCount < 256u)
-            {
-                const uint32_t inventoryIndex =
-                    __sync_fetch_and_add(&switchLoggedFxDefCount, 1u);
-                if (inventoryIndex < 256u)
-                {
-                    switchLoggedFxDefs[inventoryIndex] = effect->def;
-                    const uint32_t defElemCount =
-                        static_cast<uint32_t>(effect->def->elemDefCountEmission) +
-                        static_cast<uint32_t>(effect->def->elemDefCountOneShot) +
-                        static_cast<uint32_t>(effect->def->elemDefCountLooping);
-                    uint32_t defTypeCounts[11] = {};
-                    for (uint32_t i = 0; i < defElemCount; ++i)
-                    {
-                        const uint8_t type = effect->def->elemDefs[i].elemType;
-                        if (type < 11u)
-                            ++defTypeCounts[type];
-                    }
-
-                    uint32_t activeTypeCounts[11] = {};
-                    uint32_t activeClassCounts[3] = {};
-                    for (uint32_t elemClass = 0; elemClass < 3u; ++elemClass)
-                    {
-                        uint16_t handle = effect->firstElemHandle[elemClass];
-                        while (handle != FX_HANDLE_NONE &&
-                               activeClassCounts[elemClass] < 2048u)
-                        {
-                            FxElem *activeElem =
-                                &FX_PoolFromHandle_Generic<FxElem, 2048>(
-                                    system->elems, handle)->item;
-                            if (activeElem->defIndex < defElemCount)
-                            {
-                                const uint8_t type =
-                                    effect->def->elemDefs[activeElem->defIndex].elemType;
-                                if (type < 11u)
-                                    ++activeTypeCounts[type];
-                            }
-                            ++activeClassCounts[elemClass];
-                            handle = activeElem->nextElemHandleInEffect;
-                        }
-                    }
-
-                    char trace[640];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][FX PARTICLE DIAG] stage=effect-inventory n=%u name=%.112s defs=%u(one=%u loop=%u emit=%u) cloudDefs=%u spriteDefs=%u defTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u) drawClouds=%u\n",
-                        inventoryIndex,
-                        effect->def->name ? effect->def->name : "<null>",
-                        defElemCount,
-                        static_cast<unsigned>(effect->def->elemDefCountOneShot),
-                        static_cast<unsigned>(effect->def->elemDefCountLooping),
-                        static_cast<unsigned>(effect->def->elemDefCountEmission),
-                        defTypeCounts[FX_ELEM_TYPE_CLOUD],
-                        defTypeCounts[FX_ELEM_TYPE_SPRITE_BILLBOARD] +
-                            defTypeCounts[FX_ELEM_TYPE_SPRITE_ORIENTED],
-                        defTypeCounts[0], defTypeCounts[1], defTypeCounts[2],
-                        defTypeCounts[3], defTypeCounts[4], defTypeCounts[5],
-                        defTypeCounts[6], defTypeCounts[7], defTypeCounts[8],
-                        defTypeCounts[9], defTypeCounts[10],
-                        activeClassCounts[0], activeClassCounts[1], activeClassCounts[2],
-                        activeTypeCounts[0], activeTypeCounts[1], activeTypeCounts[2],
-                        activeTypeCounts[3], activeTypeCounts[4], activeTypeCounts[5],
-                        activeTypeCounts[6], activeTypeCounts[7], activeTypeCounts[8],
-                        activeTypeCounts[9], activeTypeCounts[10],
-                        fx_drawClouds->current.enabled ? 1u : 0u);
-                    Switch_LogWrite(trace);
-                }
-            }
+            FX_DrawSpriteEffect(system, effect, drawTime);
+            FX_DrawNonSpriteEffect(system, effect, 2u, drawTime);
+            if (effect->firstTrailHandle != 0xFFFF)
+                trailEffects[numTrailEffects++] = effectHandle;
         }
-#endif
-        FX_DrawSpriteEffect(system, effect, drawTime);
-        FX_DrawNonSpriteEffect(system, effect, 2u, drawTime);
-        if (effect->firstTrailHandle != 0xFFFF)
-            trailEffects[numTrailEffects++] = effectHandle;
+        InterlockedExchangeAdd(&effect->status, -536870912);
     }
     if (numTrailEffects > 0)
     {
         for (i = 0; i < numTrailEffects; ++i)
         {
             effecta = FX_EffectFromHandle(system, trailEffects[i]);
-            FX_DrawTrailsForEffect(system, effecta, drawTime);
+            if (!(uint16_t)effecta->status)
+                continue;
+            while (InterlockedExchangeAdd(&effecta->status, 0x20000000) >= 0x20000000)
+                InterlockedExchangeAdd(&effecta->status, -536870912);
+            if ((uint16_t)effecta->status)
+                FX_DrawTrailsForEffect(system, effecta, drawTime);
+            InterlockedExchangeAdd(&effecta->status, -536870912);
         }
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
