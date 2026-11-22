@@ -197,7 +197,8 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
     GfxViewport viewport;
     R_GetViewport(source, &viewport);
     R_SetViewport(&gfxCmdBufState, &viewport);
-    R_UpdateViewport(source, &viewport);
+    if (source->viewportIsDirty)
+        R_UpdateViewport(source, &viewport);
 #endif
 }
 
