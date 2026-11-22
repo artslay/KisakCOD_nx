@@ -69,6 +69,13 @@ void __cdecl R_RegisterOutdoorImage(GfxWorld *world, const float *outdoorMin, co
     Outdoor_SetRendererOutdoorLookupMatrix(world);
     world->outdoorImage = Image_Register("$outdoor", TS_FUNCTION, IMAGE_TRACK_MISC);
     iassert( world->outdoorImage );
+#ifdef __SWITCH__
+    // Fastfile registration can return an existing builtin object without
+    // invoking its constructor. $outdoor depends on this world's bounds, so
+    // create its Vulkan texture here, after the outdoor transform is ready.
+    if (!world->outdoorImage->texture.basemap)
+        R_GenerateOutdoorImage(world->outdoorImage);
+#endif
 }
 
 void __cdecl Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world)
