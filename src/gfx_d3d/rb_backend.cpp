@@ -935,14 +935,17 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
     context.state->origMaterial = 0;
     R_SetDrawSurfsShadowableLight(context.source, info);
     R_Set3D(context.source);
+    // The Vulkan viewport belongs to the device, but viewportIsDirty belongs
+    // to this command-buffer source. Another source can change the device
+    // viewport while this source remains clean, so restore the active 3D
+    // viewport for every draw-surfs submission. R_SetViewport is cached by
+    // GfxCmdBufState and only reaches the device when the values differ.
+    R_GetViewport(context.source, &viewport);
+    R_SetViewport(context.state, &viewport);
+    if (prepassState)
+        R_SetViewport(prepassState, &viewport);
     if (context.source->viewportIsDirty)
-    {
-        R_GetViewport(context.source, &viewport);
-        R_SetViewport(context.state, &viewport);
-        if (prepassState)
-            R_SetViewport(prepassState, &viewport);
         R_UpdateViewport(context.source, &viewport);
-    }
     prepassContext.source = prepassState != 0 ? context.source : 0;
     prepassContext.state = prepassState;
     iassert(dx.d3d9 && dx.device);
