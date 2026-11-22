@@ -187,17 +187,18 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
         GfxViewport viewport;
         R_GetViewport(source, &viewport);
         R_CmdBufSet2D(source, &viewport);
-#ifdef __SWITCH__
-        // The scene and framebuffer targets share the same color surface on
-        // Switch. A logical switch between them therefore does not call
-        // IDirect3DDevice9::SetRenderTarget and cannot restore the device-side
-        // viewport. Explicitly apply the viewport used by the 2D projection so
-        // full-screen DOF, cinematics and HUD/menu quads cover the intended
-        // target instead of inheriting the previous 3D view's viewport.
-        R_SetViewport(&gfxCmdBufState, &viewport);
-        R_UpdateViewport(source, &viewport);
-#endif
     }
+#ifdef __SWITCH__
+    // The D3D viewport is device-global, while viewMode belongs to this
+    // command-buffer source. Another source or a render-target transition can
+    // change the device viewport without changing this source's cached 2D mode.
+    // Reapply the current source's viewport on every 2D request so UI, HUD and
+    // full-screen effects do not inherit a stale scene/offscreen viewport.
+    GfxViewport viewport;
+    R_GetViewport(source, &viewport);
+    R_SetViewport(&gfxCmdBufState, &viewport);
+    R_UpdateViewport(source, &viewport);
+#endif
 }
 
 void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
