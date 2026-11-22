@@ -832,6 +832,30 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
         const bool cloudScaleVisible = draw->visState.scale != 0.0;
         const bool cloudCulled =
             cloudScaleVisible ? FX_CullElementForDraw_Cloud(draw) : false;
+#ifdef __SWITCH__
+        static volatile uint32_t switchFxCloudElemTraceCount = 0;
+        const uint32_t switchFxCloudElemTrace =
+            __sync_fetch_and_add(&switchFxCloudElemTraceCount, 1u);
+        if (switchFxCloudElemTrace < 8u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX PARTICLE DIAG] stage=cloud-element n=%u effect=%.80s elem=%u visible=%u culled=%u scale=%.4g size=(%.4g,%.4g) alpha=%u pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\\n",
+                switchFxCloudElemTrace,
+                draw->effect && draw->effect->def && draw->effect->def->name
+                    ? draw->effect->def->name : "<null>",
+                static_cast<unsigned>(draw->elem->defIndex),
+                cloudScaleVisible ? 1u : 0u,
+                cloudCulled ? 1u : 0u,
+                draw->visState.scale,
+                draw->visState.size[0], draw->visState.size[1],
+                static_cast<unsigned>(draw->visState.color[3]),
+                draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
+                draw->camera->origin[0], draw->camera->origin[1], draw->camera->origin[2]);
+            Switch_LogWrite(trace);
+        }
+#endif
         if (cloudScaleVisible && !cloudCulled)
         {
             InterlockedIncrement(&draw->system->gfxCloudCount);
@@ -839,6 +863,25 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
             if (!visuals.anonymous)
                 MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 792, 0, "%s", "visuals.material");
             cloud = R_AddParticleCloudToScene(visuals.material);
+#ifdef __SWITCH__
+            static volatile uint32_t switchFxCloudAddTraceCount = 0;
+            const uint32_t switchFxCloudAddTrace =
+                __sync_fetch_and_add(&switchFxCloudAddTraceCount, 1u);
+            if (switchFxCloudAddTrace < 8u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX PARTICLE DIAG] stage=cloud-add n=%u effect=%.72s material=%.80s result=%s\\n",
+                    switchFxCloudAddTrace,
+                    draw->effect && draw->effect->def && draw->effect->def->name
+                        ? draw->effect->def->name : "<null>",
+                    visuals.material && visuals.material->info.name
+                        ? visuals.material->info.name : "<null>",
+                    cloud ? "accepted" : "rejected");
+                Switch_LogWrite(trace);
+            }
+#endif
             if (cloud)
             {
                 {
