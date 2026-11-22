@@ -23,11 +23,14 @@ extern void Dvar_Init();
 extern void Switch_LogInit();
 extern void Switch_LogShutdown();
 extern void Switch_LogWrite(const char *msg);
+extern void Switch_LogWriteError(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
 extern const char * volatile g_switchServerInitStage;
+extern volatile uint32_t g_loadingAssets;
+extern volatile uint32_t g_zoneInfoCount;
 
 extern "C" void *__aarch64_read_tp(void);
 
@@ -550,8 +553,38 @@ static void SwitchProgressWatchdogMain()
         if (stableTicks < 2u || reportedStall)
             continue;
 
-        // Stall tracking remains available internally for diagnostics, but
-        // periodic WATCHDOG reports are intentionally omitted from the log.
+        const uint32_t loadingAssets =
+            __atomic_load_n(&g_loadingAssets, __ATOMIC_RELAXED);
+        const uint32_t pendingZones =
+            __atomic_load_n(&g_zoneInfoCount, __ATOMIC_RELAXED);
+        const bool databaseBusy =
+            loadingAssets != 0u ||
+            pendingZones != 0u ||
+            (dbStage &&
+             std::strcmp(dbStage, "idle") != 0 &&
+             std::strcmp(dbStage, "thread/wait_start") != 0 &&
+             std::strcmp(dbStage, "load/no_pending") != 0);
+        if (databaseBusy)
+        {
+            char stallLine[768];
+            std::snprintf(
+                stallLine,
+                sizeof(stallLine),
+                "[KisakCOD][DB STALL] unchanged=%us loadingAssets=%u pendingZones=%u stage=%s asset=%d rawType=%u header=0x%08x serverStage=%s progressStage=%s phase=%s detail=%u script=%s\\n",
+                tick * 5u,
+                loadingAssets,
+                pendingZones,
+                dbStage ? dbStage : "(null)",
+                asset,
+                rawType,
+                header,
+                serverStage ? serverStage : "(null)",
+                progressStage ? progressStage : "(null)",
+                progressPhase ? progressPhase : "(null)",
+                progressDetail,
+                progressScriptName[0] ? progressScriptName : "(none)");
+            Switch_LogWriteError(stallLine);
+        }
         reportedStall = true;
     }
 }
