@@ -578,7 +578,7 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
         char trace[640];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk n=%u material=%.80s vs=%.72s ps=%.72s cloud=%u/%u radius=(%.4g,%.4g) origin=(%.2f,%.2f,%.2f) end=(%.2f,%.2f,%.2f) vb=%p ib=%p stride=%u\\n",
+            "[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk n=%u material=%.80s vs=%.72s ps=%.72s cloud=%u/%u radius=(%.4g,%.4g) origin=(%.2f,%.2f,%.2f) end=(%.2f,%.2f,%.2f) vb=%p ib=%p stride=%u\n",
             switchFxCloudVkTrace,
             context.state->material && context.state->material->info.name
                 ? context.state->material->info.name : "<null>",
@@ -631,7 +631,7 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 #ifdef __SWITCH__
     if (traceFxCloudVk)
-        Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk missing=0 draw-issued=1\\n");
+        Switch_LogWrite("[KisakCOD][FX PARTICLE DIAG] stage=cloud-vk missing=0 draw-issued=1\n");
 #endif
 #ifdef __SWITCH__
     if (context.state->prim.device)
