@@ -381,9 +381,26 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     // engine's canonical per-context g_com_error[] buffer.
     Com_InitThreadData(context);
 
-    // The Switch pthread layer creates std::threads at libnx's normal
-    // 0x3B priority. Set the engine's database-thread priority from the
-    // database thread itself, after its native handle is available.
+    // libnx creates these std::threads at priority 0x3B. Give the
+    // renderer the same two-level boost used by OpenBLOPS-NX relative to
+    // its normal 0x2C thread priority, without changing the other contexts.
+    if (context == THREAD_CONTEXT_BACKEND)
+    {
+        constexpr uint32_t backendPriority = 0x39u;
+        const Result priorityResult =
+            svcSetThreadPriority(threadGetCurHandle(), backendPriority);
+        if (priorityResult != 0)
+        {
+            char error[160];
+            std::snprintf(
+                error, sizeof(error),
+                "[KisakCOD][THREAD] backend priority update failed result=0x%08x priority=%u\\n",
+                priorityResult, backendPriority);
+            Switch_LogWrite(error);
+        }
+    }
+
+    // Keep the existing database-thread priority unchanged.
     if (context == THREAD_CONTEXT_DATABASE)
     {
         const uint32_t databasePriority = s_cpuCount > 1 ? 0x3Au : 0x3Cu;
