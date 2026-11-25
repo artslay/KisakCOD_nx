@@ -3566,7 +3566,7 @@ bool VulkanBackend::EndFrame()
 
     VkResult result;
 #ifdef __SWITCH__
-    const auto queueLockStart = SwitchFrameTimingStart();
+    const auto presentQueueLockStart = SwitchFrameTimingStart();
 #endif
     {
 #ifdef __SWITCH__
@@ -3574,7 +3574,7 @@ bool VulkanBackend::EndFrame()
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
-        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(queueLockStart));
+        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(presentQueueLockStart));
         const auto presentStart = SwitchFrameTimingStart();
 #endif
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
