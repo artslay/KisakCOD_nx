@@ -12154,9 +12154,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     if (m_backend && m_backend->IsFrameActive())
     {
         const uint64_t drawFrameSerial = m_backend->FrameSerial();
-        for (uint32_t stream = 0; stream < 16u; ++stream)
+        uint32_t activeStreamMask = m_streamSourceMask;
+        while (activeStreamMask)
         {
-            if ((m_streamSourceMask & (1u << stream)) && m_streams[stream].buffer)
+            const uint32_t stream =
+                static_cast<uint32_t>(__builtin_ctz(activeStreamMask));
+            activeStreamMask &= activeStreamMask - 1u;
+            if (m_streams[stream].buffer)
             {
                 static_cast<KisakVkBuffer *>(m_streams[stream].buffer)
                     ->lastDrawFrameSerial.store(
@@ -12235,12 +12239,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t stream0Stride = 0;
     static uint32_t switchDrawBindTraceCount = 0;
     uint32_t pendingStreamMask = m_streamSourceMask;
-    for (uint32_t stream = 0; pendingStreamMask; ++stream)
+    while (pendingStreamMask)
     {
-        const uint32_t streamBit = 1u << stream;
-        if (!(pendingStreamMask & streamBit))
-            continue;
-        pendingStreamMask &= ~streamBit;
+        const uint32_t stream =
+            static_cast<uint32_t>(__builtin_ctz(pendingStreamMask));
+        pendingStreamMask &= pendingStreamMask - 1u;
 
         g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/stream_scan";
         IDirect3DVertexBuffer9 *vertexBuffer = m_streams[stream].buffer;
