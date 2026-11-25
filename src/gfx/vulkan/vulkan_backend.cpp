@@ -16,6 +16,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <malloc.h>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,179 @@ std::atomic<VulkanBackend *> g_backend{nullptr};
 thread_local VulkanBackend *g_frameRecordingBackend = nullptr;
 
 #ifdef __SWITCH__
+// Small-object host allocator for NVK device objects. Mesa stores the
+// vkCreateDevice allocator in vk_device.alloc and uses it as the fallback
+// whenever a device-level vkCreate* call passes a null allocator. This keeps
+// the driver away from newlib's global heap lock for the frequent small
+// allocations made while recording draws and creating descriptors.
+constexpr size_t kSwitchVkAllocatorHeader = 16u;
+constexpr size_t kSwitchVkAllocatorGranule = 16u;
+constexpr size_t kSwitchVkAllocatorMaxSmall = 2048u;
+constexpr uint32_t kSwitchVkAllocatorClasses =
+    static_cast<uint32_t>(kSwitchVkAllocatorMaxSmall / kSwitchVkAllocatorGranule);
+constexpr size_t kSwitchVkAllocatorChunk = 64u * 1024u;
+
+struct SwitchVkAllocatorHeader
+{
+    uint32_t sizeClass;
+    uint32_t size;
+    void *raw;
+};
+static_assert(sizeof(SwitchVkAllocatorHeader) == kSwitchVkAllocatorHeader);
+
+struct SwitchVkAllocatorFreeNode
+{
+    SwitchVkAllocatorFreeNode *next;
+};
+
+struct SwitchVkAllocatorSizeClass
+{
+    Mutex mutex;
+    SwitchVkAllocatorFreeNode *freeList;
+    char *bump;
+    char *end;
+};
+
+SwitchVkAllocatorSizeClass
+    g_switchVkAllocatorClasses[kSwitchVkAllocatorClasses]{};
+
+void *SwitchVkAllocatorLargeAllocate(size_t size, size_t alignment)
+{
+    if (alignment < kSwitchVkAllocatorHeader)
+        alignment = kSwitchVkAllocatorHeader;
+    if (size > SIZE_MAX - alignment)
+        return nullptr;
+
+    char *raw = static_cast<char *>(memalign(alignment, size + alignment));
+    if (!raw)
+        return nullptr;
+
+    char *user = raw + alignment;
+    auto *header = reinterpret_cast<SwitchVkAllocatorHeader *>(
+        user - kSwitchVkAllocatorHeader);
+    header->sizeClass = 0;
+    header->size = static_cast<uint32_t>(size);
+    header->raw = raw;
+    return user;
+}
+
+VKAPI_ATTR void *VKAPI_CALL SwitchVkDeviceAllocate(
+    void *, size_t size, size_t alignment, VkSystemAllocationScope)
+{
+    if (alignment > kSwitchVkAllocatorGranule ||
+        size > kSwitchVkAllocatorMaxSmall)
+        return SwitchVkAllocatorLargeAllocate(size, alignment);
+
+    const uint32_t sizeClass = size
+        ? static_cast<uint32_t>(
+            (size + kSwitchVkAllocatorGranule - 1u) /
+            kSwitchVkAllocatorGranule)
+        : 1u;
+    SwitchVkAllocatorSizeClass &allocatorClass =
+        g_switchVkAllocatorClasses[sizeClass - 1u];
+    const size_t blockSize =
+        kSwitchVkAllocatorHeader +
+        static_cast<size_t>(sizeClass) * kSwitchVkAllocatorGranule;
+
+    mutexLock(&allocatorClass.mutex);
+    char *block = nullptr;
+    if (allocatorClass.freeList)
+    {
+        auto *node = allocatorClass.freeList;
+        allocatorClass.freeList = node->next;
+        block = reinterpret_cast<char *>(node);
+    }
+    else
+    {
+        if (!allocatorClass.bump ||
+            static_cast<size_t>(allocatorClass.end - allocatorClass.bump) < blockSize)
+        {
+            char *chunk = static_cast<char *>(
+                memalign(kSwitchVkAllocatorGranule, kSwitchVkAllocatorChunk));
+            if (!chunk)
+            {
+                mutexUnlock(&allocatorClass.mutex);
+                return nullptr;
+            }
+            allocatorClass.bump = chunk;
+            allocatorClass.end = chunk + kSwitchVkAllocatorChunk;
+        }
+        block = allocatorClass.bump;
+        allocatorClass.bump += blockSize;
+    }
+    mutexUnlock(&allocatorClass.mutex);
+
+    auto *header = reinterpret_cast<SwitchVkAllocatorHeader *>(block);
+    header->sizeClass = sizeClass;
+    return block + kSwitchVkAllocatorHeader;
+}
+
+VKAPI_ATTR void VKAPI_CALL SwitchVkDeviceFree(void *, void *memory)
+{
+    if (!memory)
+        return;
+
+    char *user = static_cast<char *>(memory);
+    auto *header = reinterpret_cast<SwitchVkAllocatorHeader *>(
+        user - kSwitchVkAllocatorHeader);
+    if (!header->sizeClass)
+    {
+        ::free(header->raw);
+        return;
+    }
+
+    SwitchVkAllocatorSizeClass &allocatorClass =
+        g_switchVkAllocatorClasses[header->sizeClass - 1u];
+    auto *node = reinterpret_cast<SwitchVkAllocatorFreeNode *>(header);
+    mutexLock(&allocatorClass.mutex);
+    node->next = allocatorClass.freeList;
+    allocatorClass.freeList = node;
+    mutexUnlock(&allocatorClass.mutex);
+}
+
+VKAPI_ATTR void *VKAPI_CALL SwitchVkDeviceReallocate(
+    void *userData, void *memory, size_t size, size_t alignment,
+    VkSystemAllocationScope scope)
+{
+    if (!memory)
+        return SwitchVkDeviceAllocate(userData, size, alignment, scope);
+    if (!size)
+    {
+        SwitchVkDeviceFree(userData, memory);
+        return nullptr;
+    }
+
+    const auto *header = reinterpret_cast<const SwitchVkAllocatorHeader *>(
+        static_cast<const char *>(memory) - kSwitchVkAllocatorHeader);
+    if (header->sizeClass && alignment <= kSwitchVkAllocatorGranule &&
+        size > static_cast<size_t>(header->sizeClass - 1u) *
+                   kSwitchVkAllocatorGranule &&
+        size <= static_cast<size_t>(header->sizeClass) *
+                    kSwitchVkAllocatorGranule)
+        return memory;
+
+    const size_t oldSize = header->sizeClass
+        ? static_cast<size_t>(header->sizeClass) * kSwitchVkAllocatorGranule
+        : static_cast<size_t>(header->size);
+    void *replacement =
+        SwitchVkDeviceAllocate(userData, size, alignment, scope);
+    if (replacement)
+    {
+        std::memcpy(replacement, memory, std::min(oldSize, size));
+        SwitchVkDeviceFree(userData, memory);
+    }
+    return replacement;
+}
+
+const VkAllocationCallbacks g_switchVkDeviceAllocator = {
+    nullptr,
+    SwitchVkDeviceAllocate,
+    SwitchVkDeviceReallocate,
+    SwitchVkDeviceFree,
+    nullptr,
+    nullptr
+};
+
 using SwitchFrameClock = std::chrono::steady_clock;
 
 struct SwitchFrameTimingCounter
@@ -1186,7 +1360,7 @@ void VulkanBackend::Shutdown()
     SaveAndDestroyPipelineCache();
 
     if (m_surface) vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-    if (m_device) vkDestroyDevice(m_device, nullptr);
+    if (m_device) vkDestroyDevice(m_device, &g_switchVkDeviceAllocator);
     if (m_instance) vkDestroyInstance(m_instance, nullptr);
 
     m_surface = VK_NULL_HANDLE;
@@ -1564,7 +1738,7 @@ bool VulkanBackend::CreateDevice()
     info.ppEnabledExtensionNames = extensions.data();
     info.pEnabledFeatures = &features;
 
-    const VkResult result = vkCreateDevice(m_physicalDevice, &info, nullptr, &m_device);
+    const VkResult result = vkCreateDevice(m_physicalDevice, &info, &g_switchVkDeviceAllocator, &m_device);
     if (result != VK_SUCCESS)
     {
         SetError("vkCreateDevice failed");
