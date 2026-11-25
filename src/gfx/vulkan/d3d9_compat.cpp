@@ -18,11 +18,20 @@
 #include <platform/switch/switch_perf_diag.h>
 #include <spirv/spirv.h>
 
+extern "C"
+{
+#include <switch/kernel/thread.h>
+#include <switch/kernel/svc.h>
+}
+
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <thread>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -98,6 +107,233 @@ thread_local volatile uintptr_t g_switchVkPipelineTracePixelShader = 0;
 thread_local volatile uintptr_t g_switchVkPipelineTracePixelSerial = 0;
 }
 
+
+
+
+struct SwitchVkPipelineCompiler
+{
+    struct Task
+    {
+        uint64_t key = 0;
+        VkDevice device = VK_NULL_HANDLE;
+        VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        std::shared_mutex *pipelineCacheMutex = nullptr;
+        std::vector<uint32_t> vertexSpirv, pixelSpirv;
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        std::vector<VkVertexInputBindingDescription> bindings;
+        std::vector<VkVertexInputAttributeDescription> attributes;
+        VkPipelineInputAssemblyStateCreateInfo assembly{};
+        VkPipelineViewportStateCreateInfo viewport{};
+        VkPipelineRasterizationStateCreateInfo raster{};
+#ifdef VK_EXT_depth_bias_control
+        VkDepthBiasRepresentationInfoEXT depthBiasRepresentation{};
+        bool hasDepthBiasRepresentation = false;
+#endif
+        VkPipelineMultisampleStateCreateInfo multisample{};
+        VkSampleMask sampleMask = 0xffffffffu;
+        VkPipelineDepthStencilStateCreateInfo depth{};
+        VkPipelineColorBlendStateCreateInfo blend{};
+        VkPipelineColorBlendAttachmentState blendAttachment{};
+        VkPipelineDynamicStateCreateInfo dynamic{};
+        std::vector<VkDynamicState> dynamicStates;
+        VkPipelineRenderingCreateInfo rendering{};
+        VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+        VkGraphicsPipelineCreateInfo info{};
+    };
+    struct Completed
+    {
+        uint64_t key = 0;
+        VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+    };
+
+    ~SwitchVkPipelineCompiler() { Stop(); }
+
+    bool Enqueue(Task &&task)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_stopping || m_pending.size() >= 32u ||
+            m_pending.find(task.key) != m_pending.end())
+            return false;
+        if (!m_started)
+        {
+            try
+            {
+                m_worker = std::thread([this] { Run(); });
+                m_started = true;
+            }
+            catch (...) { return false; }
+        }
+        m_pending.insert(task.key);
+        m_queue.emplace_back(std::move(task));
+        m_condition.notify_one();
+        return true;
+    }
+
+    bool IsPending(uint64_t key)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_pending.find(key) != m_pending.end();
+    }
+
+    bool ConsumeFailure(uint64_t key)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_failed.erase(key) != 0;
+    }
+
+    std::vector<Completed> TakeCompleted()
+    {
+        std::vector<Completed> result;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            result.swap(m_completed);
+            for (const Completed &entry : result)
+            {
+                m_pending.erase(entry.key);
+                if (entry.result != VK_SUCCESS || entry.pipeline == VK_NULL_HANDLE)
+                    m_failed.insert(entry.key);
+            }
+        }
+        return result;
+    }
+
+    void Stop()
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (!m_started) { m_stopping = true; return; }
+            m_stopping = true;
+        }
+        m_condition.notify_all();
+        if (m_worker.joinable())
+            m_worker.join();
+        m_started = false;
+    }
+
+private:
+    static Completed Compile(Task &task)
+    {
+        Completed out{};
+        out.key = task.key;
+        if (task.vertexSpirv.empty() || task.pixelSpirv.empty() ||
+            task.device == VK_NULL_HANDLE || task.layout == VK_NULL_HANDLE)
+        {
+            out.result = VK_ERROR_INITIALIZATION_FAILED;
+            return out;
+        }
+
+        VkShaderModule vs = VK_NULL_HANDLE, ps = VK_NULL_HANDLE;
+        VkShaderModuleCreateInfo module{};
+        module.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        module.codeSize = task.vertexSpirv.size() * sizeof(uint32_t);
+        module.pCode = task.vertexSpirv.data();
+        out.result = vkCreateShaderModule(task.device, &module, nullptr, &vs);
+        if (out.result != VK_SUCCESS)
+            return out;
+
+        module.codeSize = task.pixelSpirv.size() * sizeof(uint32_t);
+        module.pCode = task.pixelSpirv.data();
+        out.result = vkCreateShaderModule(task.device, &module, nullptr, &ps);
+        if (out.result != VK_SUCCESS)
+        {
+            vkDestroyShaderModule(task.device, vs, nullptr);
+            return out;
+        }
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vs;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = ps;
+        stages[1].pName = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput = task.vertexInput;
+        vertexInput.pVertexBindingDescriptions = task.bindings.data();
+        vertexInput.pVertexAttributeDescriptions = task.attributes.data();
+        VkPipelineRasterizationStateCreateInfo raster = task.raster;
+#ifdef VK_EXT_depth_bias_control
+        VkDepthBiasRepresentationInfoEXT depthBias = task.depthBiasRepresentation;
+        raster.pNext = task.hasDepthBiasRepresentation ? &depthBias : nullptr;
+#endif
+        VkPipelineMultisampleStateCreateInfo multisample = task.multisample;
+        multisample.pSampleMask = &task.sampleMask;
+        VkPipelineColorBlendStateCreateInfo blend = task.blend;
+        blend.pAttachments = &task.blendAttachment;
+        VkPipelineDynamicStateCreateInfo dynamic = task.dynamic;
+        dynamic.pDynamicStates = task.dynamicStates.data();
+        VkPipelineRenderingCreateInfo rendering = task.rendering;
+        rendering.pColorAttachmentFormats = &task.colorFormat;
+
+        VkGraphicsPipelineCreateInfo info = task.info;
+        info.pNext = &rendering;
+        info.pStages = stages;
+        info.pVertexInputState = &vertexInput;
+        info.pInputAssemblyState = &task.assembly;
+        info.pViewportState = &task.viewport;
+        info.pRasterizationState = &raster;
+        info.pMultisampleState = &multisample;
+        info.pDepthStencilState = &task.depth;
+        info.pColorBlendState = &blend;
+        info.pDynamicState = &dynamic;
+        info.layout = task.layout;
+
+        if (task.pipelineCacheMutex)
+        {
+            std::shared_lock<std::shared_mutex> cacheLock(*task.pipelineCacheMutex);
+            out.result = vkCreateGraphicsPipelines(
+                task.device, task.pipelineCache, 1, &info, nullptr, &out.pipeline);
+        }
+        else
+        {
+            out.result = vkCreateGraphicsPipelines(
+                task.device, task.pipelineCache, 1, &info, nullptr, &out.pipeline);
+        }
+
+        vkDestroyShaderModule(task.device, ps, nullptr);
+        vkDestroyShaderModule(task.device, vs, nullptr);
+        if (out.result != VK_SUCCESS && out.pipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(task.device, out.pipeline, nullptr);
+            out.pipeline = VK_NULL_HANDLE;
+        }
+        return out;
+    }
+
+    void Run()
+    {
+        (void)svcSetThreadPriority(threadGetCurHandle(), 0x3Du);
+        for (;;)
+        {
+            Task task{};
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_condition.wait(lock, [this] { return m_stopping || !m_queue.empty(); });
+                if (m_stopping && m_queue.empty())
+                    return;
+                task = std::move(m_queue.front());
+                m_queue.pop_front();
+            }
+            Completed completed = Compile(task);
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                m_completed.emplace_back(std::move(completed));
+            }
+        }
+    }
+
+    std::mutex m_mutex;
+    std::condition_variable m_condition;
+    std::deque<Task> m_queue;
+    std::vector<Completed> m_completed;
+    std::unordered_set<uint64_t> m_pending, m_failed;
+    std::thread m_worker;
+    bool m_started = false, m_stopping = false;
+};
 
 
 // Last submitted-frame context is read by VulkanBackend only if queue submission fails.
@@ -6169,6 +6405,9 @@ void IDirect3DDevice9::LogGpuDrawCommand(
 IDirect3DDevice9::IDirect3DDevice9()
 {
     m_backend = GetVulkanBackend();
+    const char *asyncPipelineSetting = std::getenv("KISAK_SWITCH_ASYNC_PIPELINES");
+    if (!asyncPipelineSetting || std::strcmp(asyncPipelineSetting, "0") != 0)
+        m_pipelineCompiler = new SwitchVkPipelineCompiler();
     char auditCodeMarker[160];
     std::snprintf(auditCodeMarker, sizeof(auditCodeMarker),
         "[KisakCOD][VK GPU AUDIT CODE] event=device_ctor backend=%p\n",
@@ -6190,6 +6429,23 @@ IDirect3DDevice9::IDirect3DDevice9()
 
 IDirect3DDevice9::~IDirect3DDevice9()
 {
+    if (m_pipelineCompiler)
+    {
+        m_pipelineCompiler->Stop();
+        for (const SwitchVkPipelineCompiler::Completed &entry :
+             m_pipelineCompiler->TakeCompleted())
+        {
+            if (entry.result == VK_SUCCESS && entry.pipeline != VK_NULL_HANDLE)
+            {
+                const auto inserted = m_pipelines.emplace(entry.key, entry.pipeline);
+                if (!inserted.second && m_backend)
+                    vkDestroyPipeline(m_backend->Device(), entry.pipeline, nullptr);
+            }
+        }
+        delete m_pipelineCompiler;
+        m_pipelineCompiler = nullptr;
+    }
+
     // EndRendering() only closes the active dynamic-rendering scope. It does
     // not wait for submissions already queued on the graphics queue. D3D9
     // device teardown implicitly retires its work; Vulkan requires that
@@ -9203,6 +9459,20 @@ bool IDirect3DDevice9::BindSamplerSet(
 
 bool IDirect3DDevice9::EnsurePipeline()
 {
+    m_asyncPipelinePendingDraw = false;
+    if (m_pipelineCompiler)
+    {
+        for (const SwitchVkPipelineCompiler::Completed &entry :
+             m_pipelineCompiler->TakeCompleted())
+        {
+            if (entry.result != VK_SUCCESS || entry.pipeline == VK_NULL_HANDLE)
+                continue;
+            const auto inserted = m_pipelines.emplace(entry.key, entry.pipeline);
+            if (!inserted.second && m_backend)
+                vkDestroyPipeline(m_backend->Device(), entry.pipeline, nullptr);
+        }
+    }
+
     SwitchEnsurePipelineTraceScope traceScope;
     // Mark the pipeline trace inactive until a Vulkan pipeline operation is
     // reached. Module-trace state is cleared by the preceding scope destructor.
@@ -9444,6 +9714,22 @@ bool IDirect3DDevice9::EnsurePipeline()
     RecordSwitchVkPipelineTrace(
         5u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
+
+    const bool asyncPipelineFailed =
+        m_pipelineCompiler && m_pipelineCompiler->ConsumeFailure(key);
+    const bool allowAsyncPipelineCompile =
+        m_pipelineCompiler && !asyncPipelineFailed &&
+        !switchFragmentOutputProbeActive &&
+        !m_drawPrimitiveUPActive &&
+        !g_switchFxCodeMeshDrawActive &&
+        !m_markMeshPassActive &&
+        !m_particleCloudPassActive &&
+        !Switch_IsFloorAuditContextActive();
+    if (allowAsyncPipelineCompile && m_pipelineCompiler->IsPending(key))
+    {
+        m_asyncPipelinePendingDraw = true;
+        return false;
+    }
 
     // Keep the linked fragment module before our custom alpha-test rewrite.
     // If NVK rejects the final pipeline, diagnostic probes below can determine
@@ -10990,6 +11276,68 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     g_switchPipelineCrashSnapshot.valid = true;
 
+    if (allowAsyncPipelineCompile)
+    {
+        SwitchVkPipelineCompiler::Task task{};
+        task.key = key;
+        task.device = m_backend->Device();
+        task.pipelineCache = m_backend->PipelineCache();
+        task.layout = m_backend->PipelineLayout();
+        task.pipelineCacheMutex = &m_backend->PipelineCacheMutex();
+        task.vertexSpirv = m_vertexShader->spirv;
+        task.pixelSpirv = m_pixelShader->spirv;
+        task.vertexInput = vertexInput;
+        task.bindings = bindings;
+        task.attributes = vertexAttrs;
+        task.vertexInput.pVertexBindingDescriptions = nullptr;
+        task.vertexInput.pVertexAttributeDescriptions = nullptr;
+        task.assembly = assembly;
+        task.viewport = viewport;
+        task.raster = raster;
+        task.raster.pNext = nullptr;
+#ifdef VK_EXT_depth_bias_control
+        if (raster.pNext)
+        {
+            task.depthBiasRepresentation =
+                *static_cast<const VkDepthBiasRepresentationInfoEXT *>(raster.pNext);
+            task.hasDepthBiasRepresentation = true;
+        }
+#endif
+        task.multisample = multisample;
+        task.sampleMask = m_multisampleMask;
+        task.multisample.pSampleMask = nullptr;
+        task.depth = depth;
+        task.blend = blend;
+        task.blendAttachment = colorBlend;
+        task.blend.pAttachments = nullptr;
+        task.dynamic = dynamic;
+        task.dynamicStates.assign(
+            dynamicStates, dynamicStates + sizeof(dynamicStates) / sizeof(dynamicStates[0]));
+        task.dynamic.pDynamicStates = nullptr;
+        task.rendering = rendering;
+        task.colorFormat = colorFormat;
+        task.rendering.pColorAttachmentFormats = nullptr;
+        task.info = info;
+        task.info.pNext = nullptr;
+        task.info.pStages = nullptr;
+        task.info.pVertexInputState = nullptr;
+        task.info.pInputAssemblyState = nullptr;
+        task.info.pTessellationState = nullptr;
+        task.info.pViewportState = nullptr;
+        task.info.pRasterizationState = nullptr;
+        task.info.pMultisampleState = nullptr;
+        task.info.pDepthStencilState = nullptr;
+        task.info.pColorBlendState = nullptr;
+        task.info.pDynamicState = nullptr;
+        task.info.layout = task.layout;
+        if (m_pipelineCompiler->Enqueue(std::move(task)))
+        {
+            m_asyncPipelinePendingDraw = true;
+            g_switchFrameStage = "frame/render/vulkan/pipeline/async_queued";
+            return false;
+        }
+    }
+
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
@@ -11629,6 +11977,8 @@ bool IDirect3DDevice9::PrepareDraw()
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
     {
+        if (m_asyncPipelinePendingDraw)
+            return false;
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
         return false;
     }
@@ -11659,6 +12009,11 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     m_drawPrimitiveUPStride = 0;
     if (!prepared)
     {
+        if (m_asyncPipelinePendingDraw)
+        {
+            m_asyncPipelinePendingDraw = false;
+            return S_OK;
+        }
         return E_FAIL;
     }
 
@@ -12174,6 +12529,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 #endif
     if (!PrepareDraw())
     {
+        if (m_asyncPipelinePendingDraw)
+        {
+            m_asyncPipelinePendingDraw = false;
+            return S_OK;
+        }
         char msg[320];
         std::snprintf(
             msg, sizeof(msg),
@@ -13100,7 +13460,14 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed_indirect/prepare_draw";
     if (!PrepareDraw())
+    {
+        if (m_asyncPipelinePendingDraw)
+        {
+            m_asyncPipelinePendingDraw = false;
+            return S_OK;
+        }
         return E_FAIL;
+    }
 
     const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
     const VkBuffer indexBuffer = m_indices->buffer;
