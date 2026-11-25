@@ -52,6 +52,10 @@ struct SwitchSModelCacheDiagnostics
     uint64_t candidates = 0;
     uint64_t cacheAttempts = 0;
     uint64_t cacheSuccesses = 0;
+    uint64_t cachePoolAttempts[4]{};
+    uint64_t cachePoolSuccesses[4]{};
+    uint64_t cachePoolAllocatorFailures[4]{};
+    uint64_t cacheAllocBits[6]{};
     uint64_t rigidFallback[kSwitchSModelCacheFallbackReasonCount]{};
     uint64_t skinnedFallback[kSwitchSModelCacheFallbackReasonCount]{};
 };
@@ -75,7 +79,8 @@ void Switch_LogSModelCacheDiagnostics(
 
     char rigidText[384];
     char skinnedText[384];
-    char message[1024];
+    char poolText[512];
+    char message[1536];
     std::snprintf(
         rigidText, sizeof(rigidText),
         "rigid{disabled=%llu,no_lod_metadata=%llu,invalid=%llu,device_lost=%llu,patch_count=%llu,patch_vertices=%llu,allocator=%llu,unknown=%llu}",
@@ -99,13 +104,34 @@ void Switch_LogSModelCacheDiagnostics(
         value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::AllocatorExhausted),
         value(g_switchSModelCacheDiagnostics.skinnedFallback, SwitchSModelCacheFallbackReason::Unknown));
     std::snprintf(
+        poolText, sizeof(poolText),
+        "pool{0=%llu/%llu/%llu,1=%llu/%llu/%llu,2=%llu/%llu/%llu,3=%llu/%llu/%llu} alloc_bits{4=%llu,5=%llu,6=%llu,7=%llu,8=%llu,9=%llu}",
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAttempts[0]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolSuccesses[0]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures[0]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAttempts[1]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolSuccesses[1]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures[1]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAttempts[2]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolSuccesses[2]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures[2]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAttempts[3]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolSuccesses[3]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures[3]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[0]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[1]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[2]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[3]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[4]),
+        static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAllocBits[5]));
+    std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][SMC DIAG] frame=%u window=60 candidates=%llu attempts=%llu successes=%llu %s %s frame_patch_count=%u frame_patch_verts=%u\n",
+        "[KisakCOD][SMC DIAG] frame=%u window=60 candidates=%llu attempts=%llu successes=%llu %s %s %s frame_patch_count=%u frame_patch_verts=%u\n",
         frame,
         static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.candidates),
         static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheAttempts),
         static_cast<unsigned long long>(g_switchSModelCacheDiagnostics.cacheSuccesses),
-        rigidText, skinnedText, framePatchCount, framePatchVertsUsed);
+        rigidText, skinnedText, poolText, framePatchCount, framePatchVertsUsed);
     Switch_LogWrite(message);
 
     g_switchSModelCacheDiagnostics = {};
@@ -195,6 +221,7 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
         SwitchSModelCacheFallbackReason::Unknown;
     StaticModelCacheFailureReason switchCacheFailureReason =
         StaticModelCacheFailureReason::None;
+    uint32_t switchCachePoolIndex = UINT32_MAX;
 #endif
 
     model = rgp.world->dpvs.smodelDrawInsts[smodelIndex].model;
@@ -227,10 +254,19 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
             smodelIndex,
             rgp.world->dpvs.smodelCount);
 #ifdef __SWITCH__
+    switchCachePoolIndex = static_cast<uint32_t>(lodInfo->smcIndexPlusOne - 1u);
     if (switchPerfDiagEnabled)
+    {
         ++g_switchSModelCacheDiagnostics.cacheAttempts;
+        if (switchCachePoolIndex < ARRAY_COUNT(g_switchSModelCacheDiagnostics.cachePoolAttempts))
+        {
+            ++g_switchSModelCacheDiagnostics.cachePoolAttempts[switchCachePoolIndex];
+            if (lodInfo->smcAllocBits >= 4 && lodInfo->smcAllocBits <= 9)
+                ++g_switchSModelCacheDiagnostics.cacheAllocBits[lodInfo->smcAllocBits - 4u];
+        }
+    }
     staticModelId.objectId = R_CacheStaticModelSurface(
-        lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo,
+        switchCachePoolIndex, smodelIndex, lodInfo,
         &switchCacheFailureReason);
 #else
     staticModelId.objectId = R_CacheStaticModelSurface(
@@ -240,7 +276,11 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
     {
 #ifdef __SWITCH__
         if (switchPerfDiagEnabled)
+        {
             ++g_switchSModelCacheDiagnostics.cacheSuccesses;
+            if (switchCachePoolIndex < ARRAY_COUNT(g_switchSModelCacheDiagnostics.cachePoolSuccesses))
+                ++g_switchSModelCacheDiagnostics.cachePoolSuccesses[switchCachePoolIndex];
+        }
 #endif
         staticModelId.surfType = SF_STATICMODEL_CACHED;
         return staticModelId;
@@ -271,6 +311,9 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
                 switchFallbackReason = SwitchSModelCacheFallbackReason::Unknown;
                 break;
             }
+            if (switchCacheFailureReason == StaticModelCacheFailureReason::AllocatorExhausted &&
+                switchCachePoolIndex < ARRAY_COUNT(g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures))
+                ++g_switchSModelCacheDiagnostics.cachePoolAllocatorFailures[switchCachePoolIndex];
         }
 #endif
     LABEL_9:
