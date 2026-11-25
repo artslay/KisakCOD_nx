@@ -185,10 +185,14 @@ struct SwitchVkPipelineCompiler
 
     std::vector<Completed> TakeCompleted()
     {
+        if (m_completedCount.load(std::memory_order_acquire) == 0)
+            return {};
+
         std::vector<Completed> result;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             result.swap(m_completed);
+            m_completedCount.store(0, std::memory_order_release);
             for (const Completed &entry : result)
             {
                 m_pending.erase(entry.key);
@@ -322,6 +326,7 @@ private:
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_completed.emplace_back(std::move(completed));
+                m_completedCount.fetch_add(1, std::memory_order_release);
             }
         }
     }
@@ -330,6 +335,7 @@ private:
     std::condition_variable m_condition;
     std::deque<Task> m_queue;
     std::vector<Completed> m_completed;
+    std::atomic<uint32_t> m_completedCount{0};
     std::unordered_set<uint64_t> m_pending, m_failed;
     std::thread m_worker;
     bool m_started = false, m_stopping = false;
@@ -12532,6 +12538,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         if (m_asyncPipelinePendingDraw)
         {
             m_asyncPipelinePendingDraw = false;
+            g_switchQueuedWorldAuditCount = 0;
+            g_switchQueuedWorldAuditOverflowReported = false;
             return S_OK;
         }
         char msg[320];
