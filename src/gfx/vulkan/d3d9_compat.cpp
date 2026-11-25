@@ -209,6 +209,7 @@ struct SwitchVkPipelineCompiler
             std::lock_guard<std::mutex> lock(m_mutex);
             if (!m_started) { m_stopping = true; return; }
             m_stopping = true;
+            m_queue.clear();
         }
         m_condition.notify_all();
         if (m_worker.joinable())
@@ -13472,6 +13473,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitiveIndirect(
         if (m_asyncPipelinePendingDraw)
         {
             m_asyncPipelinePendingDraw = false;
+            g_switchQueuedWorldAuditCount = 0;
+            g_switchQueuedWorldAuditOverflowReported = false;
             return S_OK;
         }
         return E_FAIL;
