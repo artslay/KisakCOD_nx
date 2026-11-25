@@ -12243,6 +12243,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     {
         const uint32_t stream =
             static_cast<uint32_t>(__builtin_ctz(pendingStreamMask));
+        const uint32_t streamBit = 1u << stream;
         pendingStreamMask &= pendingStreamMask - 1u;
 
         g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/stream_scan";
