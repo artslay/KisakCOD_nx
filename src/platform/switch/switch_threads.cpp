@@ -247,6 +247,20 @@ static int32_t Switch_GetThreadAffinityCoreIndex(
     return -1;
 }
 
+static int32_t Switch_GetThreadPreferredCoreIndex(
+    ThreadContext_t context, WinThreadLock threadLock)
+{
+    if (threadLock != THREAD_LOCK_NONE)
+        return -1;
+
+    if (context == THREAD_CONTEXT_MAIN)
+        return 0;
+    if (context == THREAD_CONTEXT_BACKEND)
+        return s_cpuCount > 1u ? 1 : 0;
+
+    return -1;
+}
+
 static void Switch_SetThreadAffinity(
     Handle handle, ThreadContext_t context, WinThreadLock threadLock)
 {
@@ -265,10 +279,11 @@ static void Switch_SetThreadAffinity(
             affinityMask = selectedMask;
     }
 
-    // libnx uses preferred_core=-1 for an unrestricted process mask.
-    // For a pinned thread, pass the physical CPU ID represented by the
-    // one-bit mask from Switch_InitCpuTopology().
+    // Keep the process-wide mask when no lock mode is active, but provide
+    // the scheduler's preferred core for the main and backend threads.
+    // Explicit WinThreadLock modes continue to use their existing hard masks.
     int32_t preferredCore = -1;
+    int32_t preferredCoreIndex = -1;
     if (affinityMask != s_affinityMaskForProcess)
     {
         for (uint32_t coreId = 0; coreId < 4u; ++coreId)
@@ -277,6 +292,25 @@ static void Switch_SetThreadAffinity(
             {
                 preferredCore = static_cast<int32_t>(coreId);
                 break;
+            }
+        }
+    }
+    else
+    {
+        preferredCoreIndex =
+            Switch_GetThreadPreferredCoreIndex(context, threadLock);
+        if (preferredCoreIndex >= 0 &&
+            static_cast<uint32_t>(preferredCoreIndex) < s_cpuCount)
+        {
+            const uint32_t preferredMask =
+                s_affinityMaskForCpu[static_cast<uint32_t>(preferredCoreIndex)];
+            for (uint32_t coreId = 0; coreId < 4u; ++coreId)
+            {
+                if (preferredMask & (1u << coreId))
+                {
+                    preferredCore = static_cast<int32_t>(coreId);
+                    break;
+                }
             }
         }
     }
@@ -358,6 +392,8 @@ void __cdecl Sys_InitMainThread()
     Switch_InitCpuTopology();
     g_threadContext = THREAD_CONTEXT_MAIN;
     g_nativeThreads[THREAD_CONTEXT_MAIN].store(threadGetSelf(), std::memory_order_release);
+    Switch_SetThreadAffinity(
+        threadGetCurHandle(), THREAD_CONTEXT_MAIN, THREAD_LOCK_NONE);
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
     threadHandle[THREAD_CONTEXT_MAIN] = nullptr;
     g_switchThreadValues[0] = nullptr;
@@ -422,8 +458,7 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     // the same role-specific affinity before this thread begins its callback.
     const WinThreadLock threadLock =
         s_threadLock.load(std::memory_order_acquire);
-    if (threadLock != THREAD_LOCK_NONE)
-        Switch_SetThreadAffinity(threadGetCurHandle(), context, threadLock);
+    Switch_SetThreadAffinity(threadGetCurHandle(), context, threadLock);
 
     g_switchThreadStage = "thread/ready";
 }
