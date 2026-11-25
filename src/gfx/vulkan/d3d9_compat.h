@@ -544,6 +544,7 @@ struct IDirect3DQuery9 : IDirect3DResource9 {
 struct IDirect3D9 {};
 
 class VulkanBackend;
+struct SwitchVkPipelineCompiler;
 class IDirect3DDevice9;
 using LPDIRECT3DDEVICE9 = IDirect3DDevice9 *;
 
@@ -659,6 +660,8 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
     };
     VulkanBackend *m_backend=nullptr;
+    SwitchVkPipelineCompiler *m_pipelineCompiler=nullptr;
+    bool m_asyncPipelinePendingDraw=false;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
     StreamBinding m_streams[16]{};
