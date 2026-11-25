@@ -394,7 +394,7 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
             char error[160];
             std::snprintf(
                 error, sizeof(error),
-                "[KisakCOD][THREAD] backend priority update failed result=0x%08x priority=%u\\n",
+                "[KisakCOD][THREAD] backend priority update failed result=0x%08x priority=%u\n",
                 priorityResult, backendPriority);
             Switch_LogWrite(error);
         }
