@@ -290,6 +290,7 @@ struct SwitchFrameTimingStats
         static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> activeFrameSyncByReason;
     SwitchFrameTimingCounter queueSubmit;
     SwitchFrameTimingCounter queuePresent;
+    SwitchFrameTimingCounter queueLockWait;
     SwitchFrameTimingCounter immediateWait;
     std::array<SwitchFrameTimingCounter,
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateWaitByReason;
@@ -356,6 +357,7 @@ void Switch_RecordFrameCpuEnd()
         static_cast<size_t>(VulkanBackend::FrameSyncReason::Count)> syncReasonMaxNs{};
     uint64_t submitCalls = 0, submitNs = 0, submitMaxNs = 0;
     uint64_t presentCalls = 0, presentNs = 0, presentMaxNs = 0;
+    uint64_t queueLockCalls = 0, queueLockNs = 0, queueLockMaxNs = 0;
     uint64_t immediateCalls = 0, immediateNs = 0, immediateMaxNs = 0;
     std::array<uint64_t,
         static_cast<size_t>(VulkanBackend::ImmediateSubmitReason::Count)> immediateReasonCalls{};
@@ -396,6 +398,8 @@ void Switch_RecordFrameCpuEnd()
         &submitCalls, &submitNs, &submitMaxNs);
     g_switchFrameTimingStats.queuePresent.Reset(
         &presentCalls, &presentNs, &presentMaxNs);
+    g_switchFrameTimingStats.queueLockWait.Reset(
+        &queueLockCalls, &queueLockNs, &queueLockMaxNs);
     g_switchFrameTimingStats.immediateWait.Reset(
         &immediateCalls, &immediateNs, &immediateMaxNs);
     for (size_t i = 0; i < g_switchFrameTimingStats.immediateWaitByReason.size(); ++i)
@@ -599,7 +603,7 @@ void Switch_RecordFrameCpuEnd()
     char message[5120];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f gpu_ms=%llu:%.2f/%.2f %s %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
+        "[KisakCOD][VK FRAME TIMING] frames=60 cpu_ms=%.2f/%.2f gpu_ms=%llu:%.2f/%.2f %s %s %s %s %s %s slot_wait=%llu:%.2f/%.2f frontend_wait=%llu:%.2f/%.2f acquire=%llu:%.2f/%.2f sync=%llu:%.2f/%.2f sync_reason{static=%llu:%.2f,lock2d=%llu:%.2f,unlock2d=%llu:%.2f,lock3d=%llu:%.2f,unlock3d=%llu:%.2f,mapped=%llu:%.2f,ring=%llu:%.2f,readback=%llu:%.2f,generic=%llu:%.2f} upload_wait=%llu:%.2f/%.2f upload_reason{up2d=%llu:%.2f,batch=%llu:%.2f,down2d=%llu:%.2f,up3d=%llu:%.2f,down3d=%llu:%.2f,blit=%llu:%.2f,copy2d=%llu:%.2f,copy3d=%llu:%.2f,generic=%llu:%.2f} model_light{regions=%llu bytes=%llu full_bytes=%llu} idle_wait=%llu:%.2f/%.2f queue_lock=%llu:%.2f/%.2f submit=%llu:%.2f/%.2f present=%llu:%.2f/%.2f\n",
         averageMs(cpuNs, cpuCalls), maximumMs(cpuMaxNs),
         static_cast<unsigned long long>(gpuCalls),
         averageMs(gpuNs, gpuCalls), maximumMs(gpuMaxNs),
@@ -656,6 +660,8 @@ void Switch_RecordFrameCpuEnd()
         static_cast<unsigned long long>(modelLightingFullBytes),
         static_cast<unsigned long long>(idleCalls),
         averageMs(idleNs, idleCalls), maximumMs(idleMaxNs),
+        static_cast<unsigned long long>(queueLockCalls),
+        averageMs(queueLockNs, queueLockCalls), maximumMs(queueLockMaxNs),
         static_cast<unsigned long long>(submitCalls),
         averageMs(submitNs, submitCalls), maximumMs(submitMaxNs),
         static_cast<unsigned long long>(presentCalls),
@@ -3179,8 +3185,14 @@ bool VulkanBackend::SynchronizeActiveFrame(FrameSyncReason reason)
     submit.pCommandBuffers = &m_commandBuffer;
 
     VkResult submitResult;
+#ifdef __SWITCH__
+    const auto queueLockStart = SwitchFrameTimingStart();
+#endif
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(queueLockStart));
+#endif
         submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
     }
     if (submitResult != VK_SUCCESS)
@@ -3463,8 +3475,14 @@ bool VulkanBackend::EndFrame()
     // queue lock acquired first to preserve renderer queue-lock ordering.
     VkResult resetFenceResult;
     VkResult submitResult = VK_SUCCESS;
+#ifdef __SWITCH__
+    const auto queueLockStart = SwitchFrameTimingStart();
+#endif
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(queueLockStart));
+#endif
         std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[m_currentFrameSlot]);
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/present/reset_fence";
@@ -3547,12 +3565,16 @@ bool VulkanBackend::EndFrame()
     present.pImageIndices = &m_swapchainIndex;
 
     VkResult result;
+#ifdef __SWITCH__
+    const auto queueLockStart = SwitchFrameTimingStart();
+#endif
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_present";
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
 #ifdef __SWITCH__
+        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(queueLockStart));
         const auto presentStart = SwitchFrameTimingStart();
 #endif
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
@@ -5030,8 +5052,12 @@ bool VulkanBackend::ImmediateSubmit(
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/upload/immediate_queue_submit";
+        const auto queueLockStart = SwitchFrameTimingStart();
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
+#ifdef __SWITCH__
+        g_switchFrameTimingStats.queueLockWait.Add(SwitchElapsedNs(queueLockStart));
+#endif
         submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_immediateFence);
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/upload/immediate_queue_submit_return";
