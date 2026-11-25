@@ -417,12 +417,12 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     // engine's canonical per-context g_com_error[] buffer.
     Com_InitThreadData(context);
 
-    // libnx creates these std::threads at priority 0x3B. Give the
-    // renderer the same two-level boost used by OpenBLOPS-NX relative to
-    // its normal 0x2C thread priority, without changing the other contexts.
+    // libnx creates these std::threads at priority 0x3B. Match the
+    // one-level renderer command-stream boost used by OpenBLOPS-NX
+    // relative to its normal 0x2C thread priority.
     if (context == THREAD_CONTEXT_BACKEND)
     {
-        constexpr uint32_t backendPriority = 0x39u;
+        constexpr uint32_t backendPriority = 0x3Au;
         const Result priorityResult =
             svcSetThreadPriority(threadGetCurHandle(), backendPriority);
         if (priorityResult != 0)
