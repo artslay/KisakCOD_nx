@@ -50,6 +50,7 @@ extern "C"
 #include <vector>
 
 extern void Switch_LogWrite(const char *msg);
+extern "C" void SwitchPrepareRustTlsForCurrentThread();
 extern thread_local const char * volatile g_switchFrameStage;
 extern thread_local bool g_switchFxCodeMeshDrawActive;
 extern thread_local const char *g_switchFxCodeMeshMaterialName;
@@ -311,6 +312,7 @@ private:
 
     void Run()
     {
+        SwitchPrepareRustTlsForCurrentThread();
         (void)svcSetThreadPriority(threadGetCurHandle(), 0x3Du);
         for (;;)
         {
